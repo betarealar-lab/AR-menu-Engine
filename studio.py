@@ -111,16 +111,18 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- GET ----------
 
     def do_GET(self) -> None:
+        path = urllib.parse.urlparse(self.path).path
+        # The platform's health probe cannot send credentials, so it has to sit in front
+        # of the auth check. It reveals nothing - a literal "ok" and the storage mode.
+        if path == "/healthz":
+            return self._send(200, f"ok {storage.backend().kind}".encode(), "text/plain")
         who = self.whoami()
         if who is None:
             return self.challenge()
-        path = urllib.parse.urlparse(self.path).path
         try:
             if path == "/":
                 return self._send(200, (ROOT / "web" / "studio.html").read_bytes(),
                                   "text/html; charset=utf-8")
-            if path == "/healthz":
-                return self._send(200, b"ok", "text/plain")
             if path == "/api/meta":
                 return self._json({
                     "faults": FAULTS, "slots": SLOTS, "slot_role": dataset.SLOT_ROLE,
