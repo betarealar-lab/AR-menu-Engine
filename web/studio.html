@@ -328,7 +328,8 @@ function paint() {
   }).join('');
 
   $('#filled').textContent = `${d.filled} of 4`;
-  $('#platehint').textContent = d.filled < 4 ? `${4 - d.filled} to go` : 'ready';
+  $('#platehint').textContent = d.filled === 0 ? 'need at least one'
+    : d.filled < 4 ? `${d.filled} of 4 — more frames, better model` : 'ready';
 
   const stage = $('#stage');
   if (d.status === 'running') {
@@ -349,7 +350,7 @@ function paint() {
     $('#resultmeta').textContent = d.engine || '';
   } else {
     stage.innerHTML = `<div class="stagemsg"><span class="lbl">Nothing generated</span>
-      <p>${d.filled < 4 ? 'Fill all four cells first.' : 'Press Run engine.'}</p></div>`;
+      <p>${d.filled === 0 ? 'Add at least one frame.' : 'Press Run engine.'}</p></div>`;
     $('#resultmeta').textContent = '';
   }
 
@@ -357,7 +358,7 @@ function paint() {
     `<button class="fault" data-f="${f}" aria-pressed="${(d.faults || []).includes(f)}">${f}</button>`).join('');
   $$('.mark').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === d.verdict));
   $('#note').value = d.note || '';
-  $('#run').disabled = d.status === 'running' || d.filled < 4;
+  $('#run').disabled = d.status === 'running' || d.filled < 1;
   say(`${DISH} / ${VAR} · ${d.status}`);
 }
 

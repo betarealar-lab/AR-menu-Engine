@@ -47,7 +47,7 @@ def main() -> int:
 
     load_env()
     rows = [m for m in dataset.catalogue()
-            if len(m.get("frames", {})) == 4
+            if m.get("frames")
             and (not a.dish or dataset.slug(a.dish) == m["dish_id"])]
     if not rows:
         print("No complete variants found. Upload four frames per dish in the Studio first.")

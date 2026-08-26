@@ -21,7 +21,14 @@ from config import meshy_key
 from .base import Engine, Job, Result
 
 BASE = "https://api.meshy.ai/openapi/v1/multi-image-to-3d"
+MIN_IMAGES = 1          # Meshy accepts 1-4; one is a valid, if weaker, generation
 MAX_IMAGES = 4          # hard API limit — the constraint the hybrid exists to escape
+
+# The API caps target_polycount at 300k. That is NOT Meshy's raw export: the web UI
+# download of the burrata salad was 1.97M triangles / 99.3 MB, so the true master is
+# only reachable outside the API. 300k is as close as we get, and still ~7x more than
+# we would ever ship.
+API_MAX_POLYCOUNT = 300_000
 POLL_SECONDS = 5
 GIVE_UP_AFTER = 900
 
@@ -94,18 +101,27 @@ class MeshyEngine(Engine):
         ai_model: str = "meshy-7",
         *,
         should_texture: bool = True,
-        texture_resolution: str = "2k",
+        texture_resolution: str = "4k",
         enable_pbr: bool = True,
-        target_polycount: int = 25_000,
+        target_polycount: int = API_MAX_POLYCOUNT,
         topology: str = "triangle",
+        should_remesh: bool | None = None,
         variant: str | None = None,
     ):
+        # Ask for the most detail the API will give and decimate ourselves.
+        #
+        # Letting Meshy pre-decimate to 25k hands the reduction to a black box we cannot
+        # inspect or tune, on geometry - thin garnish, crumb, sauce ridges - that naive
+        # decimation destroys first. Our own optimizer took a 1.97M-triangle master to
+        # 40k triangles at 1.99 MB, so a bigger input did not cost delivery size. You can
+        # always go down from a master; you cannot go back up without paying credits again.
         self.ai_model = ai_model
         self.should_texture = should_texture
         self.texture_resolution = texture_resolution
         self.enable_pbr = enable_pbr
         self.target_polycount = target_polycount
         self.topology = topology
+        self.should_remesh = should_remesh
         self.variant = variant or f"{ai_model}-{texture_resolution if should_texture else 'notex'}"
         self.cost_per_job = _cost(ai_model, should_texture)
         self.cost_uncertain = ai_model not in _LISTED
@@ -114,8 +130,8 @@ class MeshyEngine(Engine):
         return {"Authorization": f"Bearer {meshy_key()}"}
 
     def _payload(self, job: Job) -> dict:
-        if not job.images:
-            raise ValueError(f"{job.dish}: no images")
+        if len(job.images) < MIN_IMAGES:
+            raise ValueError(f"{job.dish}: needs at least {MIN_IMAGES} image")
         body = {
             "image_urls": [_data_uri(p) for p in job.images[:MAX_IMAGES]],
             "ai_model": self.ai_model,
@@ -123,6 +139,8 @@ class MeshyEngine(Engine):
             "target_polycount": self.target_polycount,
             "should_texture": self.should_texture,
         }
+        if self.should_remesh is not None:
+            body["should_remesh"] = self.should_remesh
         if self.should_texture:
             body["texture_resolution"] = self.texture_resolution
             body["enable_pbr"] = self.enable_pbr

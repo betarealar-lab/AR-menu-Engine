@@ -184,9 +184,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/generate":
                 key = (dataset.slug(dish), dataset.slug(variant))
                 rec = dataset.record(dish, variant)
-                if len(rec["frames"]) < 4:
-                    return self._json(
-                        {"error": f"Needs 4 frames. {len(rec['frames'])} uploaded."}, 400)
+                # Meshy takes 1-4 images. Four is better, one is a real generation, and
+                # refusing three because it is not four just wastes a dish someone shot.
+                if not rec["frames"]:
+                    return self._json({"error": "Upload at least one frame first."}, 400)
                 with RUN_LOCK:
                     if key in RUNNING:
                         return self._json({"status": "running"})
