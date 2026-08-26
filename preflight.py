@@ -69,13 +69,44 @@ def spend_one(engine: MeshyEngine, images: list[Path]) -> None:
     print("  If it disagrees with the estimate, fix _cost() in engines/meshy.py.")
 
 
+def check_storage() -> bool:
+    """Write, read back and delete a scratch object. Proves the whole R2 path works -
+    credentials, bucket names, permissions - before a teammate uploads anything real."""
+    b = storage.backend()
+    print(f"  storage : {storage.describe()}")
+    if b.kind != "r2":
+        print("  (no R2 configured - the Studio will use local disk)")
+        return True
+    ok = True
+    for bucket in ("photos", "models"):
+        key, blob = "_preflight/roundtrip.txt", b"betareal-preflight"
+        try:
+            b.put(bucket, key, blob, "text/plain")
+            got = b.get(bucket, key)
+            b.delete_prefix(bucket, key)
+            if got == blob:
+                print(f"    {bucket:7} write + read + delete  OK")
+            else:
+                print(f"    {bucket:7} FAILED - read back {got!r}")
+                ok = False
+        except Exception as e:
+            print(f"    {bucket:7} FAILED - {type(e).__name__}: {str(e)[:120]}")
+            ok = False
+    return ok
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--engine", default="meshy-7")
     ap.add_argument("--spend", action="store_true", help="run one real generation")
+    ap.add_argument("--storage-only", action="store_true", help="only check R2, skip Meshy")
     ap.add_argument("--images", type=Path, nargs="+", help="4 photos for --spend")
     a = ap.parse_args()
+
+    if a.storage_only:
+        print("Preflight")
+        return 0 if check_storage() else 1
 
     try:
         key = meshy_key()
@@ -87,6 +118,8 @@ def main() -> int:
     engine = engines.build(a.engine)
     print(f"  engine : {engine.label}")
     if not check_key(key):
+        return 1
+    if not check_storage():
         return 1
     show_request(engine)
 

@@ -149,5 +149,5 @@ def backend(local_root: Path | None = None) -> Backend:
 def describe() -> str:
     b = backend()
     if b.kind == "r2":
-        return f"R2 · photos={b.buckets['photos']} · models={b.buckets['models']}"
-    return f"local disk · {b.root}"
+        return f"R2 | photos={b.buckets['photos']} | models={b.buckets['models']}"
+    return f"local disk | {b.root}"
