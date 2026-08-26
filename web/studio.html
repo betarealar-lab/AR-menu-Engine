@@ -123,6 +123,10 @@
   .fault{border:1px solid var(--rule);background:transparent;color:var(--ink-dim);
          font-size:11.5px;padding:5px 11px;border-radius:2px}
   .fault[aria-pressed="true"]{background:var(--red);border-color:transparent;color:#fff}
+  .exportrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .hintline{font-size:12px;color:var(--ink-faint)}
+  .hintline.warn{color:var(--amber)}
+  .hintline.ok{color:var(--chalk)}
   .rail textarea{width:100%;min-height:34px;max-height:90px;resize:vertical;
                  background:var(--plate);font-size:13px}
 
@@ -235,6 +239,11 @@
     <div class="faults" id="faults"></div>
     <span class="lbl">Note</span>
     <textarea id="note" placeholder="What specifically went wrong, or why it works."></textarea>
+    <span class="lbl">Catalogue</span>
+    <div class="exportrow">
+      <button id="export-model">Optimise &amp; add to catalogue</button>
+      <span id="exportnote" class="hintline"></span>
+    </div>
   </div>
 </template>
 
@@ -339,11 +348,23 @@ function paint() {
       const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
       if (f.status !== 'running') { clearInterval(POLL); POLL = null; CUR = f; paint(); refresh(); }
     }, 4000);
-  } else if (d.status === 'done') {
+  } else if (d.status === 'exporting') {
+    stage.innerHTML = `<div class="stagemsg"><div class="spinner"></div>
+      <span class="lbl">Optimising</span><p>Decimating, compressing, packaging.</p></div>`;
+    POLL ||= setInterval(async () => {
+      const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+      if (f.status !== 'exporting') { clearInterval(POLL); POLL = null; CUR = f; paint(); refresh(); }
+    }, 4000);
+  } else if (d.status === 'review' || d.status === 'catalogued') {
+    // The MASTER is what you judge - untouched, full detail. Optimisation happens after
+    // approval, so a dish you reject costs nothing but the look.
     stage.innerHTML = `<model-viewer src="/model?dish=${enc(DISH)}&variant=${enc(VAR)}&v=${Date.now()}"
       camera-controls auto-rotate rotation-per-second="18deg" shadow-intensity="1"
       exposure="1.1" interaction-prompt="none" alt="Generated model of ${DISH}"></model-viewer>`;
-    $('#resultmeta').textContent = `${d.engine} · ${d.seconds}s`;
+    const st = d.export_stats || {};
+    $('#resultmeta').textContent = d.status === 'catalogued'
+      ? `catalogued · ${(st.draco_bytes/1048576||0).toFixed(2)} MB draco · ${st.shrink||'?'}x smaller`
+      : `master · ${d.engine} · ${d.seconds}s`;
   } else if (d.status === 'failed') {
     stage.innerHTML = `<div class="stagemsg"><span class="lbl">Failed</span>
       <p class="err">${d.error || 'no detail returned'}</p></div>`;
@@ -359,6 +380,25 @@ function paint() {
   $$('.mark').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === d.verdict));
   $('#note').value = d.note || '';
   $('#run').disabled = d.status === 'running' || d.filled < 1;
+
+  const canExport = ['review','catalogued'].includes(d.status) && d.verdict !== 'reject';
+  const btn = $('#export-model'), note = $('#exportnote');
+  if (btn) {
+    btn.disabled = !canExport || d.status === 'exporting';
+    btn.textContent = d.status === 'catalogued'
+      ? 'Re-optimise' : 'Optimise & add to catalogue';
+    note.className = 'hintline';
+    if (d.export_error) { note.textContent = d.export_error; note.classList.add('warn'); }
+    else if (d.status === 'catalogued') {
+      const st = d.export_stats || {};
+      note.textContent = `${(st.draco_bytes/1048576||0).toFixed(2)} MB shipping, ${st.shrink||'?'}x smaller than the master`;
+      note.classList.add('ok');
+    }
+    else if (d.verdict === 'reject') note.textContent = 'Rejected — nothing to optimise.';
+    else if (d.status === 'review') note.textContent = META.optimizer && META.optimizer !== 'none (masters kept, export unavailable)'
+      ? `Toolchain: ${META.optimizer}` : 'No optimiser on this host — the master is kept regardless.';
+    else note.textContent = '';
+  }
   say(`${DISH} / ${VAR} · ${d.status}`);
 }
 
@@ -450,6 +490,12 @@ const drawer = on => { document.body.classList.toggle('drawer-open', on);
 $('#menu').onclick = () => drawer(!document.body.classList.contains('drawer-open'));
 $('#scrim').onclick = () => drawer(false);
 addEventListener('keydown', e => { if (e.key === 'Escape') drawer(false); });
+
+$('#export-model').onclick = async () => {
+  const r = await api('/api/optimize', {dish: DISH, variant: VAR});
+  if (r.error) return say(r.error);
+  CUR.status = 'exporting'; paint();
+};
 
 $('#export').onclick = async () => say('Wrote ' + (await api('/api/export')).csv);
 

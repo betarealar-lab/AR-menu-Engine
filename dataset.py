@@ -56,6 +56,11 @@ def blank(dish: str, variant: str) -> dict:
         "dish": dish, "dish_id": slug(dish), "variant": variant,
         "frames": {}, "status": "empty", "verdict": "", "faults": [], "note": "",
         "engine": "", "seconds": 0, "error": "", "model_key": "",
+        # What generation produced, untouched, and what export produced from it.
+        # Two stages on purpose: you judge the master, then decide whether it earns
+        # the optimisation.
+        "master_keys": {}, "catalog_keys": {}, "catalogued_utc": "",
+        "export_error": "", "export_stats": {},
         "created_utc": _now(), "judged_by": "", "judged_utc": "",
     }
 
@@ -127,7 +132,21 @@ def frames(dish: str, variant: str) -> list[bytes]:
 # ── models ──────────────────────────────────────────────────────────
 
 def model_key(dish: str, variant: str, engine: str, ext: str) -> str:
+    """Masters live under the engine that made them; the catalogue is what ships."""
     return f"models/{slug(dish)}/{slug(variant)}/{engine}/model.{ext}"
+
+
+def catalog_key(dish: str, variant: str, name: str) -> str:
+    return f"catalog/{slug(dish)}/{slug(variant)}/{name}"
+
+
+def save_catalog(dish: str, variant: str, name: str, data: bytes) -> str:
+    ext = name.rsplit(".", 1)[-1].lower()
+    ctype = {"glb": "model/gltf-binary", "usdz": "model/vnd.usdz+zip",
+             "png": "image/png"}.get(ext, "application/octet-stream")
+    key = catalog_key(dish, variant, name)
+    storage.backend().put(MODELS, key, data, ctype)
+    return key
 
 
 def save_model(dish: str, variant: str, engine: str, ext: str, data: bytes) -> str:

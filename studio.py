@@ -20,6 +20,7 @@ import csv
 import io
 import json
 import os
+import shutil
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,6 +28,7 @@ from pathlib import Path
 
 import dataset
 import engines
+import optimize
 import storage
 from config import load_env
 from engines import Job
@@ -131,6 +133,7 @@ class Handler(BaseHTTPRequestHandler):
                                 for n in engines.REGISTRY],
                     "default_engine": self.engine_name,
                     "storage": storage.describe(), "you": who,
+                    "optimizer": optimize.describe(),
                 })
             if path == "/api/dishes":
                 return self._json({"dishes": self._dishes()})
@@ -181,6 +184,22 @@ class Handler(BaseHTTPRequestHandler):
                            judged_utc=dataset._now())
                 dataset.write(rec)
                 return self._json({"ok": True})
+            if path == "/api/optimize":
+                rec = dataset.record(dish, variant)
+                if not rec.get("model_key"):
+                    return self._json({"error": "Nothing generated yet."}, 400)
+                if rec["verdict"] == "reject":
+                    return self._json({"error": "Rejected - not worth optimising."}, 400)
+                key = (dataset.slug(dish), dataset.slug(variant), "opt")
+                with RUN_LOCK:
+                    if key in RUNNING:
+                        return self._json({"status": "exporting"})
+                    RUNNING.add(key)
+                rec.update(status="exporting", export_error="")
+                dataset.write(rec)
+                threading.Thread(target=self._optimize,
+                                 args=(dish, variant, who), daemon=True).start()
+                return self._json({"ok": True})
             if path == "/api/generate":
                 key = (dataset.slug(dish), dataset.slug(variant))
                 rec = dataset.record(dish, variant)
@@ -225,13 +244,16 @@ class Handler(BaseHTTPRequestHandler):
             rec["seconds"] = result.seconds
             rec["generated_by"] = who
             if result.ok:
+                # Store the master untouched and stop. It gets looked at before anything
+                # is spent optimising it - a rejected dish should cost only the look.
+                masters = {}
                 for ext, path in result.files.items():
-                    stored = dataset.save_model(dish, variant, name,
-                                                "png" if ext == "thumb" else ext,
-                                                Path(path).read_bytes())
-                    if ext == "glb":
-                        rec["model_key"] = stored
-                rec["status"] = "done"
+                    kind = "png" if ext == "thumb" else ext
+                    masters[kind] = dataset.save_model(dish, variant, name, kind,
+                                                       Path(path).read_bytes())
+                rec["master_keys"] = masters
+                rec["model_key"] = masters.get("glb", "")
+                rec["status"] = "review"
             else:
                 rec.update(status="failed", error=result.error)
             dataset.write(rec)
@@ -265,6 +287,47 @@ class Handler(BaseHTTPRequestHandler):
             return
         blob = storage.backend().get(bucket, key)
         return self._send(200, blob, ctype) if blob else                self._send(404, b"not found", "text/plain")
+
+    def _optimize(self, dish: str, variant: str, who: str) -> None:
+        """Approved master -> the files a menu ships. Runs only when asked."""
+        key = (dataset.slug(dish), dataset.slug(variant), "opt")
+        tmp = self.out_dir / "_opt"
+        try:
+            rec = dataset.record(dish, variant)
+            tmp.mkdir(parents=True, exist_ok=True)
+            master = tmp / "master.glb"
+            master.write_bytes(dataset.read_model(rec["model_key"]))
+
+            res = optimize.run(master, tmp / "out")
+            rec = dataset.record(dish, variant)
+            if not res.ok:
+                rec.update(status="review", export_error=res.error)
+                dataset.write(rec)
+                return
+
+            catalog = {}
+            for kind, path in res.files.items():
+                name = {"draco": "model_draco.glb", "opt": "model_opt.glb"}.get(kind, path.name)
+                catalog[kind] = dataset.save_catalog(dish, variant, name, path.read_bytes())
+            # Meshy already returns a USDZ; carry it into the catalogue rather than
+            # converting one ourselves, since Linux has no reliable USDZ writer.
+            if rec.get("master_keys", {}).get("usdz"):
+                blob = dataset.read_model(rec["master_keys"]["usdz"])
+                if blob:
+                    catalog["usdz"] = dataset.save_catalog(dish, variant, "model.usdz", blob)
+
+            rec.update(status="catalogued", catalog_keys=catalog,
+                       export_stats=res.stats, catalogued_utc=dataset._now(),
+                       catalogued_by=who, export_error="")
+            dataset.write(rec)
+        except Exception as e:  # noqa: BLE001
+            rec = dataset.record(dish, variant)
+            rec.update(status="review", export_error=f"{type(e).__name__}: {e}")
+            dataset.write(rec)
+        finally:
+            with RUN_LOCK:
+                RUNNING.discard(key)
+            shutil.rmtree(tmp, ignore_errors=True)
 
     # ---------- shaping ----------
 

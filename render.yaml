@@ -15,6 +15,10 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
+      # The optimise stage shells out to glTF-Transform, which is Node. A Python runtime
+      # has none, so export reports "no optimiser on this host" and keeps the master
+      # instead of shipping one. To enable it, move this service to a Docker runtime with
+      # both Python and Node, then `npm i -g @gltf-transform/cli`.
       - key: MESHY_API_KEY        # one shared key, one shared credit pool
         sync: false
       - key: STUDIO_USERS         # temo:pw,niko:pw,gio:pw  - who did what is recorded
