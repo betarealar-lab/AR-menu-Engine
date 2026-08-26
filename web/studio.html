@@ -1,0 +1,452 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scan Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+<style>
+  /* A colour-judgement instrument. The chrome is true neutral - equal R, G and B at every
+     step - so nothing on screen biases how a dish reads. The only saturated colour here
+     should be the food. Verdict marks are the exception: grease pencil, and only there. */
+  :root{
+    --void:#151515; --bench:#1e1e1e; --plate:#262626; --raise:#2f2f2f;
+    --rule:#383838; --rule-lit:#4a4a4a;
+    --ink:#e4e4e4; --ink-dim:#8c8c8c; --ink-faint:#5f5f5f;
+    --chalk:#f0ede7; --amber:#d99a2b; --red:#c4402f;
+    --pad:20px;
+    --label:600 10px/1 'Archivo',sans-serif;
+    --track:.16em;
+  }
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:var(--void);color:var(--ink);
+       font:400 14px/1.55 'Archivo',system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased;overflow:hidden}
+  .lbl{font:var(--label);letter-spacing:var(--track);text-transform:uppercase;color:var(--ink-dim)}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+
+  button,select,input,textarea{font:inherit;color:var(--ink);background:var(--raise);
+    border:1px solid var(--rule);border-radius:2px;padding:7px 12px}
+  button{cursor:pointer;transition:background .12s,border-color .12s}
+  button:hover:not(:disabled){background:#3a3a3a;border-color:var(--rule-lit)}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  :focus-visible{outline:2px solid var(--chalk);outline-offset:2px}
+
+  .run{background:var(--chalk);color:#151515;border-color:transparent;font-weight:600;
+       letter-spacing:.08em;text-transform:uppercase;font-size:11px;padding:8px 18px}
+  .run:hover:not(:disabled){background:#fff}
+
+  /* ── frame ─────────────────────────────────────────────── */
+  header{display:flex;align-items:center;gap:10px;height:54px;padding:0 var(--pad);
+         border-bottom:1px solid var(--rule);background:var(--bench)}
+  .wordmark{font:700 12px/1 'Archivo',sans-serif;letter-spacing:.2em;text-transform:uppercase;
+            margin-right:6px}
+  .wordmark span{color:var(--ink-faint)}
+  .sp{flex:1}
+  #status{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-dim);
+          max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  main{display:grid;grid-template-columns:216px 1fr;height:calc(100% - 54px)}
+
+  /* ── specimen list ─────────────────────────────────────── */
+  aside{border-right:1px solid var(--rule);background:var(--bench);overflow:auto;
+        padding:16px 0}
+  aside .lbl{padding:0 var(--pad) 10px;display:block}
+  .spec{display:block;width:100%;text-align:left;background:none;border:0;border-radius:0;
+        padding:8px var(--pad);cursor:pointer}
+  .spec:hover{background:var(--plate)}
+  .spec[aria-current="true"]{background:var(--plate);box-shadow:inset 2px 0 0 var(--chalk)}
+  .spec b{font-weight:500;display:block;font-size:13px}
+  .spec small{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink-faint)}
+  .newdish{margin:12px var(--pad) 0;width:calc(100% - var(--pad)*2);font-size:12px}
+
+  /* ── bench ─────────────────────────────────────────────── */
+  .bench{display:grid;grid-template-rows:1fr auto;overflow:hidden}
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:var(--pad);
+           padding:var(--pad);overflow:auto;min-height:0}
+  .panel{display:flex;flex-direction:column;min-height:0}
+  .panel > header{all:unset;display:flex;align-items:baseline;gap:10px;
+                  padding-bottom:9px;margin-bottom:11px;border-bottom:1px solid var(--rule)}
+
+  /* The input plate: four frames butted into one object with hairline gutters, because
+     Meshy receives them as one ordered array, not four files. */
+  .plate{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+         gap:1px;background:var(--rule);border:1px solid var(--rule);
+         aspect-ratio:1;min-height:0}
+  .cell{position:relative;background:var(--plate);cursor:pointer;overflow:hidden;
+        display:grid;place-items:center}
+  .cell.over{background:var(--raise);box-shadow:inset 0 0 0 2px var(--chalk)}
+  .cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .cell .no{position:absolute;top:8px;left:9px;z-index:2;font-family:'IBM Plex Mono',monospace;
+            font-size:10px;color:var(--chalk);text-shadow:0 1px 3px #000c;letter-spacing:.06em}
+  .cell .role{position:absolute;bottom:8px;left:9px;right:9px;z-index:2;font:var(--label);
+              letter-spacing:var(--track);text-transform:uppercase;color:#fff;
+              text-shadow:0 1px 3px #000c}
+  .cell .drop{color:var(--ink-faint);font-size:12px;text-align:center;padding:0 12px}
+  .cell.primary .no,.cell.primary .role{color:var(--amber)}
+  .cell .x{position:absolute;top:5px;right:5px;z-index:3;padding:2px 7px;font-size:11px;
+           background:#000a;border-color:transparent;opacity:0;transition:opacity .12s}
+  .cell:hover .x{opacity:1}
+
+  .platefoot{display:flex;justify-content:space-between;align-items:center;
+             padding-top:9px;font-family:'IBM Plex Mono',monospace;font-size:11px;
+             color:var(--ink-faint)}
+
+  /* ── result ────────────────────────────────────────────── */
+  .stage{flex:1;min-height:0;border:1px solid var(--rule);background:
+         repeating-conic-gradient(#232323 0% 25%,#1c1c1c 0% 50%) 50%/22px 22px;
+         display:grid;place-items:center;position:relative;overflow:hidden}
+  model-viewer{width:100%;height:100%;--poster-color:transparent}
+  .stagemsg{text-align:center;padding:28px;max-width:340px}
+  .stagemsg p{color:var(--ink-faint);font-size:13px;margin-top:6px}
+  .err{color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:12px;
+       white-space:pre-wrap;text-align:left}
+  .spinner{width:26px;height:26px;border:2px solid var(--rule-lit);border-top-color:var(--chalk);
+           border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 14px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ── verdict rail ──────────────────────────────────────── */
+  .rail{border-top:1px solid var(--rule);background:var(--bench);
+        padding:14px var(--pad);display:grid;grid-template-columns:auto 1fr;
+        gap:10px 22px;align-items:start}
+  .rail .lbl{padding-top:7px}
+  .marks{display:flex;gap:8px}
+  .mark{border:1px solid var(--rule);background:transparent;font-size:12px;padding:6px 16px;
+        letter-spacing:.04em}
+  .mark[aria-pressed="true"]{color:#151515;border-color:transparent;font-weight:600}
+  .mark.good[aria-pressed="true"]{background:var(--chalk)}
+  .mark.ok[aria-pressed="true"]{background:var(--amber)}
+  .mark.no[aria-pressed="true"]{background:var(--red);color:#fff}
+  .faults{display:flex;flex-wrap:wrap;gap:6px}
+  .fault{border:1px solid var(--rule);background:transparent;color:var(--ink-dim);
+         font-size:11.5px;padding:5px 11px;border-radius:2px}
+  .fault[aria-pressed="true"]{background:var(--red);border-color:transparent;color:#fff}
+  .rail textarea{width:100%;min-height:34px;max-height:90px;resize:vertical;
+                 background:var(--plate);font-size:13px}
+
+  .empty{display:grid;place-items:center;height:100%;text-align:center;padding:40px}
+  .empty h2{font-weight:600;font-size:15px;margin-bottom:8px}
+  .empty p{color:var(--ink-faint);font-size:13px;max-width:380px}
+
+  /* ── phone + tablet ──────────────────────────────────────
+     Capture happens on a phone, so the bench has to work on one. Below 900px the
+     specimen list becomes an off-canvas drawer and the two comparison panels stack:
+     plate first (you are choosing frames), result under it (you are judging one). */
+  .drawer-btn{display:none;padding:8px 12px;font-size:16px;line-height:1}
+  .scrim{display:none}
+
+  @media (max-width:900px){
+    main{grid-template-columns:1fr}
+    .drawer-btn{display:block}
+    aside{position:fixed;inset:54px auto 0 0;width:262px;max-width:84vw;z-index:30;
+          transform:translateX(-102%);transition:transform .22s ease;
+          box-shadow:0 0 0 100vmax rgba(0,0,0,0);}
+    body.drawer-open aside{transform:translateX(0)}
+    .scrim{display:block;position:fixed;inset:54px 0 0 0;background:#000;opacity:0;
+           pointer-events:none;transition:opacity .22s ease;z-index:29}
+    body.drawer-open .scrim{opacity:.55;pointer-events:auto}
+    .compare{grid-template-columns:1fr;overflow:visible}
+    .plate{max-width:520px}
+    .stage{min-height:290px}
+    #status{max-width:150px}
+  }
+
+  @media (max-width:620px){
+    :root{--pad:14px}
+    header{height:auto;min-height:54px;flex-wrap:wrap;padding:9px var(--pad);gap:8px}
+    main{height:auto;min-height:calc(100% - 54px)}
+    aside{inset:0 auto 0 0;padding-top:66px}
+    .scrim{inset:0}
+    .bench{grid-template-rows:auto auto}
+    .compare{padding:var(--pad);gap:16px}
+    .rail{grid-template-columns:1fr;gap:6px 0;padding:14px var(--pad) 22px}
+    .rail .lbl{padding-top:12px}
+    .verdicts{flex-wrap:wrap}
+    .verdicts button{flex:1 1 30%;min-height:44px}
+    .fault{padding:9px 12px}          /* touch targets */
+    button,select,input{min-height:40px}
+    #variant,#engine{max-width:132px}
+    #newvar{width:100%;order:10}
+    .slot .lb{font-size:10px;padding:4px 6px}
+    #status{width:100%;max-width:none;order:11}
+  }
+
+  /* the plate is square by design; keep it that way but never let it overflow */
+  .plate{width:100%;max-width:min(100%,640px)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header>
+  <button id="menu" class="drawer-btn" aria-label="Show dishes" aria-expanded="false">☰</button>
+  <span class="wordmark">Scan<span>·</span>Studio</span>
+  <select id="variant" title="Angle strategy"></select>
+  <button id="newvariant">New variant</button>
+  <span class="sp"></span>
+  <span id="status"></span>
+  <select id="engine"></select>
+  <button id="run" class="run">Run engine</button>
+  <button id="export">Export</button>
+</header>
+
+<main>
+  <aside>
+    <span class="lbl">Specimens</span>
+    <div id="specimens"></div>
+    <button class="newdish" id="newdish">+ New dish</button>
+  </aside>
+
+  <div class="bench" id="bench"></div>
+</main>
+<div class="scrim" id="scrim"></div>
+
+<template id="tpl-bench">
+  <div class="compare">
+    <section class="panel">
+      <header>
+        <span class="lbl">Input plate</span>
+        <span class="lbl mono" id="filled" style="color:var(--ink-faint)"></span>
+      </header>
+      <div class="plate" id="plate"></div>
+      <div class="platefoot">
+        <span>Drop a photo, or click a cell to browse</span>
+        <span id="platehint"></span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <header>
+        <span class="lbl">Result</span>
+        <span class="lbl mono" id="resultmeta" style="color:var(--ink-faint)"></span>
+      </header>
+      <div class="stage" id="stage"></div>
+    </section>
+  </div>
+
+  <div class="rail">
+    <span class="lbl">Verdict</span>
+    <div class="marks">
+      <button class="mark good" data-v="good">Good</button>
+      <button class="mark ok"   data-v="acceptable">Acceptable</button>
+      <button class="mark no"   data-v="reject">Reject</button>
+    </div>
+    <span class="lbl">Fault</span>
+    <div class="faults" id="faults"></div>
+    <span class="lbl">Note</span>
+    <textarea id="note" placeholder="What specifically went wrong, or why it works."></textarea>
+  </div>
+</template>
+
+<input type="file" id="picker" accept="image/*" multiple hidden>
+
+<script>
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const enc = encodeURIComponent;
+
+let META = {}, LIST = [], CUR = null, DISH = null, VAR = 'default', PICK_SLOT = 0, POLL = null;
+
+const api = (u, body) => fetch(u, body ? {
+  method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+} : undefined).then(r => r.json());
+
+/* Downscale in the browser to exactly what the engine would reduce it to anyway.
+   A 24MB camera JPEG becomes ~1MB, and nothing is lost that Meshy would have kept. */
+function prepare(file, max = 2048) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s);
+      c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', 0.92));
+    };
+    img.onerror = () => reject(new Error(`${file.name} is not a readable image`));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+const say = t => $('#status').textContent = t;
+
+async function boot() {
+  META = await api('/api/meta');
+  $('#engine').innerHTML = META.engines.map(e =>
+    `<option value="${e.name}"${e.name === META.default_engine ? ' selected' : ''}>${e.name} · ${e.credits}cr</option>`).join('');
+  await refresh();
+  LIST.length ? open(LIST[0].dish, LIST[0].variants[0]) : renderEmpty();
+}
+
+async function refresh() {
+  LIST = (await api('/api/dishes')).dishes;
+  $('#specimens').innerHTML = LIST.map(d => `
+    <button class="spec" data-dish="${d.dish}" aria-current="${d.dish === DISH}">
+      <b>${d.dish}</b>
+      <small>${d.variants.length} variant${d.variants.length === 1 ? '' : 's'}${d.judged ? ` · ${d.judged} judged` : ''}</small>
+    </button>`).join('');
+}
+
+function renderEmpty() {
+  $('#bench').innerHTML = `<div class="empty"><div>
+    <h2>No dishes yet</h2>
+    <p>Make a dish, drop four photos into the plate, and run an engine.
+       Nothing is read from your drive &mdash; only what you upload here.</p>
+  </div></div>`;
+  say('');
+}
+
+async function open(dish, variant) {
+  DISH = dish; VAR = variant || 'default';
+  CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+  paint(); refresh();
+}
+
+function paint() {
+  if (!$('#plate')) $('#bench').replaceChildren($('#tpl-bench').content.cloneNode(true));
+  const d = CUR;
+
+  const vs = [...new Set([...(d.all_variants || []), VAR])];
+  $('#variant').innerHTML = vs.map(v => `<option${v === VAR ? ' selected' : ''}>${v}</option>`).join('');
+
+  $('#plate').innerHTML = META.slots.map((name, i) => {
+    const f = d.frames[i];
+    const primary = i === 0 ? ' primary' : '';
+    return `<div class="cell${primary}" data-slot="${i}">
+      <span class="no mono">0${i + 1}</span>
+      ${f ? `<img src="/frame?dish=${enc(DISH)}&variant=${enc(VAR)}&slot=${i}&v=${Date.now()}" alt="${name}">
+             <button class="x" data-clear="${i}" title="Remove">Clear</button>` : ''}
+      ${f ? '' : '<span class="drop">drop photo</span>'}
+      <span class="role">${name}${i === 0 ? ' · primary' : ''}</span>
+    </div>`;
+  }).join('');
+
+  $('#filled').textContent = `${d.filled} of 4`;
+  $('#platehint').textContent = d.filled < 4 ? `${4 - d.filled} to go` : 'ready';
+
+  const stage = $('#stage');
+  if (d.status === 'running') {
+    stage.innerHTML = `<div class="stagemsg"><div class="spinner"></div>
+      <span class="lbl">Generating</span><p>Usually one to three minutes.</p></div>`;
+    POLL ||= setInterval(async () => {
+      const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+      if (f.status !== 'running') { clearInterval(POLL); POLL = null; CUR = f; paint(); refresh(); }
+    }, 4000);
+  } else if (d.status === 'done') {
+    stage.innerHTML = `<model-viewer src="/model?dish=${enc(DISH)}&variant=${enc(VAR)}&v=${Date.now()}"
+      camera-controls auto-rotate rotation-per-second="18deg" shadow-intensity="1"
+      exposure="1.1" interaction-prompt="none" alt="Generated model of ${DISH}"></model-viewer>`;
+    $('#resultmeta').textContent = `${d.engine} · ${d.seconds}s`;
+  } else if (d.status === 'failed') {
+    stage.innerHTML = `<div class="stagemsg"><span class="lbl">Failed</span>
+      <p class="err">${d.error || 'no detail returned'}</p></div>`;
+    $('#resultmeta').textContent = d.engine || '';
+  } else {
+    stage.innerHTML = `<div class="stagemsg"><span class="lbl">Nothing generated</span>
+      <p>${d.filled < 4 ? 'Fill all four cells first.' : 'Press Run engine.'}</p></div>`;
+    $('#resultmeta').textContent = '';
+  }
+
+  $('#faults').innerHTML = META.faults.map(f =>
+    `<button class="fault" data-f="${f}" aria-pressed="${(d.faults || []).includes(f)}">${f}</button>`).join('');
+  $$('.mark').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === d.verdict));
+  $('#note').value = d.note || '';
+  $('#run').disabled = d.status === 'running' || d.filled < 4;
+  say(`${DISH} / ${VAR} · ${d.status}`);
+}
+
+const saveVerdict = () => api('/api/verdict',
+  {dish: DISH, variant: VAR, verdict: CUR.verdict, faults: CUR.faults, note: $('#note').value});
+
+async function upload(files, startSlot) {
+  let slot = startSlot;
+  for (const file of files) {
+    if (slot > 3) { say('Plate is full — clear a cell to replace one'); break; }
+    if (!file.type.startsWith('image/')) continue;
+    say(`Preparing ${file.name}…`);
+    try {
+      CUR = await api('/api/upload',
+        {dish: DISH, variant: VAR, slot, name: file.name, data: await prepare(file)});
+      slot++;
+    } catch (e) { say(e.message); }
+  }
+  paint(); refresh();
+}
+
+/* ── events ─────────────────────────────────────────────── */
+document.addEventListener('click', async e => {
+  const spec = e.target.closest('.spec');
+  if (spec) return open(spec.dataset.dish, null);
+
+  const clear = e.target.closest('[data-clear]');
+  if (clear) {
+    CUR = await api('/api/clear-frame', {dish: DISH, variant: VAR, slot: +clear.dataset.clear});
+    return paint();
+  }
+
+  const cell = e.target.closest('.cell');
+  if (cell) { PICK_SLOT = +cell.dataset.slot; $('#picker').click(); return; }
+
+  const mark = e.target.closest('.mark');
+  if (mark) {
+    CUR.verdict = CUR.verdict === mark.dataset.v ? '' : mark.dataset.v;
+    paint(); return saveVerdict();
+  }
+
+  const fault = e.target.closest('.fault');
+  if (fault) {
+    CUR.faults ||= [];
+    const i = CUR.faults.indexOf(fault.dataset.f);
+    i < 0 ? CUR.faults.push(fault.dataset.f) : CUR.faults.splice(i, 1);
+    paint(); return saveVerdict();
+  }
+});
+
+document.addEventListener('dragover', e => {
+  const cell = e.target.closest?.('.cell');
+  if (!cell) return;
+  e.preventDefault();
+  $$('.cell').forEach(c => c.classList.toggle('over', c === cell));
+});
+document.addEventListener('dragleave', e => e.target.closest?.('.cell')?.classList.remove('over'));
+document.addEventListener('drop', e => {
+  const cell = e.target.closest?.('.cell');
+  if (!cell) return;
+  e.preventDefault();
+  $$('.cell').forEach(c => c.classList.remove('over'));
+  upload(e.dataTransfer.files, +cell.dataset.slot);
+});
+
+$('#picker').onchange = e => { upload(e.target.files, PICK_SLOT); e.target.value = ''; };
+document.addEventListener('blur', e => { if (e.target.id === 'note') saveVerdict(); }, true);
+
+$('#newdish').onclick = async () => {
+  const name = prompt('Dish name');
+  if (!name) return;
+  DISH = name.trim(); VAR = 'default';
+  CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+  paint();
+};
+$('#newvariant').onclick = () => {
+  if (!DISH) return say('Make a dish first');
+  const v = prompt('Variant name — the angle strategy, e.g. ring-25');
+  if (v) open(DISH, v.trim());
+};
+$('#variant').onchange = e => open(DISH, e.target.value);
+$('#run').onclick = async () => {
+  const r = await api('/api/generate', {dish: DISH, variant: VAR, engine: $('#engine').value});
+  if (r.error) return say(r.error);
+  CUR.status = 'running'; paint();
+};
+const drawer = on => { document.body.classList.toggle('drawer-open', on);
+  $('#menu').setAttribute('aria-expanded', String(on)); };
+$('#menu').onclick = () => drawer(!document.body.classList.contains('drawer-open'));
+$('#scrim').onclick = () => drawer(false);
+addEventListener('keydown', e => { if (e.key === 'Escape') drawer(false); });
+
+$('#export').onclick = async () => say('Wrote ' + (await api('/api/export')).csv);
+
+boot();
+</script>

@@ -1,0 +1,435 @@
+<title>3D Menu Category Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root{
+    --paper:#faf8f6; --surface:#ffffff; --sunk:#f3efec;
+    --rule:#e4ded9; --rule-soft:#eee9e5;
+    --ink:#1a1512; --ink-2:#544c46; --ink-3:#8a807a;
+    --accent:#8c2f39; --accent-soft:#f7ecec;
+    --good:#2f6b4f; --warn:#a06818; --dead:#8a827c;
+    --shadow:0 1px 2px rgba(26,21,18,.05), 0 8px 24px -12px rgba(26,21,18,.18);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#14110f; --surface:#1c1815; --sunk:#221d1a;
+      --rule:#312b26; --rule-soft:#272220;
+      --ink:#f0ebe7; --ink-2:#b6ada6; --ink-3:#867d76;
+      --accent:#d2737c; --accent-soft:#2a1c1e;
+      --good:#6cbf95; --warn:#d9a24a; --dead:#7d756f;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#14110f; --surface:#1c1815; --sunk:#221d1a;
+    --rule:#312b26; --rule-soft:#272220;
+    --ink:#f0ebe7; --ink-2:#b6ada6; --ink-3:#867d76;
+    --accent:#d2737c; --accent-soft:#2a1c1e;
+    --good:#6cbf95; --warn:#d9a24a; --dead:#7d756f;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font:400 15px/1.6 Archivo,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:44px 22px 90px;display:flex;flex-direction:column;gap:46px}
+
+  h1{font:600 clamp(30px,4.4vw,46px)/1.08 Fraunces,Georgia,serif;margin:0;letter-spacing:-.015em;text-wrap:balance}
+  h2{font:600 22px/1.25 Fraunces,Georgia,serif;margin:0;letter-spacing:-.01em}
+  .eyebrow{font:600 11px/1 Archivo,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+  .sub{color:var(--ink-2);max-width:66ch;margin:0}
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+
+  header{display:flex;flex-direction:column;gap:14px;
+         border-bottom:1px solid var(--rule);padding-bottom:30px}
+  .stamp{display:flex;gap:16px;flex-wrap:wrap;color:var(--ink-3);font-size:12.5px}
+  .stamp b{color:var(--ink-2);font-weight:500}
+
+  /* the finding that reframes everything */
+  .finding{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);
+           border-radius:3px;padding:24px 26px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--shadow)}
+  .finding p{margin:0;max-width:70ch}
+  .finding .lede{font:500 17px/1.5 Archivo,sans-serif}
+  .gauge{display:grid;gap:12px}
+  .gauge-row{display:grid;grid-template-columns:140px 1fr auto;gap:14px;align-items:center;font-size:13.5px}
+  .gauge-row .name{color:var(--ink-2)}
+  .bar{height:9px;background:var(--sunk);border-radius:99px;overflow:hidden}
+  .bar span{display:block;height:100%;border-radius:99px;background:var(--dead)}
+  .bar.ours span{background:var(--accent)}
+  .gauge-row .val{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+  section{display:flex;flex-direction:column;gap:16px}
+  .shead{display:flex;flex-direction:column;gap:5px}
+
+  .filters{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{font:500 12.5px/1 Archivo,sans-serif;padding:8px 14px;border:1px solid var(--rule);
+        background:var(--surface);color:var(--ink-2);border-radius:99px;cursor:pointer}
+  .chip:hover{border-color:var(--ink-3)}
+  .chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:3px;background:var(--surface);box-shadow:var(--shadow)}
+  table{border-collapse:collapse;width:100%;min-width:720px;font-size:13.5px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  thead th{position:sticky;top:0;background:var(--sunk);z-index:1;
+           font:600 10.5px/1.3 Archivo,sans-serif;letter-spacing:.11em;text-transform:uppercase;
+           color:var(--ink-3);border-bottom:1px solid var(--rule);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--sunk)}
+  td.num{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .co{font-weight:600;white-space:nowrap}
+  .flag{color:var(--ink-3);font-weight:400;font-size:12px;margin-left:5px}
+  .note{color:var(--ink-3);font-size:12.5px}
+  .dash{color:var(--ink-3)}
+
+  /* our row, edged in every table */
+  tr.ours{background:var(--accent-soft)}
+  tr.ours:hover{background:var(--accent-soft)}
+  tr.ours td{box-shadow:inset 0 0 0 rgba(0,0,0,0)}
+  tr.ours td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+  tr.ours .co{color:var(--accent)}
+
+  .pill{display:inline-block;font:500 11px/1 Archivo,sans-serif;padding:5px 9px;border-radius:99px;
+        border:1px solid currentColor;white-space:nowrap}
+  .pill.active{color:var(--good)} .pill.dormant{color:var(--warn)}
+  .pill.exited{color:var(--dead)} .pill.new{color:var(--ink-3)}
+  .yes{color:var(--good);font-weight:600} .no{color:var(--ink-3)}
+  .warnflag{color:var(--warn)}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  .card{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:18px 20px;
+        display:flex;flex-direction:column;gap:6px}
+  .card .k{font:600 10.5px/1 Archivo,sans-serif;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)}
+  .card .v{font:600 27px/1 Fraunces,Georgia,serif;font-variant-numeric:tabular-nums}
+  .card .d{font-size:12.5px;color:var(--ink-2)}
+
+  ol.moves{margin:0;padding-left:0;list-style:none;counter-reset:m;display:flex;flex-direction:column;gap:12px}
+  ol.moves li{counter-increment:m;display:grid;grid-template-columns:26px 1fr;gap:13px;align-items:start}
+  ol.moves li::before{content:counter(m);font:500 12px/24px 'IBM Plex Mono',monospace;text-align:center;
+    color:var(--accent);border:1px solid var(--rule);border-radius:50%;height:24px}
+  ol.moves b{font-weight:600}
+
+  footer{border-top:1px solid var(--rule);padding-top:22px;color:var(--ink-3);font-size:12.5px;max-width:70ch}
+  @media (max-width:640px){
+    .gauge-row{grid-template-columns:104px 1fr auto;font-size:12.5px}
+    .wrap{padding:30px 15px 64px;gap:36px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">Competitive dossier</span>
+    <h1>3D Menu Category Map</h1>
+    <p class="sub">Fourteen companies building 3D or AR restaurant menus, plus the adjacent
+      category quietly undercutting all of them. Process, pricing, clients and measured
+      technical data.</p>
+    <div class="stamp">
+      <span><b>Compiled</b> 26 Aug 2026</span>
+      <span><b>Companies</b> 14</span>
+      <span><b>Publishing client counts</b> 4 of 14</span>
+      <span><b>Georgian competitors found</b> 0</span>
+    </div>
+  </header>
+
+  <!-- ── the measured finding ─────────────────────────────── -->
+  <div class="finding">
+    <span class="eyebrow">Measured live, 26 Aug</span>
+    <p class="lede">Nobody renders 25 models on a menu page. They render <strong>zero</strong>.</p>
+    <p>Menu AR's live client <em>Pisco Express</em> lists 12 dishes using exactly
+      <strong>one</strong> <code class="mono">&lt;model-viewer&gt;</code> element and loads
+      <strong>no</strong> 3D at all — the whole page is 420&nbsp;KB of photographs. All twelve
+      GLB URLs sit in the DOM as lazy references; the single viewer's source is swapped when a
+      diner taps. Their models are far heavier than ours, and it costs them nothing.</p>
+    <div class="gauge">
+      <div class="gauge-row">
+        <span class="name">Menu AR</span>
+        <span class="bar"><span style="width:100%"></span></span>
+        <span class="val">~8.2 MB avg</span>
+      </div>
+      <div class="gauge-row">
+        <span class="name">BetaReal</span>
+        <span class="bar ours"><span style="width:19.5%"></span></span>
+        <span class="val">~1.6 MB avg</span>
+      </div>
+    </div>
+    <p class="note">Sampled: 6.12 · 8.22 · 8.23 · 8.77 · 9.56 MB against Monday Greens'
+      1.02 · 1.16 · 1.51 · 1.97 · 2.22 MB (Draco). The five-dish ceiling is not model weight and
+      not production — it is live 3D thumbnails spawning one WebGL context per card.</p>
+  </div>
+
+  <!-- ── master ───────────────────────────────────────────── -->
+  <section>
+    <div class="shead">
+      <h2>Who they are</h2>
+      <p class="sub">Status reflects what the site and its demo actually do today, not what it claims.</p>
+    </div>
+    <div class="filters" role="group" aria-label="Filter by category">
+      <button class="chip" data-f="all" aria-pressed="true">All 14</button>
+      <button class="chip" data-f="manual" aria-pressed="false">Manual scanning</button>
+      <button class="chip" data-f="ai" aria-pressed="false">AI image-to-3D</button>
+      <button class="chip" data-f="other" aria-pressed="false">Other</button>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Company</th><th>Base</th><th>Category</th><th>Status</th>
+          <th>Named clients</th><th>Notable</th>
+        </tr></thead>
+        <tbody id="master"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── production ───────────────────────────────────────── -->
+  <section>
+    <div class="shead">
+      <h2>How the models get made</h2>
+      <p class="sub">Throughput comes from who holds the camera and whether anyone has to travel —
+        never from better 3D software.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Company</th><th>Who captures</th><th>Method</th><th>Throughput</th><th>Turnaround</th>
+        </tr></thead>
+        <tbody id="prod"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── commercial ───────────────────────────────────────── -->
+  <section>
+    <div class="shead">
+      <h2>What it costs, per dish</h2>
+      <p class="sub">Every published plan normalised to dollars per dish per month, cheapest first.
+        Unlimited tiers are costed at 100 dishes.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Company</th><th>Plan</th><th>Price</th><th>Dishes</th>
+          <th>$ / dish / mo</th><th>Self-serve</th>
+        </tr></thead>
+        <tbody id="price"></tbody>
+      </table>
+    </div>
+    <p class="note">Four companies publish no pricing at all: 3DMenu.tech, 3Dish, Triveo, Foodo,
+      plus Menu AR, which is set by each regional franchisee.</p>
+  </section>
+
+  <!-- ── product ──────────────────────────────────────────── -->
+  <section>
+    <div class="shead">
+      <h2>What the product actually does</h2>
+      <p class="sub">“AR” in marketing copy often means a 3D viewer. This column means real
+        placement on the guest's table.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          <th>Company</th><th>Real AR</th><th>Analytics</th><th>Languages</th>
+          <th>Model size</th><th>Viewers on list page</th>
+        </tr></thead>
+        <tbody id="feat"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── the adjacent threat ──────────────────────────────── -->
+  <section>
+    <div class="shead">
+      <span class="eyebrow">The competitor that isn't 3D</span>
+      <h2>AI food photography</h2>
+      <p class="sub">Same budget, same job, a fifth of the price — and two of the largest food
+        platforms give it away inside tools the restaurant already opens every day.</p>
+    </div>
+    <div class="cards">
+      <div class="card"><span class="k">FoodShot AI</span><span class="v">$0.36</span>
+        <span class="d">per image, at the 250-image annual tier</span></div>
+      <div class="card"><span class="k">MenuPhotoAI</span><span class="v">$27</span>
+        <span class="d">per month entry, credits never expire</span></div>
+      <div class="card"><span class="k">DoorDash · Uber Eats</span><span class="v">Free</span>
+        <span class="d">AI photo enhancement built into the merchant tools</span></div>
+      <div class="card"><span class="k">Their claim</span><span class="v">24–35%</span>
+        <span class="d">more orders with professional photos</span></div>
+    </div>
+    <p class="sub">Photos cannot show portion size on a real table, cannot report which dishes a
+      guest lingered on, and are drawing criticism precisely because the plate that arrives does
+      not match the picture. Those three gaps are the pitch. “Your food will look better” is not.</p>
+  </section>
+
+  <!-- ── moves ────────────────────────────────────────────── -->
+  <section>
+    <div class="shead"><h2>What follows from this</h2></div>
+    <ol class="moves">
+      <li><span><b>Lift the five-dish ceiling with a database flag.</b> Set
+        <code class="mono">thumb_3d = false</code> on non-featured items and keep
+        <code class="mono">featured_items</code> driving the 3D block. Whole menu listed as photos,
+        five dishes promoted in 3D — the scarcity play gets stronger, not weaker, against forty
+        plain cards.</span></li>
+      <li><span><b>Rebuild the ladder as 5 / 20 / unlimited.</b> At $22 per dish we sit last on
+        the pricing table, and that only made sense while the ceiling was real.</span></li>
+      <li><span><b>Copy ARmenu's intake.</b> The venue sends 20–30 photos per dish over WhatsApp,
+        we process, 48 hours back. No travel, no scheduling, no photographer — which is exactly how
+        they afford unlimited at £199.</span></li>
+      <li><span><b>Lead with model weight.</b> 1.6 MB against 8.2 MB is measurable, demonstrable on
+        a phone in the room, and nobody else in the category can say it.</span></li>
+      <li><span><b>Retire “first in Georgia.”</b> Literally true, but JARIT is one country over and
+        Menu AR franchises territories with Georgia unclaimed. Both are one search away.</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    Compiled from company websites, published pricing pages, archived captures and live browser
+    measurement on 26 August 2026. Client counts are what each company names publicly. Figures
+    marked <span class="warnflag">⚠</span> are claims that contradict primary sources or read as
+    synthetic. Currency converted at approximate August 2026 rates.
+  </footer>
+</div>
+
+<script>
+  const D = [
+    {n:"3DMenu.tech",c:"India",cat:"manual",catL:"Manual",st:"active",clients:"10",cl:10,
+     note:"Only company naming double-digit clients",
+     who:"They do — on site",meth:"Pro 3D photoshoot at the venue",tp:"25 dishes/day",ta:"≤21 days",
+     ar:false,an:false,lang:"—",size:"—",viewers:"—",
+     plans:[]},
+    {n:"JARIT",c:"Armenia",cat:"manual",catL:"Manual",st:"active",clients:"0",cl:0,
+     note:"ARLOOPA Inc. Nearest neighbour",
+     who:"They do — on site",meth:"Photogrammetry",tp:"—",ta:"—",
+     ar:true,an:"Advanced+",lang:"—",size:"—",viewers:"—",
+     plans:[{p:"Basic",pr:"$19/mo",d:"1",pd:19.00,ss:false},
+            {p:"Advanced",pr:"$99/mo",d:"10",pd:9.90,ss:false},
+            {p:"Pro",pr:"$299/mo",d:"50",pd:5.98,ss:false}]},
+    {n:"Menu AR",c:"Russia",cat:"manual",catL:"Manual",st:"active",clients:"1 + 16 reps",cl:1,
+     note:"Franchise network across 16+ territories since 2017",
+     who:"They do",meth:"In-house scanning",tp:"—",ta:"—",
+     ar:true,an:"—",lang:"22",size:"~8.2 MB",viewers:"1 (lazy)",
+     plans:[]},
+    {n:"3Dish",c:"Portugal",cat:"manual",catL:"Manual",st:"new",clients:"0",cl:0,
+     note:"Ships a scanner box to the kitchen",
+     who:"Restaurant staff",meth:"Hardware rig on site",tp:"35 sec/dish",ta:"Immediate",
+     ar:false,an:"—",lang:"—",size:"—",viewers:"—",
+     plans:[]},
+    {n:"Reliefs",c:"France",cat:"manual",catL:"Manual + AI",st:"dormant",clients:"0",cl:0,
+     note:"Meters 3D views, not dishes. Site 403s since March",
+     who:"Restaurant, or them",meth:"Phone self-scan + turnkey option",tp:"—",ta:"2–3 days/dish",
+     ar:true,an:true,lang:"—",size:"—",viewers:"—",
+     plans:[{p:"Starter",pr:"€29/mo",d:"15",pd:2.09,ss:true},
+            {p:"Pro",pr:"€49/mo",d:"50",pd:1.06,ss:true},
+            {p:"Business",pr:"€89/mo",d:"100",pd:0.96,ss:true}]},
+    {n:"AR Dining",c:"UK",cat:"manual",catL:"Manual",st:"new",clients:"0",cl:0,
+     note:"Also sells personalised NFC beacons",
+     who:"They do",meth:"3D scanning",tp:"—",ta:"—",
+     ar:true,an:"—",lang:"—",size:"—",viewers:"—",plans:[]},
+    {n:"MiARMenu",c:"—",cat:"manual",catL:"Manual",st:"dormant",clients:"0",cl:0,
+     note:"Client section empty, demo subdomain dead",
+     who:"—",meth:"—",tp:"—",ta:"—",
+     ar:true,an:true,lang:"Multi",size:"—",viewers:"—",plans:[]},
+    {n:"QReal / KabaQ",c:"USA",cat:"manual",catL:"Manual",st:"exited",clients:"3",cl:3,
+     note:"Denny's, Bareburger, Magnolia Bakery — then left food",
+     who:"They do",meth:"Photos → cloud pipeline",tp:"—",ta:"—",
+     ar:true,an:"—",lang:"—",size:"—",viewers:"—",plans:[]},
+    {n:"ARmenu",c:"UK",cat:"ai",catL:"AI",st:"active",clients:"6 ⚠",cl:6,
+     note:"Remote intake by WhatsApp. Client names read as synthetic",
+     who:"Restaurant sends photos",meth:"Apple Object Capture, 20–30 photos/dish",tp:"—",ta:"48 hours",
+     ar:true,an:true,lang:"—",size:"—",viewers:"—",
+     plans:[{p:"Starter",pr:"£49/mo",d:"5",pd:12.30,ss:true},
+            {p:"Growth",pr:"£99/mo",d:"20",pd:6.25,ss:true},
+            {p:"Pro",pr:"£199/mo",d:"Unlimited",pd:2.50,ss:true}]},
+    {n:"Triveo",c:"—",cat:"ai",catL:"AI",st:"new",clients:"0",cl:0,
+     note:"Same thesis as ours. Demo menu renders no models at all",
+     who:"Restaurant uploads",meth:"AI software, human in the loop",tp:"—",ta:"—",
+     ar:true,an:true,lang:"—",size:"—",viewers:"0 (empty demo)",plans:[]},
+    {n:"AR Code",c:"France",cat:"ai",catL:"AI",st:"active",clients:"0",cl:0,
+     note:"iPhone, iPad and Apple-silicon Mac only",
+     who:"Restaurant self-scans",meth:"Object Capture, LiDAR when present",tp:"—",ta:"—",
+     ar:true,an:"—",lang:"—",size:"—",viewers:"—",plans:[]},
+    {n:"Diner",c:"Turkey",cat:"ai",catL:"AI",st:"exited",clients:"0",cl:0,
+     note:"Raised ~$810K in 2020, silent since",
+     who:"Restaurant self-serve",meth:"—",tp:"—",ta:"—",
+     ar:true,an:"—",lang:"—",size:"—",viewers:"—",plans:[]},
+    {n:"Foodo",c:"UK + UAE",cat:"other",catL:"Bundled OS",st:"active",clients:"15",cl:15,
+     note:"AR bundled with POS, ordering, websites — never priced alone",
+     who:"—",meth:"—",tp:"—",ta:"—",
+     ar:true,an:true,lang:"—",size:"—",viewers:"—",plans:[]},
+    {n:"AI photo tools",c:"Global",cat:"other",catL:"Adjacent",st:"active",clients:"—",cl:0,
+     note:"FoodShot, MenuPhotoAI + native DoorDash and Uber Eats",
+     who:"Restaurant uploads a photo",meth:"AI enhancement, no 3D",tp:"Instant",ta:"~30 sec",
+     ar:false,an:false,lang:"—",size:"n/a",viewers:"n/a",
+     plans:[{p:"FoodShot 100",pr:"$45/mo",d:"100 images",pd:0.45,ss:true}]},
+    {n:"BetaReal",c:"Georgia",cat:"manual",catL:"Manual",st:"active",clients:"1",cl:1,ours:true,
+     note:"Monday Greens. Smallest models in the category",
+     who:"We do — on site",meth:"Pro camera → KIRI → Blender",tp:"~5 per client",ta:"—",
+     ar:true,an:true,lang:"3",size:"~1.6 MB",viewers:"one per card",
+     plans:[{p:"Current",pr:"₾300/mo",d:"5",pd:22.00,ss:false}]}
+  ];
+
+  const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const stLabel = {active:"Active", dormant:"Dormant", exited:"Exited", new:"Unproven"};
+  const mark = v => v === true ? '<span class="yes">Yes</span>'
+                 : v === false ? '<span class="no">No</span>'
+                 : `<span class="dash">${esc(v)}</span>`;
+  const rowCls = d => d.ours ? ' class="ours"' : '';
+
+  function render(filter) {
+    const rows = D.filter(d => filter === 'all' || d.cat === filter);
+
+    document.getElementById('master').innerHTML = rows.map(d => `
+      <tr${rowCls(d)}>
+        <td class="co">${esc(d.n)}</td>
+        <td>${esc(d.c)}</td>
+        <td>${esc(d.catL)}</td>
+        <td><span class="pill ${d.st}">${stLabel[d.st]}</span></td>
+        <td class="num">${esc(d.clients)}</td>
+        <td class="note">${esc(d.note)}</td>
+      </tr>`).join('');
+
+    document.getElementById('prod').innerHTML = rows.map(d => `
+      <tr${rowCls(d)}>
+        <td class="co">${esc(d.n)}</td>
+        <td>${esc(d.who)}</td>
+        <td>${esc(d.meth)}</td>
+        <td class="num">${esc(d.tp)}</td>
+        <td class="num">${esc(d.ta)}</td>
+      </tr>`).join('');
+
+    const plans = [];
+    rows.forEach(d => d.plans.forEach(p => plans.push({ ...p, n: d.n, ours: d.ours })));
+    plans.sort((a, b) => a.pd - b.pd);
+    document.getElementById('price').innerHTML = plans.length ? plans.map(p => `
+      <tr${p.ours ? ' class="ours"' : ''}>
+        <td class="co">${esc(p.n)}</td>
+        <td>${esc(p.p)}</td>
+        <td class="num">${esc(p.pr)}</td>
+        <td class="num">${esc(p.d)}</td>
+        <td class="num"><strong>$${p.pd.toFixed(2)}</strong></td>
+        <td>${mark(p.ss)}</td>
+      </tr>`).join('')
+      : '<tr><td colspan="6" class="note">No published pricing in this category.</td></tr>';
+
+    document.getElementById('feat').innerHTML = rows.map(d => `
+      <tr${rowCls(d)}>
+        <td class="co">${esc(d.n)}</td>
+        <td>${mark(d.ar)}</td>
+        <td>${mark(d.an)}</td>
+        <td class="num">${esc(d.lang)}</td>
+        <td class="num">${esc(d.size)}</td>
+        <td class="num">${esc(d.viewers)}</td>
+      </tr>`).join('');
+  }
+
+  document.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(b =>
+        b.setAttribute('aria-pressed', String(b === btn)));
+      render(btn.dataset.f);
+    });
+  });
+
+  render('all');
+</script>
