@@ -54,8 +54,23 @@ JPEG_QUALITY = 92
 
 
 def _data_uri(path: Path) -> str:
-    """Inline an image, downscaled, so nothing has to be hosted first."""
+    """Inline an image, downscaled, so nothing has to be hosted first.
+
+    The Studio's browser side already downscales to MAX_EDGE before upload, so for the
+    common path this would be a pointless decode-and-re-encode. On a 0.1-CPU free
+    container that is not free: four 2048px JPEGs cost real seconds. So when a file is
+    already small enough and already JPEG, ship the bytes untouched.
+    """
     from PIL import Image, ImageOps
+
+    raw = path.read_bytes()
+    if path.suffix.lower() in (".jpg", ".jpeg"):
+        try:
+            with Image.open(io.BytesIO(raw)) as probe:
+                if max(probe.size) <= MAX_EDGE and probe.info.get("exif") is None:
+                    return "data:image/jpeg;base64," + base64.b64encode(raw).decode()
+        except Exception:
+            pass   # unreadable header - fall through to the full path below
 
     with Image.open(path) as im:
         im = ImageOps.exif_transpose(im)         # honour camera rotation
