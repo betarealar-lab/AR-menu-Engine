@@ -31,7 +31,6 @@ ROOT = Path(__file__).resolve().parent
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--dataset", type=Path, default=ROOT / "dataset")
     ap.add_argument("--out", type=Path, default=ROOT / "out")
     ap.add_argument("--engines", nargs="+", default=["meshy-7"])
     ap.add_argument("--dish", help="only this dish")
@@ -47,11 +46,11 @@ def main() -> int:
         return 0
 
     load_env()
-    rows = [m for m in dataset.catalogue(a.dataset)
+    rows = [m for m in dataset.catalogue()
             if len(m.get("frames", {})) == 4
             and (not a.dish or dataset.slug(a.dish) == m["dish_id"])]
     if not rows:
-        print(f"Nothing complete in {a.dataset}. Upload four frames per dish in the Studio first.")
+        print("No complete variants found. Upload four frames per dish in the Studio first.")
         return 1
 
     built = [engines.build(n) for n in a.engines]
@@ -80,8 +79,12 @@ def main() -> int:
                 print(f"  = {m['dish_id']}/{m['variant']:12} {engine.label:22} already done")
                 continue
             print(f"  > {m['dish_id']}/{m['variant']:12} {engine.label:22} ...", end="", flush=True)
-            job = Job(dish=m["dish_id"],
-                      images=dataset.frames(a.dataset, m["dish"], m["variant"]))
+            staged = a.out / "_batch"
+            staged.mkdir(parents=True, exist_ok=True)
+            paths = []
+            for i, blob in enumerate(dataset.frames(m["dish"], m["variant"])):
+                fp = staged / f'{m["dish_id"]}-{i}.jpg'; fp.write_bytes(blob); paths.append(fp)
+            job = Job(dish=m["dish_id"], images=paths)
             r = engine.generate(job, out)
             results.append((m, engine, r))
             print(f" ok {r.seconds}s" if r.ok else f" FAILED {r.error}")

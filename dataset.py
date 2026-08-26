@@ -1,34 +1,37 @@
-"""The photo store.
+"""Dishes, variants, frames and verdicts - all of it through `storage`.
 
-Nothing is scanned from a drive. Frames arrive by upload and land here immediately,
-under a stable dish id, because "meshy-7 vs the hybrid" is only a real comparison if
-both saw identical bytes - and a working photo drive gets re-graded, renamed and moved.
+Layout in the photos bucket:
 
-    dataset/
-      tuna-sandwich/
-        ring-25/                    <- a variant is one angle strategy
-          1-front.jpg
-          2-right.jpg
-          3-back.jpg
-          4-left.jpg
-          meta.json                 <- per-frame sha256, original filename, timestamp
+    dishes/<dish_id>/<variant>/record.json     frames + verdict + who did what
+    dishes/<dish_id>/<variant>/1-front.jpg
+    dishes/<dish_id>/<variant>/2-right.jpg     ... etc
+
+and in the models bucket:
+
+    models/<dish_id>/<variant>/<engine>/model.glb   .usdz   .png
+
+**One record per dish+variant, not one shared state file.** With several teammates working
+at once a single studio.json would be a write race - two people judging different dishes
+would overwrite each other. Keyed per variant, they never collide.
+
+A VARIANT is one angle strategy for one dish (`ring-25`, `ring-45`, `three-plus-top`). The
+same dish shot four ways is four experiments.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import re
-import shutil
 from datetime import datetime, timezone
-from pathlib import Path
+
+import storage
 
 SLOTS = ["front", "right", "back", "left"]
 SLOT_ROLE = {
     0: "primary view - meshy-7 reconstructs from this one first",
-    1: "coverage",
-    2: "coverage",
-    3: "coverage",
+    1: "coverage", 2: "coverage", 3: "coverage",
 }
+PHOTOS, MODELS = "photos", "models"
 
 
 def slug(name: str) -> str:
@@ -36,98 +39,130 @@ def slug(name: str) -> str:
     return s or "untitled"
 
 
-def variant_dir(root: Path, dish: str, variant: str) -> Path:
-    return root / slug(dish) / slug(variant)
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _meta_path(root: Path, dish: str, variant: str) -> Path:
-    return variant_dir(root, dish, variant) / "meta.json"
+def _prefix(dish: str, variant: str) -> str:
+    return f"dishes/{slug(dish)}/{slug(variant)}"
 
 
-def manifest(root: Path, dish: str, variant: str) -> dict:
-    p = _meta_path(root, dish, variant)
-    if p.is_file():
-        return json.loads(p.read_text(encoding="utf-8"))
-    return {"dish": dish, "dish_id": slug(dish), "variant": variant, "frames": {}}
+def _record_key(dish: str, variant: str) -> str:
+    return f"{_prefix(dish, variant)}/record.json"
 
 
-def _write(root: Path, dish: str, variant: str, meta: dict) -> None:
-    p = _meta_path(root, dish, variant)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+def blank(dish: str, variant: str) -> dict:
+    return {
+        "dish": dish, "dish_id": slug(dish), "variant": variant,
+        "frames": {}, "status": "empty", "verdict": "", "faults": [], "note": "",
+        "engine": "", "seconds": 0, "error": "", "model_key": "",
+        "created_utc": _now(), "judged_by": "", "judged_utc": "",
+    }
 
 
-def save_frame(root: Path, dish: str, variant: str, slot: int,
-               data: bytes, source_name: str) -> dict:
-    """Write one uploaded frame into its slot. Re-uploading replaces it."""
+def record(dish: str, variant: str) -> dict:
+    raw = storage.backend().get(PHOTOS, _record_key(dish, variant))
+    if not raw:
+        return blank(dish, variant)
+    r = blank(dish, variant) | json.loads(raw)
+    return r
+
+
+def write(rec: dict) -> dict:
+    storage.backend().put(
+        PHOTOS, _record_key(rec["dish"], rec["variant"]),
+        json.dumps(rec, indent=2).encode(), "application/json")
+    return rec
+
+
+# ── frames ──────────────────────────────────────────────────────────
+
+def frame_key(dish: str, variant: str, slot: int) -> str:
+    return f"{_prefix(dish, variant)}/{slot + 1}-{SLOTS[slot]}.jpg"
+
+
+def save_frame(dish: str, variant: str, slot: int, data: bytes,
+               source_name: str, by: str = "") -> dict:
     if not 0 <= slot < 4:
         raise ValueError(f"slot {slot} out of range")
-    out = variant_dir(root, dish, variant)
-    out.mkdir(parents=True, exist_ok=True)
+    key = frame_key(dish, variant, slot)
+    storage.backend().put(PHOTOS, key, data, "image/jpeg")
 
-    dest = out / f"{slot + 1}-{SLOTS[slot]}.jpg"
-    dest.write_bytes(data)
-
-    meta = manifest(root, dish, variant)
-    meta["frames"][str(slot)] = {
-        "slot": SLOTS[slot],
-        "file": dest.name,
-        "source_name": source_name,
-        "bytes": len(data),
-        "sha256": hashlib.sha256(data).hexdigest()[:16],
-        "stored_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    rec = record(dish, variant)
+    rec["frames"][str(slot)] = {
+        "slot": SLOTS[slot], "key": key, "source_name": source_name,
+        "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()[:16],
+        "uploaded_utc": _now(), "uploaded_by": by,
     }
-    _write(root, dish, variant, meta)
-    return meta
+    if rec["status"] in ("empty", ""):
+        rec["status"] = "ready"
+    return write(rec)
 
 
-def clear_frame(root: Path, dish: str, variant: str, slot: int) -> dict:
-    meta = manifest(root, dish, variant)
-    entry = meta["frames"].pop(str(slot), None)
+def clear_frame(dish: str, variant: str, slot: int) -> dict:
+    rec = record(dish, variant)
+    entry = rec["frames"].pop(str(slot), None)
     if entry:
-        (variant_dir(root, dish, variant) / entry["file"]).unlink(missing_ok=True)
-    _write(root, dish, variant, meta)
-    return meta
+        storage.backend().delete_prefix(PHOTOS, entry["key"])
+    return write(rec)
 
 
-def frames(root: Path, dish: str, variant: str) -> list[Path]:
-    """The stored frames in slot order. This is exactly what an engine receives."""
-    meta = manifest(root, dish, variant)
-    d = variant_dir(root, dish, variant)
-    return [d / meta["frames"][str(i)]["file"]
-            for i in range(4) if str(i) in meta["frames"]]
+def read_frame(dish: str, variant: str, slot: int) -> bytes | None:
+    return storage.backend().get(PHOTOS, frame_key(dish, variant, slot))
 
 
-def frame_path(root: Path, dish: str, variant: str, slot: int) -> Path | None:
-    entry = manifest(root, dish, variant)["frames"].get(str(slot))
-    return variant_dir(root, dish, variant) / entry["file"] if entry else None
+def frames(dish: str, variant: str) -> list[bytes]:
+    """The stored frames in slot order - exactly what an engine receives."""
+    rec = record(dish, variant)
+    out = []
+    for i in range(4):
+        e = rec["frames"].get(str(i))
+        if e:
+            b = storage.backend().get(PHOTOS, e["key"])
+            if b:
+                out.append(b)
+    return out
 
 
-def variants_of(root: Path, dish: str) -> list[str]:
-    d = root / slug(dish)
-    if not d.is_dir():
-        return []
-    return sorted(p.name for p in d.iterdir() if p.is_dir() and (p / "meta.json").is_file())
+# ── models ──────────────────────────────────────────────────────────
+
+def model_key(dish: str, variant: str, engine: str, ext: str) -> str:
+    return f"models/{slug(dish)}/{slug(variant)}/{engine}/model.{ext}"
 
 
-def dishes(root: Path) -> list[str]:
-    if not root.is_dir():
-        return []
-    return sorted(p.name for p in root.iterdir() if p.is_dir())
+def save_model(dish: str, variant: str, engine: str, ext: str, data: bytes) -> str:
+    ctype = {"glb": "model/gltf-binary", "usdz": "model/vnd.usdz+zip",
+             "png": "image/png"}.get(ext, "application/octet-stream")
+    key = model_key(dish, variant, engine, ext)
+    storage.backend().put(MODELS, key, data, ctype)
+    return key
 
 
-def delete(root: Path, dish: str, variant: str | None = None) -> None:
-    """Remove a variant, or the whole dish. Nothing here is precious enough to keep
-    around once it is wrong - the source photos live on your own drive."""
-    target = variant_dir(root, dish, variant) if variant else root / slug(dish)
-    if target.is_dir():
-        shutil.rmtree(target)
+def read_model(key: str) -> bytes | None:
+    return storage.backend().get(MODELS, key)
 
 
-def catalogue(root: Path) -> list[dict]:
-    """Everything stored, for re-running the whole set against a new engine."""
-    rows = []
-    for dish in dishes(root):
-        for variant in variants_of(root, dish):
-            rows.append(manifest(root, dish, variant))
-    return rows
+# ── listing ─────────────────────────────────────────────────────────
+
+def dishes() -> list[str]:
+    return storage.backend().children(PHOTOS, "dishes/")
+
+
+def variants_of(dish: str) -> list[str]:
+    return storage.backend().children(PHOTOS, f"dishes/{slug(dish)}/")
+
+
+def delete(dish: str, variant: str | None = None) -> None:
+    """Remove a variant or a whole dish. The originals live on someone's own drive."""
+    b = storage.backend()
+    if variant:
+        b.delete_prefix(PHOTOS, _prefix(dish, variant))
+        b.delete_prefix(MODELS, f"models/{slug(dish)}/{slug(variant)}")
+    else:
+        b.delete_prefix(PHOTOS, f"dishes/{slug(dish)}")
+        b.delete_prefix(MODELS, f"models/{slug(dish)}")
+
+
+def catalogue() -> list[dict]:
+    """Every stored variant - for re-running the whole set against a new engine."""
+    return [record(d, v) for d in dishes() for v in variants_of(d)]

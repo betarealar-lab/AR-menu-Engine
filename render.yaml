@@ -1,0 +1,29 @@
+# Render blueprint. Connect the repo, then set the secrets in the dashboard.
+#
+# Local disk on a hosted container is ephemeral - it is wiped on every deploy - so all
+# frames, models and records go to R2. Set the R2 vars or teammates will lose their work.
+services:
+  - type: web
+    name: betareal-scan-studio
+    runtime: python
+    plan: starter                 # free tier sleeps after 15 min; a scan takes 1-3 min
+    buildCommand: pip install -r requirements.txt
+    startCommand: python studio.py --host 0.0.0.0
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: MESHY_API_KEY        # one shared key, one shared credit pool
+        sync: false
+      - key: STUDIO_USERS         # temo:pw,niko:pw,gio:pw  - who did what is recorded
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_PHOTOS
+        value: betareal-photos
+      - key: R2_BUCKET_MODELS
+        value: betareal-models
