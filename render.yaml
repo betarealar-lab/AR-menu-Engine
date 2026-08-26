@@ -19,8 +19,8 @@ services:
         sync: false
       - key: STUDIO_USERS         # temo:pw,niko:pw,gio:pw  - who did what is recorded
         sync: false
-      - key: R2_ACCOUNT_ID
-        sync: false
+      - key: R2_ENDPOINT          # paste from the R2 token screen, e.g.
+        sync: false               # https://<account-id>.r2.cloudflarestorage.com
       - key: R2_ACCESS_KEY_ID
         sync: false
       - key: R2_SECRET_ACCESS_KEY

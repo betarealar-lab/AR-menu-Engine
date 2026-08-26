@@ -15,7 +15,8 @@ Two buckets, because the two kinds of data have opposite economics:
                             roughly 100x larger than everything the product serves.
     models  hot, public     ~2 MB each, served to diners constantly, zero egress on R2.
 
-Configure by environment. If R2_ACCOUNT_ID is absent, local disk is used, so the laptop
+Configure by environment: R2_ENDPOINT (paste the URL Cloudflare gives you) or
+R2_ACCOUNT_ID, plus the key pair. With neither, local disk is used, so the laptop
 workflow keeps working with no flags.
 """
 from __future__ import annotations
@@ -29,6 +30,21 @@ from config import load_env
 _client = None
 
 
+def endpoint() -> str:
+    """The S3 endpoint for this account.
+
+    Cloudflare never labels an "Account ID" field on the token screen - it is the first
+    chunk of the endpoint URL it hands you. So take R2_ENDPOINT pasted verbatim if it is
+    set, and fall back to building it from R2_ACCOUNT_ID. Either works; the first one
+    saves reading a URL apart by eye, and it carries jurisdiction endpoints
+    (`<id>.eu.r2.cloudflarestorage.com`) correctly for free.
+    """
+    ep = os.environ.get("R2_ENDPOINT", "").strip().rstrip("/")
+    if ep:
+        return ep if ep.startswith("http") else f"https://{ep}"
+    return f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+
+
 def _r2():
     """Lazily build the S3 client. R2 is S3-compatible, so boto3 talks to it directly."""
     global _client
@@ -37,7 +53,7 @@ def _r2():
         from botocore.config import Config
         _client = boto3.client(
             "s3",
-            endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+            endpoint_url=endpoint(),
             aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
             aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
             region_name="auto",
@@ -141,7 +157,7 @@ class R2Backend(Backend):
 
 def backend(local_root: Path | None = None) -> Backend:
     load_env()
-    if os.environ.get("R2_ACCOUNT_ID"):
+    if os.environ.get("R2_ENDPOINT") or os.environ.get("R2_ACCOUNT_ID"):
         return R2Backend()
     return LocalBackend(local_root or Path(__file__).resolve().parent / "store")
 
@@ -149,5 +165,6 @@ def backend(local_root: Path | None = None) -> Backend:
 def describe() -> str:
     b = backend()
     if b.kind == "r2":
-        return f"R2 | photos={b.buckets['photos']} | models={b.buckets['models']}"
+        host = endpoint().split("//")[-1]
+        return f"R2 @ {host} | photos={b.buckets['photos']} | models={b.buckets['models']}"
     return f"local disk | {b.root}"
