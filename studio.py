@@ -137,15 +137,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self._detail(q["dish"], q.get("variant", "default")))
             if path == "/frame":
                 q = self._q()
-                b = dataset.read_frame(q["dish"], q["variant"], int(q["slot"]))
-                return self._send(200, b, "image/jpeg") if b else \
-                       self._send(404, b"no frame", "text/plain")
+                key = dataset.frame_key(q["dish"], q["variant"], int(q["slot"]))
+                return self._serve(dataset.PHOTOS, key, "image/jpeg")
             if path == "/model":
                 q = self._q()
                 rec = dataset.record(q["dish"], q.get("variant", "default"))
-                b = dataset.read_model(rec.get("model_key", "")) if rec.get("model_key") else None
-                return self._send(200, b, "model/gltf-binary") if b else \
-                       self._send(404, b"no model", "text/plain")
+                return self._serve(dataset.MODELS, rec.get("model_key", ""),
+                                   "model/gltf-binary")
             if path == "/api/export":
                 return self._send(200, self._csv().encode(), "text/csv; charset=utf-8")
             self._send(404, b"not found", "text/plain")
@@ -244,6 +242,26 @@ class Handler(BaseHTTPRequestHandler):
             for f in tmp.glob("*"):
                 try: f.unlink()
                 except OSError: pass
+
+    def _serve(self, bucket: str, key: str, ctype: str) -> None:
+        """Redirect to a signed R2 URL where possible, stream the bytes where not.
+
+        The redirect keeps model and photo traffic off the app server entirely - R2 egress
+        is free, the host's bandwidth allowance is not. Local disk has nothing to sign
+        against, so it falls back to streaming.
+        """
+        if not key:
+            return self._send(404, b"not found", "text/plain")
+        url = storage.backend().signed_url(bucket, key)
+        if url:
+            self.send_response(302)
+            self.send_header("Location", url)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        blob = storage.backend().get(bucket, key)
+        return self._send(200, blob, ctype) if blob else                self._send(404, b"not found", "text/plain")
 
     # ---------- shaping ----------
 

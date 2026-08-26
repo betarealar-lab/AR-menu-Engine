@@ -70,6 +70,10 @@ class Backend:
     def delete_prefix(self, bucket: str, prefix: str) -> None: ...
     def list_keys(self, bucket: str, prefix: str) -> list[str]: ...
 
+    def signed_url(self, bucket: str, key: str, seconds: int = 900) -> str | None:
+        """A direct, time-limited URL, or None if this backend cannot make one."""
+        return None
+
     def children(self, bucket: str, prefix: str) -> list[str]:
         """Immediate folder names under a prefix - how dishes and variants are listed."""
         out = set()
@@ -141,6 +145,21 @@ class R2Backend(Backend):
         for i in range(0, len(keys), 1000):
             _r2().delete_objects(Bucket=self._b(bucket),
                                  Delete={"Objects": [{"Key": k} for k in keys[i:i + 1000]]})
+
+    def signed_url(self, bucket, key, seconds=900):
+        """Hand the browser a direct R2 link instead of streaming bytes through the app.
+
+        R2 egress is free; the app server's bandwidth is not. Proxying a 5 MB model
+        through the container spends the host's allowance on something the object store
+        would serve for nothing - and adds a hop for every frame thumbnail too.
+        """
+        try:
+            return _r2().generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self._b(bucket), "Key": key},
+                ExpiresIn=seconds)
+        except Exception:
+            return None
 
     def list_keys(self, bucket, prefix):
         out, token = [], None

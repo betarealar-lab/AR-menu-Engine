@@ -251,9 +251,13 @@ const api = (u, body) => fetch(u, body ? {
   method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
 } : undefined).then(r => r.json());
 
-/* Downscale in the browser to exactly what the engine would reduce it to anyway.
-   A 24MB camera JPEG becomes ~1MB, and nothing is lost that Meshy would have kept. */
-function prepare(file, max = 2048) {
+/* What gets STORED, which is not the same question as what gets SENT.
+   The photos bucket is the training corpus - the moat - and a dish cannot be reshot six
+   months later, so keep well more detail here than any engine consumes today. 4096px at
+   q0.95 lands around 3-4MB: cheap on R2, still plenty for a future fine-tune, and small
+   enough that a phone can upload it. The engine gets its own, smaller cap server-side. */
+const STORE_MAX_EDGE = 4096;
+function prepare(file, max = STORE_MAX_EDGE) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -263,7 +267,7 @@ function prepare(file, max = 2048) {
       c.height = Math.round(img.height * s);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(img.src);
-      resolve(c.toDataURL('image/jpeg', 0.92));
+      resolve(c.toDataURL('image/jpeg', 0.95));
     };
     img.onerror = () => reject(new Error(`${file.name} is not a readable image`));
     img.src = URL.createObjectURL(file);

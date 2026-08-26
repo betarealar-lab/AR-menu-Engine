@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 import time
 from pathlib import Path
 
@@ -49,8 +50,11 @@ def _cost(ai_model: str, textured: bool) -> int:
 # inflates by a third - four of those is a ~130 MB request body. Meshy works from
 # a far smaller image than that, so downscale on the way out. 2048px on the long
 # edge is well above what the model consumes and keeps a submission near 1 MB.
-MAX_EDGE = 2048
-JPEG_QUALITY = 92
+# What we SEND to the engine. Separate from what we KEEP: multi-view models consume a
+# far smaller image than a camera produces, so sending more is mostly upload time - but
+# this is a guess about Meshy's internals, not documented, so it is tunable and testable.
+MAX_EDGE = int(os.environ.get("MESHY_MAX_EDGE", "2048"))
+JPEG_QUALITY = 95
 
 
 def _data_uri(path: Path) -> str:
