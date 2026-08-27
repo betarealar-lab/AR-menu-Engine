@@ -29,6 +29,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import glb
+
 TARGET_TRIANGLES = 40_000
 TARGET_TEXTURE = 2048
 
@@ -44,7 +46,7 @@ class Optimized:
 
 def toolchain() -> str:
     """Which optimizer is usable here: 'gltf-transform', 'gltfpack', or '' for none."""
-    if shutil.which("gltf-transform"):
+    if _exe("gltf-transform"):
         return "gltf-transform"
     if shutil.which("npx") and _npx_has("@gltf-transform/cli"):
         return "npx-gltf-transform"
@@ -53,9 +55,22 @@ def toolchain() -> str:
     return ""
 
 
+def _exe(name: str) -> str | None:
+    """Resolve to a full path.
+
+    shutil.which finds npm's global shims, but on Windows those are .cmd files and
+    subprocess cannot exec them by bare name - it reports "not found" for something that
+    is plainly there. Passing the resolved path works on every platform.
+    """
+    return shutil.which(name)
+
+
 def _npx_has(pkg: str) -> bool:
     try:
-        r = subprocess.run(["npx", "--no-install", pkg, "--version"],
+        npx = _exe("npx")
+        if not npx:
+            return False
+        r = subprocess.run([npx, "--no-install", pkg, "--version"],
                            capture_output=True, timeout=25)
         return r.returncode == 0
     except Exception:
@@ -68,7 +83,8 @@ def available() -> bool:
 
 def _run(cmd: list[str], cwd: Path) -> tuple[bool, str]:
     try:
-        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600)
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=900)
         return r.returncode == 0, (r.stderr or r.stdout)[-600:]
     except FileNotFoundError:
         return False, f"{cmd[0]} not found"
@@ -91,31 +107,40 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
     out_dir.mkdir(parents=True, exist_ok=True)
     opt = out_dir / "model_opt.glb"
     draco = out_dir / "model_draco.glb"
-    base = (["gltf-transform"] if tc == "gltf-transform" else
-            ["npx", "--no-install", "@gltf-transform/cli"])
+    base = ([_exe("gltf-transform")] if tc == "gltf-transform" else
+            [_exe("npx"), "--no-install", "@gltf-transform/cli"])
 
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         staged = work / "in.glb"
         shutil.copy2(master, staged)
+        geom = work / "geom.glb"
 
-        # Decimate and shrink textures. `optimize` bundles weld/join/simplify/resize.
+        # 1. Geometry only. Texture work is explicitly disabled here because
+        #    glTF-Transform routes it through sharp/libvips, which dies on Meshy's
+        #    textures with "colourspace: parameter space not set" - see glb.py.
         ok, log = _run(base + [
-            "optimize", str(staged), str(opt),
+            "optimize", str(staged), str(geom),
             "--compress", "false",
+            "--texture-compress", "false",
             "--simplify-error", "0.001",
-            "--texture-size", str(texture),
         ], work)
         if not ok:
-            return Optimized(ok=False, toolchain=tc, error=f"optimize failed: {log}")
+            return Optimized(ok=False, toolchain=tc, error=f"geometry pass failed: {log}")
 
-        # Draco is the web payload. This reverses the old "no Draco" rule, which existed
-        # only because the Three.js WebXR path had no decoder - it lazy-loads one now,
-        # and model-viewer has always bundled its own.
+        # 2. Textures, in Python. This is where the weight actually is: after decimation
+        #    the salad was still 47 MB, of which 45 MB was three JPEGs.
+        try:
+            tex_stats = glb.resize_textures(geom, opt, max_edge=texture)
+        except Exception as e:  # noqa: BLE001
+            return Optimized(ok=False, toolchain=tc,
+                             error=f"texture pass failed: {type(e).__name__}: {e}")
+
+        # 3. Draco for the web payload.
         ok, log = _run(base + ["draco", str(opt), str(draco)], work)
         if not ok:
             return Optimized(ok=False, toolchain=tc, error=f"draco failed: {log}",
-                             files={"opt": opt})
+                             files={"opt": opt}, stats=tex_stats)
 
     files = {"opt": opt, "draco": draco}
     stats = {
@@ -125,6 +150,7 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         "shrink": round(master.stat().st_size / max(draco.stat().st_size, 1), 1),
         "target_triangles": triangles,
         "target_texture": texture,
+        **tex_stats,
     }
     # USDZ needs Apple's tooling or a converter that is not reliably present on Linux.
     # Meshy returns a USDZ of its own, so the pipeline uses that and skips the conversion

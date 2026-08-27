@@ -5,20 +5,13 @@
 services:
   - type: web
     name: betareal-scan-studio
-    runtime: python
+    runtime: docker            # Python + Node; the optimise stage needs glTF-Transform
+    dockerfilePath: ./Dockerfile
     plan: free                    # sleeps after ~15 min idle; first hit then takes ~1 min
                                   # to wake. Upgrade to `starter` ($7) if the wait annoys
                                   # the team - it is a one-line change and a redeploy.
-    buildCommand: pip install -r requirements.txt
-    startCommand: python studio.py --host 0.0.0.0
     healthCheckPath: /healthz
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12"
-      # The optimise stage shells out to glTF-Transform, which is Node. A Python runtime
-      # has none, so export reports "no optimiser on this host" and keeps the master
-      # instead of shipping one. To enable it, move this service to a Docker runtime with
-      # both Python and Node, then `npm i -g @gltf-transform/cli`.
       - key: MESHY_API_KEY        # one shared key, one shared credit pool
         sync: false
       - key: STUDIO_USERS         # temo:pw,niko:pw,gio:pw  - who did what is recorded
