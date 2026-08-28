@@ -117,7 +117,10 @@ class Handler(BaseHTTPRequestHandler):
         # The platform's health probe cannot send credentials, so it has to sit in front
         # of the auth check. It reveals nothing - a literal "ok" and the storage mode.
         if path == "/healthz":
-            return self._send(200, f"ok {storage.backend().kind}".encode(), "text/plain")
+            # Storage backend and optimiser toolchain, both non-sensitive, so a deploy can
+            # be verified from outside without handing anyone a login.
+            body = f"ok storage={storage.backend().kind} optimizer={optimize.toolchain() or 'none'}"
+            return self._send(200, body.encode(), "text/plain")
         who = self.whoami()
         if who is None:
             return self.challenge()
@@ -414,6 +417,7 @@ def main() -> int:
     print("BetaReal Scan Studio")
     print(f"  storage : {storage.describe()}")
     print(f"  engine  : {a.engine}")
+    print(f"  optimizer: {optimize.describe()}")
     print(f"  users   : {', '.join(accounts) if accounts else 'OPEN - no auth (set STUDIO_USERS)'}")
     print(f"  listen  : http://{a.host}:{a.port}")
     if a.host != "127.0.0.1" and not accounts:
