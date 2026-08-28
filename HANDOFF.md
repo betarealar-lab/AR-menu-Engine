@@ -131,6 +131,7 @@ attributable.
 
 | Bug | Fix |
 |---|---|
+| **The whole page was dead on load.** `$('#export-model').onclick = ...` ran at parse time, but that button lives inside `<template id="tpl-bench">`, so it set `.onclick` on `null`, threw, and took every line after it — `boot()` included — down with it. The Studio rendered its shell and did nothing. Live in production from `eb29357` (2026-08-27) until 2026-08-29 — two days in which the Studio could not be used at all | Bound through the delegated `click` listener instead. **Anything inside that template must be delegated, never bound directly** |
 | **glTF-Transform's texture stage dies on Meshy JPEGs** — `colourspace: parameter space not set` from sharp/libvips, and it takes the whole `optimize` command down | Textures resized in Pillow (`glb.py`). The JPEGs are ordinary baseline files Pillow opens fine — the bug is in the resizer. **This also means no libvips in the container** |
 | `/healthz` sat behind basic auth, so the platform probe got a 401 and the deploy read unhealthy | Answers before the auth check |
 | Clicking a dish always opened variant `default`, so a dish stored as `ring-25` opened an empty plate and finished work looked lost | Opens the first variant that exists |
@@ -198,22 +199,24 @@ These are places where confident advice was wrong. They are the most useful thin
 
 ## 10. Start here
 
-From `ROADMAP.md` Phase 0, in order. The first two are work that is otherwise going to be
-redone:
+**Phase 0.1 and 0.2 are done** (2026-08-29) — generation optimises automatically, review
+loads the shipping file with a `Master` toggle beside it, and one real-world dimension
+(any of height / width / length) is baked into that file. `ROADMAP.md` Phase 0 records
+what shipped; `DECISIONS.md` §2 records why.
 
-**0.1 — Judge the optimised model, not the master.** `/model` currently serves `model_key`,
-the untouched master: ~216 MB VRAM against ~52 MB optimised, which drops the tab on a
-mid-range Android. And a master can look perfect while the optimiser loses the garnish, so
-the verdict is on the wrong artefact. Optimisation is 5 seconds and costs no credits.
-Generation should run it automatically, and review should load the result.
+Next, from `ROADMAP.md`:
 
-**0.2 — Real-world scale.** Three fields, any one sufficient. Default proposed from dish
-shape. Without it every model is the wrong size in AR.
+**1.1 — Metadata to Postgres.** `models`, `verdicts`, `faults`, `frames` as real tables;
+objects stay in R2. The verdict log is the research asset and today it cannot answer a
+single question. One dish to migrate — it only gets harder.
 
-Then `1.1` metadata to Postgres and `1.2` the job queue — both free, both cheap now and
-expensive later.
+**1.2 — The job queue.** Generation runs on a thread inside the web process with
+in-memory state. It loses jobs on every deploy and breaks at two containers. A `jobs`
+table plus a polling worker is free and survives restarts.
 
----
+Both cost $0. Still open and cheap to settle: `should_remesh: false` (does it return the
+true ~2M master?) and what one meshy-7 call actually costs — one generation each, then
+read Settings → API → Daily Usage.
 
 ## 11. Repo map
 

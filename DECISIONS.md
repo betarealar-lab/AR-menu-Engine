@@ -80,6 +80,34 @@ unviable and self-hosting makes it rounding error.
   name Meshy 7. Newer being cheaper is normal — Meshy 6 is the priced-high legacy outlier in
   every row — but confirm by reading Settings → API → Daily Usage after one real call.
 
+### After the engine: the optimiser, and real-world scale
+
+Generation runs the optimiser automatically, and the review screen loads its **output**,
+not the master. The earlier call was the reverse — optimise only what gets approved, so a
+rejected dish costs nothing but the look. That was wrong on both halves: the work is five
+seconds of CPU and zero credits, and the master is the wrong thing to judge. It is ~216 MB
+of VRAM against ~52 MB, which is the difference between a page a mid-range Android survives
+and one it drops, and a master can look perfect while the optimiser has quietly eaten the
+garnish. The master stays one click away for when a verdict is contested — the only honest
+way to separate "the engine got it wrong" from "the optimiser did".
+
+**One dimension in centimetres is enough.** The model supplies the aspect ratio for the
+other two, so asking for all three is asking for two numbers nobody has. Which one a person
+knows varies — the height of a burger, the diameter of a bowl — so height, width and length
+are all offered and any one is accepted. `width` means the **widest horizontal span**,
+which is what a person means by the width of a plate, what `optimize-model.mjs --size`
+already means in `BetaReal scaleable`, and what the `-30cm` folder names encode. The Studio
+and the hand-run script agree by construction.
+
+Placement happens **before Draco, by wrapping the scene in one node**, never by rewriting
+vertices. Draco quantises positions in local space, so baking a 0.15x scale into the
+vertices first throws away precision it needs. Measured on the burrata salad: 104 MB master
+→ 1.85 MB Draco at exactly 28.0 cm across, seated on y=0, 6 seconds.
+
+What is deliberately **not** done: auto-rotation. The .mjs script guesses upright from the
+thinnest axis because its inputs arrived sideways. A sideways model here came from a
+sideways photo, and guessing would break the models that are already correct.
+
 ---
 
 ## 3. Dataset licensing ⚠️

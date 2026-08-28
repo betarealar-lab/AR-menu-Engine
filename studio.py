@@ -44,8 +44,25 @@ FAULTS = [
     "tall or stacked", "uniform texture", "reflective tableware", "inconsistent grade",
 ]
 
-RUNNING: set[tuple[str, str]] = set()
+RUNNING: set[tuple[str, ...]] = set()
 RUN_LOCK = threading.Lock()
+
+
+def _model_key(rec: dict, stage: str) -> str:
+    """Which GLB to hand back.
+
+    `ship` is the default and the point of the whole exercise: review must load the
+    optimised, real-size file, because that is what a guest gets. A master that looks
+    perfect while the optimiser has eaten the garnish is a false pass, and at ~216 MB of
+    VRAM against ~52 MB it is also what drops the tab on a mid-range Android.
+
+    `master` stays reachable so a contested verdict can be checked against the original -
+    the only honest way to tell "the engine got it wrong" from "the optimiser did".
+    """
+    cat = rec.get("catalog_keys") or {}
+    if stage == "master":
+        return rec.get("model_key", "")
+    return cat.get("draco") or cat.get("opt") or rec.get("model_key", "")
 
 
 def users() -> dict[str, str]:
@@ -131,6 +148,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/meta":
                 return self._json({
                     "faults": FAULTS, "slots": SLOTS, "slot_role": dataset.SLOT_ROLE,
+                    "shapes": dataset.SHAPES, "scale_axes": dataset.SCALE_AXES,
                     "engines": [{"name": n, "credits": engines.build(n).cost_per_job,
                                  "uncertain": getattr(engines.build(n), "cost_uncertain", False)}
                                 for n in engines.REGISTRY],
@@ -157,7 +175,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/model":
                 q = self._q()
                 rec = dataset.record(q["dish"], q.get("variant", "default"))
-                return self._serve(dataset.MODELS, rec.get("model_key", ""),
+                return self._serve(dataset.MODELS, _model_key(rec, q.get("stage", "ship")),
                                    "model/gltf-binary")
             if path == "/api/export":
                 return self._send(200, self._csv().encode(), "text/csv; charset=utf-8")
@@ -194,18 +212,33 @@ class Handler(BaseHTTPRequestHandler):
                            judged_utc=dataset._now())
                 dataset.write(rec)
                 return self._json({"ok": True})
+            if path == "/api/scale":
+                # Setting a size re-runs the optimiser, because scale is baked into the
+                # shipped file rather than applied by the viewer. Five seconds, no credits.
+                rec = dataset.record(dish, variant)
+                cm = float(body.get("cm") or 0)
+                axis = body.get("axis", "width")
+                if cm and axis not in dataset.SCALE_AXES:
+                    return self._json({"error": f"unknown dimension {axis!r}"}, 400)
+                if cm and not 1 <= cm <= 200:
+                    return self._json({"error": "A dish is between 1 and 200 cm."}, 400)
+                rec["scale"] = {"axis": axis, "cm": cm, "shape": body.get("shape", ""),
+                                "set_by": who, "set_utc": dataset._now()} if cm else {}
+                if rec.get("model_key") and rec["status"] not in ("running", "optimising"):
+                    rec["status"] = "optimising"
+                    dataset.write(rec)
+                    threading.Thread(target=self._optimize,
+                                     args=(dish, variant, who), daemon=True).start()
+                else:
+                    dataset.write(rec)
+                return self._json(self._shape(dataset.record(dish, variant)))
             if path == "/api/optimize":
                 rec = dataset.record(dish, variant)
                 if not rec.get("model_key"):
                     return self._json({"error": "Nothing generated yet."}, 400)
-                if rec["verdict"] == "reject":
-                    return self._json({"error": "Rejected - not worth optimising."}, 400)
-                key = (dataset.slug(dish), dataset.slug(variant), "opt")
-                with RUN_LOCK:
-                    if key in RUNNING:
-                        return self._json({"status": "exporting"})
-                    RUNNING.add(key)
-                rec.update(status="exporting", export_error="")
+                if rec["status"] in ("running", "optimising"):
+                    return self._json({"status": rec["status"]})
+                rec.update(status="optimising", export_error="")
                 dataset.write(rec)
                 threading.Thread(target=self._optimize,
                                  args=(dish, variant, who), daemon=True).start()
@@ -236,7 +269,9 @@ class Handler(BaseHTTPRequestHandler):
     def _generate(self, dish: str, variant: str, engine_name: str | None, who: str) -> None:
         name = engine_name or self.engine_name
         key = (dataset.slug(dish), dataset.slug(variant))
-        tmp = self.out_dir / "_run"
+        # Per variant: the finally clause empties this directory, and two dishes
+        # generating at once would delete each other's staged frames mid-call.
+        tmp = self.out_dir / "_run" / f"{key[0]}--{key[1]}"
         try:
             engine = engines.build(name)
             # Engines take file paths, so stage the frames locally for the call only.
@@ -254,8 +289,6 @@ class Handler(BaseHTTPRequestHandler):
             rec["seconds"] = result.seconds
             rec["generated_by"] = who
             if result.ok:
-                # Store the master untouched and stop. It gets looked at before anything
-                # is spent optimising it - a rejected dish should cost only the look.
                 masters = {}
                 for ext, path in result.files.items():
                     kind = "png" if ext == "thumb" else ext
@@ -263,10 +296,15 @@ class Handler(BaseHTTPRequestHandler):
                                                        Path(path).read_bytes())
                 rec["master_keys"] = masters
                 rec["model_key"] = masters.get("glb", "")
-                rec["status"] = "review"
+                rec["status"] = "optimising"
             else:
                 rec.update(status="failed", error=result.error)
             dataset.write(rec)
+            # Optimise straight away rather than waiting for approval. Already on a
+            # background thread, five seconds, no credits - and it means review loads
+            # the thing that will actually ship instead of a ~200 MB master.
+            if result.ok:
+                self._optimize(dish, variant, who)
         except Exception as e:  # noqa: BLE001
             rec = dataset.record(dish, variant)
             rec.update(status="failed", error=f"{type(e).__name__}: {e}")
@@ -299,36 +337,44 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, blob, ctype) if blob else                self._send(404, b"not found", "text/plain")
 
     def _optimize(self, dish: str, variant: str, who: str) -> None:
-        """Approved master -> the files a menu ships. Runs only when asked."""
+        """Master -> the files a menu ships, at real-world size.
+
+        Runs automatically after generation, again whenever the scale changes, and by
+        hand from the rail. Always lands on `review`: if it fails, the master is still
+        there and still judgeable, it just is not shippable yet.
+
+        Only one run per variant at a time, and a size typed WHILE one is running is not
+        lost - the loop re-reads the record afterwards and runs again if the number moved.
+        Without that, changing 28 to 35 mid-run would save the 35, ship the 28, and show
+        no sign of the disagreement.
+        """
         key = (dataset.slug(dish), dataset.slug(variant), "opt")
-        tmp = self.out_dir / "_opt"
-        try:
-            rec = dataset.record(dish, variant)
-            tmp.mkdir(parents=True, exist_ok=True)
-            master = tmp / "master.glb"
-            master.write_bytes(dataset.read_model(rec["model_key"]))
-
-            res = optimize.run(master, tmp / "out")
-            rec = dataset.record(dish, variant)
-            if not res.ok:
-                rec.update(status="review", export_error=res.error)
-                dataset.write(rec)
+        with RUN_LOCK:
+            if key in RUNNING:
                 return
-
-            catalog = {}
-            for kind, path in res.files.items():
-                name = {"draco": "model_draco.glb", "opt": "model_opt.glb"}.get(kind, path.name)
-                catalog[kind] = dataset.save_catalog(dish, variant, name, path.read_bytes())
-            # Meshy already returns a USDZ; carry it into the catalogue rather than
-            # converting one ourselves, since Linux has no reliable USDZ writer.
-            if rec.get("master_keys", {}).get("usdz"):
-                blob = dataset.read_model(rec["master_keys"]["usdz"])
-                if blob:
-                    catalog["usdz"] = dataset.save_catalog(dish, variant, "model.usdz", blob)
-
-            rec.update(status="catalogued", catalog_keys=catalog,
-                       export_stats=res.stats, catalogued_utc=dataset._now(),
-                       catalogued_by=who, export_error="")
+            RUNNING.add(key)
+        # Per variant, not shared: two dishes optimising at once would otherwise write
+        # into one directory and rmtree it from under each other.
+        tmp = self.out_dir / "_opt" / f"{key[0]}--{key[1]}"
+        try:
+            for _ in range(3):
+                rec = dataset.record(dish, variant)
+                applied = rec.get("scale") or {}
+                if not self._optimize_once(dish, variant, who, rec, applied, tmp):
+                    return
+                after = dataset.record(dish, variant)
+                if (after.get("scale") or {}) == applied:
+                    return
+                # The size moved while that pass ran. Go back to `optimising` before
+                # running again, so the page keeps polling instead of showing a file
+                # it is about to replace.
+                after["status"] = "optimising"
+                dataset.write(after)
+            # Three passes and the size is still moving under us. Stop chasing it, but
+            # never leave the record saying `optimising` with nothing running - that is
+            # a spinner the page polls forever.
+            rec = dataset.record(dish, variant)
+            rec["status"] = "review"
             dataset.write(rec)
         except Exception as e:  # noqa: BLE001
             rec = dataset.record(dish, variant)
@@ -338,6 +384,38 @@ class Handler(BaseHTTPRequestHandler):
             with RUN_LOCK:
                 RUNNING.discard(key)
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def _optimize_once(self, dish: str, variant: str, who: str, rec: dict,
+                       scale: dict, tmp: Path) -> bool:
+        """One pass. False means stop - it failed and the record already says so."""
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True, exist_ok=True)
+        master = tmp / "master.glb"
+        master.write_bytes(dataset.read_model(rec["model_key"]) or b"")
+
+        res = optimize.run(master, tmp / "out", scale=scale or None)
+        rec = dataset.record(dish, variant)
+        if not res.ok:
+            rec.update(status="review", export_error=res.error)
+            dataset.write(rec)
+            return False
+
+        catalog = {}
+        for kind, path in res.files.items():
+            name = {"draco": "model_draco.glb", "opt": "model_opt.glb"}.get(kind, path.name)
+            catalog[kind] = dataset.save_catalog(dish, variant, name, path.read_bytes())
+        # Meshy already returns a USDZ; carry it into the catalogue rather than
+        # converting one ourselves, since Linux has no reliable USDZ writer.
+        if rec.get("master_keys", {}).get("usdz"):
+            blob = dataset.read_model(rec["master_keys"]["usdz"])
+            if blob:
+                catalog["usdz"] = dataset.save_catalog(dish, variant, "model.usdz", blob)
+
+        rec.update(status="review", catalog_keys=catalog,
+                   export_stats=res.stats, catalogued_utc=dataset._now(),
+                   catalogued_by=who, export_error="")
+        dataset.write(rec)
+        return True
 
     # ---------- shaping ----------
 
@@ -355,7 +433,7 @@ class Handler(BaseHTTPRequestHandler):
             recs = [dataset.record(d, v) for v in vs]
             out.append({"dish": d, "variants": vs or ["default"],
                         "judged": sum(1 for r in recs if r.get("verdict")),
-                        "done": sum(1 for r in recs if r.get("status") == "done")})
+                        "shipping": sum(1 for r in recs if r.get("catalog_keys"))})
         return out
 
     def _library(self) -> list[dict]:
@@ -374,6 +452,9 @@ class Handler(BaseHTTPRequestHandler):
                 "frames": len(rec.get("frames", {})),
                 "has_thumb": bool(rec.get("master_keys", {}).get("png")),
                 "has_model": bool(rec.get("model_key")),
+                # Shippable is a fact about what exists, not a flag anyone sets.
+                "shipping": bool(rec.get("catalog_keys")),
+                "scale": rec.get("scale") or {},
                 "draco_mb": round(st.get("draco_bytes", 0) / 1048576, 2) or None,
                 "shrink": st.get("shrink"),
                 "judged_by": rec.get("judged_by"), "judged_utc": rec.get("judged_utc"),
@@ -391,11 +472,15 @@ class Handler(BaseHTTPRequestHandler):
         buf = io.StringIO()
         w = csv.writer(buf)
         w.writerow(["dish", "variant", "engine", "status", "verdict", "faults", "note",
-                    "seconds", "judged_by", "judged_utc", "model_key", "error"])
+                    "seconds", "scale_axis", "scale_cm", "draco_bytes", "shipping",
+                    "judged_by", "judged_utc", "model_key", "error"])
         for r in dataset.catalogue():
+            sc, st = r.get("scale") or {}, r.get("export_stats") or {}
             w.writerow([r.get("dish"), r.get("variant"), r.get("engine"), r.get("status"),
                         r.get("verdict"), "; ".join(r.get("faults", [])), r.get("note"),
-                        r.get("seconds"), r.get("judged_by"), r.get("judged_utc"),
+                        r.get("seconds"), sc.get("axis", ""), sc.get("cm", ""),
+                        st.get("draco_bytes", ""), bool(r.get("catalog_keys")),
+                        r.get("judged_by"), r.get("judged_utc"),
                         r.get("model_key"), r.get("error")])
         return buf.getvalue()
 

@@ -185,21 +185,22 @@ next.
 
 *Days. Do before anything is built on top.*
 
-**0.1 · Judge the optimised model, not the master** 🔴
-The review stage currently loads the untouched master — ~216 MB of VRAM against ~52 MB
-optimised, which drops the tab on a mid-range Android. And you should judge **what you will
-ship**: if the master looks perfect and the optimiser loses the garnish, the pass is false.
-Optimisation is 5 seconds and costs no credits, so the "don't waste work on rejects"
-argument does not survive contact.
-*Before everything, because every verdict recorded until it lands is a verdict on the wrong
-artefact.*
+**0.1 · Judge the optimised model, not the master** ✅ **done**
+Generation now runs the optimiser itself, and review loads the result. A `Shipping` /
+`Master` toggle sits above the viewer, defaulting to shipping, so a contested verdict can
+still be checked against the original — the only honest way to separate "the engine got it
+wrong" from "the optimiser did". `catalogued` stopped being a status: a variant is
+shippable when it *has* catalogue files, which is a fact about the object graph rather than
+a flag someone has to remember to set.
 
-**0.2 · Real-world scale** 🔴
-Three fields — **height, width or length** — any one is enough, because the model's aspect
-ratio supplies the other two. Someone may only know the height of a burger or the diameter
-of a bowl, so demanding a specific dimension fails for real people. The tool proposes a
-default from the dish shape; they confirm or correct.
-*Second, because every model made without it is the wrong size in AR and will be redone.*
+**0.2 · Real-world scale** ✅ **done**
+One dimension — height, width or length, any one — typed into the review rail, with a shape
+picker that proposes a starting number. Setting it re-runs the optimiser (5 seconds, no
+credits), because the size is baked into the shipped file rather than applied by the
+viewer, and the model is centred and seated on y=0 whether or not anyone has given a size.
+Measured: 104 MB master → 1.85 MB Draco at exactly 28.0 cm across.
+See [DECISIONS.md](DECISIONS.md) §2 for why one dimension is enough, what `width` means,
+and why placement happens before Draco rather than after.
 
 **0.3 · Live resize in AR**
 Pinch-to-scale in the AR view, saved back to the model. Partly rescues 0.2 — a typed

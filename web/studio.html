@@ -124,6 +124,18 @@
          font-size:11.5px;padding:5px 11px;border-radius:2px}
   .fault[aria-pressed="true"]{background:var(--red);border-color:transparent;color:#fff}
   .exportrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .scalerow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .scalerow input[type=number]{width:88px;text-align:right;
+    font-family:'IBM Plex Mono',monospace}
+  .scalerow select{max-width:172px}
+  .scalerow .unit{color:var(--ink-faint);font-size:12px;margin-left:-4px}
+  /* Amber, not red: an unsized model is not broken, it is unfinished. */
+  #scalecm.unset{border-color:var(--amber)}
+  .minitab{font:500 10px/1 'Archivo',sans-serif;letter-spacing:.09em;text-transform:uppercase;
+           padding:5px 10px;background:transparent;color:var(--ink-dim)}
+  .minitab[aria-pressed="true"]{background:var(--raise);border-color:var(--rule-lit);
+           color:var(--chalk)}
+  .stagetabs{display:flex;gap:4px}
   .hintline{font-size:12px;color:var(--ink-faint)}
   .hintline.warn{color:var(--amber)}
   .hintline.ok{color:var(--chalk)}
@@ -156,9 +168,9 @@
   .card .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:2px}
   .tagpill{font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;
            border-radius:99px;border:1px solid currentColor}
-  .tagpill.catalogued{color:var(--chalk)} .tagpill.review{color:var(--amber)}
+  .tagpill.shipping{color:var(--chalk)} .tagpill.review{color:var(--amber)}
   .tagpill.failed{color:var(--red)} .tagpill.ready,.tagpill.empty{color:var(--ink-faint)}
-  .tagpill.running,.tagpill.exporting{color:var(--amber)}
+  .tagpill.running,.tagpill.optimising{color:var(--amber)}
   .v-good{color:var(--chalk)} .v-acceptable{color:var(--amber)} .v-reject{color:var(--red)}
   .empty{display:grid;place-items:center;height:100%;text-align:center;padding:40px}
   .empty h2{font-weight:600;font-size:15px;margin-bottom:8px}
@@ -243,7 +255,7 @@
     <span class="sp"></span>
     <div class="filters" id="libfilters" role="group" aria-label="Filter">
       <button class="chip" data-f="all" aria-pressed="true">All</button>
-      <button class="chip" data-f="catalogued" aria-pressed="false">Catalogued</button>
+      <button class="chip" data-f="shipping" aria-pressed="false">Shipping</button>
       <button class="chip" data-f="review" aria-pressed="false">Awaiting judgement</button>
       <button class="chip" data-f="good" aria-pressed="false">Good</button>
       <button class="chip" data-f="reject" aria-pressed="false">Rejected</button>
@@ -270,6 +282,11 @@
     <section class="panel">
       <header>
         <span class="lbl">Result</span>
+        <div class="stagetabs" id="stagetabs" hidden role="group" aria-label="Which file">
+          <button class="minitab" data-stage="ship" aria-pressed="true">Shipping</button>
+          <button class="minitab" data-stage="master" aria-pressed="false">Master</button>
+        </div>
+        <span class="sp"></span>
         <span class="lbl mono" id="resultmeta" style="color:var(--ink-faint)"></span>
       </header>
       <div class="stage" id="stage"></div>
@@ -287,9 +304,18 @@
     <div class="faults" id="faults"></div>
     <span class="lbl">Note</span>
     <textarea id="note" placeholder="What specifically went wrong, or why it works."></textarea>
+    <span class="lbl">Real size</span>
+    <div class="scalerow">
+      <select id="shape" title="Proposes a starting number"></select>
+      <select id="scaleaxis" title="Which dimension you are giving"></select>
+      <input type="number" id="scalecm" min="1" max="200" step="0.5" placeholder="cm"
+             aria-label="Size in centimetres">
+      <span class="unit mono">cm</span>
+      <span id="scalenote" class="hintline"></span>
+    </div>
     <span class="lbl">Catalogue</span>
     <div class="exportrow">
-      <button id="export-model">Optimise &amp; add to catalogue</button>
+      <button id="export-model">Re-optimise</button>
       <span id="exportnote" class="hintline"></span>
     </div>
   </div>
@@ -303,6 +329,9 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const enc = encodeURIComponent;
 
 let META = {}, LIST = [], CUR = null, DISH = null, VAR = 'default', PICK_SLOT = 0, POLL = null;
+/* 'ship' or 'master'. Sticky across dishes on purpose: someone auditing whether the
+   optimiser is eating garnish wants to stay on one side of the comparison. */
+let STAGE = 'ship';
 
 const api = (u, body) => fetch(u, body ? {
   method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
@@ -346,7 +375,7 @@ async function refresh() {
   $('#specimens').innerHTML = LIST.map(d => `
     <button class="spec" data-dish="${d.dish}" aria-current="${d.dish === DISH}">
       <b>${d.dish}</b>
-      <small>${d.variants.length} variant${d.variants.length === 1 ? '' : 's'}${d.judged ? ` · ${d.judged} judged` : ''}</small>
+      <small>${d.variants.length} variant${d.variants.length === 1 ? '' : 's'}${d.judged ? ` · ${d.judged} judged` : ''}${d.shipping ? ` · ${d.shipping} shipping` : ''}</small>
     </button>`).join('');
 }
 
@@ -396,32 +425,46 @@ function paint() {
       const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
       if (f.status !== 'running') { clearInterval(POLL); POLL = null; CUR = f; paint(); refresh(); }
     }, 4000);
-  } else if (d.status === 'exporting') {
+  } else if (d.status === 'optimising') {
     stage.innerHTML = `<div class="stagemsg"><div class="spinner"></div>
-      <span class="lbl">Optimising</span><p>Decimating, compressing, packaging.</p></div>`;
+      <span class="lbl">Optimising</span><p>Decimating, resizing textures, placing at
+      real-world size. About five seconds.</p></div>`;
     POLL ||= setInterval(async () => {
       const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
-      if (f.status !== 'exporting') { clearInterval(POLL); POLL = null; CUR = f; paint(); refresh(); }
-    }, 4000);
-  } else if (d.status === 'review' || d.status === 'catalogued') {
-    // The MASTER is what you judge - untouched, full detail. Optimisation happens after
-    // approval, so a dish you reject costs nothing but the look.
-    stage.innerHTML = `<model-viewer src="/model?dish=${enc(DISH)}&variant=${enc(VAR)}&v=${Date.now()}"
+      if (f.status !== 'optimising') { clearInterval(POLL); POLL = null; CUR = f; paint(); refresh(); }
+    }, 3000);
+  /* `catalogued` and `exporting` are the old names for this state. Records written
+     before the rename still carry them, and a record is not worth a migration. */
+  } else if (['review', 'catalogued', 'exporting'].includes(d.status)) {
+    // You judge what SHIPS, not the master. A master can look perfect while the optimiser
+    // has quietly eaten the garnish, and at ~216 MB of VRAM against ~52 MB it is also not
+    // the thing a guest's phone has to survive. The Master tab is there to tell the two
+    // apart when a verdict is contested.
+    const shippable = !!(d.catalog_keys && Object.keys(d.catalog_keys).length);
+    const stg = shippable ? STAGE : 'master';
+    stage.innerHTML = `<model-viewer src="/model?dish=${enc(DISH)}&variant=${enc(VAR)}&stage=${stg}&v=${Date.now()}"
       camera-controls auto-rotate rotation-per-second="18deg" shadow-intensity="1"
       exposure="1.1" interaction-prompt="none" alt="Generated model of ${DISH}"></model-viewer>`;
+    const tabs = $('#stagetabs');
+    tabs.hidden = !shippable;
+    $$('#stagetabs .minitab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.stage === stg)));
     const st = d.export_stats || {};
-    $('#resultmeta').textContent = d.status === 'catalogued'
-      ? `catalogued · ${(st.draco_bytes/1048576||0).toFixed(2)} MB draco · ${st.shrink||'?'}x smaller`
-      : `master · ${d.engine} · ${d.seconds}s`;
+    const dims = (st.size_after || []).map(v => (v * 100).toFixed(1)).join(' x ');
+    $('#resultmeta').textContent = stg === 'master'
+      ? `master · ${d.engine} · ${d.seconds}s`
+      : `${(st.draco_bytes/1048576||0).toFixed(2)} MB draco · ${st.result_triangles||'?'} tris${dims ? ` · ${dims} cm` : ''}`;
   } else if (d.status === 'failed') {
     stage.innerHTML = `<div class="stagemsg"><span class="lbl">Failed</span>
       <p class="err">${d.error || 'no detail returned'}</p></div>`;
     $('#resultmeta').textContent = d.engine || '';
+    $('#stagetabs').hidden = true;
   } else {
     stage.innerHTML = `<div class="stagemsg"><span class="lbl">Nothing generated</span>
       <p>${d.filled === 0 ? 'Add at least one frame.' : 'Press Run engine.'}</p></div>`;
     $('#resultmeta').textContent = '';
+    $('#stagetabs').hidden = true;
   }
+  paintScale(d);
 
   $('#faults').innerHTML = META.faults.map(f =>
     `<button class="fault" data-f="${f}" aria-pressed="${(d.faults || []).includes(f)}">${f}</button>`).join('');
@@ -429,25 +472,68 @@ function paint() {
   $('#note').value = d.note || '';
   $('#run').disabled = d.status === 'running' || d.filled < 1;
 
-  const canExport = ['review','catalogued'].includes(d.status) && d.verdict !== 'reject';
+  /* Optimisation now runs itself after generation and after any size change, so this
+     button is the retry and the manual re-run, not the thing that makes the catalogue. */
   const btn = $('#export-model'), note = $('#exportnote');
   if (btn) {
-    btn.disabled = !canExport || d.status === 'exporting';
-    btn.textContent = d.status === 'catalogued'
-      ? 'Re-optimise' : 'Optimise & add to catalogue';
+    const shippable = !!(d.catalog_keys && Object.keys(d.catalog_keys).length);
+    btn.disabled = !d.model_key || ['running','optimising'].includes(d.status);
     note.className = 'hintline';
     if (d.export_error) { note.textContent = d.export_error; note.classList.add('warn'); }
-    else if (d.status === 'catalogued') {
+    else if (shippable) {
       const st = d.export_stats || {};
       note.textContent = `${(st.draco_bytes/1048576||0).toFixed(2)} MB shipping, ${st.shrink||'?'}x smaller than the master`;
       note.classList.add('ok');
     }
-    else if (d.verdict === 'reject') note.textContent = 'Rejected — nothing to optimise.';
-    else if (d.status === 'review') note.textContent = META.optimizer && META.optimizer !== 'none (masters kept, export unavailable)'
+    else if (!d.model_key) note.textContent = '';
+    else note.textContent = META.optimizer && META.optimizer !== 'none (masters kept, export unavailable)'
       ? `Toolchain: ${META.optimizer}` : 'No optimiser on this host — the master is kept regardless.';
-    else note.textContent = '';
   }
   say(`${DISH} / ${VAR} · ${d.status}`);
+}
+
+/* Real-world size. One dimension is enough - the model supplies the aspect ratio for
+   the other two - so the question is which one the person happens to know. The shape
+   picker only PROPOSES a number; every figure behind it is a guess (dataset.SHAPES) that
+   ~30 real dishes are meant to replace. */
+function paintScale(d) {
+  const shape = $('#shape'), axis = $('#scaleaxis'), cm = $('#scalecm'), note = $('#scalenote');
+  if (!shape) return;
+  const sc = d.scale || {};
+  if (!shape.options.length) {
+    shape.innerHTML = '<option value="">Shape…</option>' +
+      (META.shapes || []).map(s => `<option value="${s.id}">${s.label} · ${s.cm}cm</option>`).join('');
+    axis.innerHTML = (META.scale_axes || []).map(a =>
+      `<option value="${a}">${a === 'width' ? 'width / across' : a}</option>`).join('');
+  }
+  shape.value = sc.shape || '';
+  axis.value = sc.axis || 'width';
+  cm.value = sc.cm || '';
+  cm.classList.toggle('unset', !sc.cm);
+
+  note.className = 'hintline';
+  const st = d.export_stats || {};
+  const dims = (st.size_after || []).map(v => (v * 100).toFixed(1));
+  /* The stats carry the size the SHIPPING file was actually built at. Compare it with
+     what the record now says, or a number typed a second ago reads as already applied. */
+  const applied = st.scale_cm === sc.cm && st.scale_axis === sc.axis;
+  if (!sc.cm) {
+    note.textContent = dims.length
+      ? `Not set — shipping at ${dims.join(' x ')} cm, whatever the engine invented.`
+      : 'Not set — this ships at whatever size the engine invented.';
+    note.classList.add('warn');
+  } else if (applied && dims.length) {
+    note.textContent = `${dims.join(' x ')} cm on the table`;
+    note.classList.add('ok');
+  } else {
+    note.textContent = `${sc.cm} cm ${sc.axis} — applied on the next optimise`;
+  }
+}
+
+async function saveScale({shape, axis, cm}) {
+  const r = await api('/api/scale', {dish: DISH, variant: VAR, shape, axis, cm});
+  if (r.error) return say(r.error);
+  CUR = r; paint(); refresh();
 }
 
 const saveVerdict = () => api('/api/verdict',
@@ -544,11 +630,31 @@ $('#menu').onclick = () => drawer(!document.body.classList.contains('drawer-open
 $('#scrim').onclick = () => drawer(false);
 addEventListener('keydown', e => { if (e.key === 'Escape') drawer(false); });
 
-$('#export-model').onclick = async () => {
-  const r = await api('/api/optimize', {dish: DISH, variant: VAR});
-  if (r.error) return say(r.error);
-  CUR.status = 'exporting'; paint();
-};
+/* Delegated, because the rail is re-rendered from a template on every paint. */
+document.addEventListener('change', e => {
+  if (e.target.id === 'shape') {
+    const s = (META.shapes || []).find(x => x.id === e.target.value);
+    if (!s) return;
+    return saveScale({shape: s.id, axis: s.axis, cm: s.cm});
+  }
+  if (e.target.id === 'scaleaxis' || e.target.id === 'scalecm') {
+    const cm = parseFloat($('#scalecm').value) || 0;
+    return saveScale({shape: $('#shape').value, axis: $('#scaleaxis').value, cm});
+  }
+});
+
+document.addEventListener('click', async e => {
+  const tab = e.target.closest('#stagetabs .minitab');
+  if (tab) { STAGE = tab.dataset.stage; return paint(); }
+  /* Delegated for a second reason: #export-model lives inside <template id="tpl-bench">,
+     so binding it directly at parse time set .onclick on null, threw, and took every
+     line after it - boot() included - down with it. The page loaded and did nothing. */
+  if (e.target.id === 'export-model') {
+    const r = await api('/api/optimize', {dish: DISH, variant: VAR});
+    if (r.error) return say(r.error);
+    CUR.status = 'optimising'; paint();
+  }
+});
 
 $('#export').onclick = async () => say('Wrote ' + (await api('/api/export')).csv);
 
@@ -563,8 +669,8 @@ function paintLibrary() {
   const f = LIBFILTER;
   const rows = LIB.filter(r =>
     f === 'all' ? true :
-    f === 'catalogued' ? r.status === 'catalogued' :
-    f === 'review' ? (r.status === 'review' && !r.verdict) :
+    f === 'shipping' ? r.shipping :
+    f === 'review' ? (r.has_model && !r.verdict) :
     r.verdict === f);
   $('#libcount').textContent = `${rows.length} of ${LIB.length}`;
   $('#libgrid').innerHTML = rows.length ? rows.map(r => `
@@ -576,9 +682,11 @@ function paintLibrary() {
         <b>${r.dish}</b>
         <span class="sub">${r.variant} · ${r.frames} frame${r.frames === 1 ? '' : 's'}${r.engine ? ' · ' + r.engine : ''}</span>
         <span class="row">
-          <span class="tagpill ${r.status}">${r.status}</span>
+          <span class="tagpill ${r.shipping ? 'shipping' : r.status}">${r.shipping ? 'shipping' : r.status}</span>
           ${r.verdict ? `<span class="v-${r.verdict}">${r.verdict}</span>` : ''}
           ${r.draco_mb ? `<span class="sub">${r.draco_mb} MB</span>` : ''}
+          ${r.scale && r.scale.cm ? `<span class="sub">${r.scale.cm}cm</span>`
+            : '<span class="sub" style="color:var(--amber)">no size</span>'}
         </span>
         ${r.judged_by ? `<span class="sub">judged by ${r.judged_by}</span>` : ''}
       </span>

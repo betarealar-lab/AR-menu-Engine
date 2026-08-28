@@ -33,6 +33,26 @@ SLOT_ROLE = {
 }
 PHOTOS, MODELS = "photos", "models"
 
+# The pipeline a record moves through. `catalogued` used to be a state here; it is now
+# derived - a variant is shippable when it HAS catalogue files, which is a fact about the
+# object graph rather than a flag someone has to remember to set.
+STATUSES = ("empty", "ready", "running", "optimising", "review", "failed")
+
+# One real-world dimension is enough: the model supplies the aspect ratio for the other
+# two. Which one a person knows varies - the height of a burger, the diameter of a bowl -
+# so all three are offered and any one is accepted. See glb.bounds for what each measures.
+SCALE_AXES = ("width", "length", "height")
+
+# Proposed defaults, so nobody starts from a blank number. **Every figure here is a
+# guess** carried over from ROADMAP 0.4 - the fault tags and ~30 real dishes are what will
+# replace it. Do not let it harden into doctrine.
+SHAPES = [
+    {"id": "flat-plated", "label": "Flat plated", "axis": "width", "cm": 28},
+    {"id": "deep-bowl", "label": "Deep bowl", "axis": "width", "cm": 18},
+    {"id": "wide-flat", "label": "Wide flat / sharing", "axis": "width", "cm": 35},
+    {"id": "tall-stacked", "label": "Tall / stacked", "axis": "height", "cm": 12},
+]
+
 
 def slug(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
@@ -56,11 +76,17 @@ def blank(dish: str, variant: str) -> dict:
         "dish": dish, "dish_id": slug(dish), "variant": variant,
         "frames": {}, "status": "empty", "verdict": "", "faults": [], "note": "",
         "engine": "", "seconds": 0, "error": "", "model_key": "",
-        # What generation produced, untouched, and what export produced from it.
-        # Two stages on purpose: you judge the master, then decide whether it earns
-        # the optimisation.
+        # What generation produced untouched (`master_keys`) and what the optimiser
+        # made from it (`catalog_keys`). Both are kept, but the catalogue is what gets
+        # judged and what ships - see optimize.py.
         "master_keys": {}, "catalog_keys": {}, "catalogued_utc": "",
         "export_error": "", "export_stats": {},
+        # One dimension in centimetres, plus the shape it was proposed from.
+        # {"axis": "width", "cm": 28, "shape": "flat-plated", "set_by": ..., "set_utc": ...}
+        # Empty means nobody has said how big the dish is, so it ships at whatever size
+        # the engine invented - which is the single most common way a model has to be
+        # remade, and why this sits next to the frames rather than buried in a setting.
+        "scale": {},
         "created_utc": _now(), "judged_by": "", "judged_utc": "",
     }
 

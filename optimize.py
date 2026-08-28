@@ -1,15 +1,21 @@
 """Turn an approved master into the three files a menu actually ships.
 
-Deliberately a SEPARATE STAGE from generation, not part of it. A generation you are
-going to reject should cost nothing beyond looking at it - decimating, Draco-compressing
-and converting to USDZ a dish that turns out abhorrent is time spent on a dead model.
-So: generate, look, judge, and only then export.
+Generation runs this automatically and review loads the RESULT, not the master. That
+reverses an earlier call to optimise only after approval. The argument for waiting was
+"don't spend work on a dish you'll reject" - but the work is five seconds of CPU and no
+credits, and judging the master is judging the wrong artefact twice over: it is ~216 MB
+of VRAM against ~52 MB, which is the difference between a page a mid-range Android
+survives and one it does not, and a master can look perfect while the optimiser has
+quietly eaten the garnish. You have to look at what you will actually ship.
 
     master (300k tris, 4k PBR, tens of MB)
         |
-        +-- decimate + resize textures  ->  model_opt.glb    uncompressed fallback
-        +-- + Draco                     ->  model_draco.glb  the web payload
-        +-- + USDZ                      ->  model.usdz       iOS Quick Look
+        +-- decimate + resize textures
+        +-- + place: real-world scale, centred, standing on y=0
+        |       |
+        |       +--                     ->  model_opt.glb    uncompressed fallback
+        |       +-- + Draco             ->  model_draco.glb  the web payload
+        +-- (USDZ comes from the engine unchanged)
 
 Reference numbers from the burrata salad, done by hand in `BetaReal scaleable`:
 99.3 MB / 1.97M triangles in; 3.26 MB, 1.99 MB and 4.01 MB out at 40k triangles.
@@ -33,6 +39,11 @@ import glb
 
 TARGET_TRIANGLES = 40_000
 TARGET_TEXTURE = 2048
+
+# Which measured extent each dimension name refers to - see glb.bounds. "width" is the
+# widest horizontal span, matching both what a person means by the width of a plate and
+# the `-30cm` convention the hand-optimised MondayGreens models already use.
+SCALE_AXES = ("width", "length", "height")
 
 
 @dataclass
@@ -93,8 +104,17 @@ def _run(cmd: list[str], cwd: Path) -> tuple[bool, str]:
 
 
 def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
-        texture: int = TARGET_TEXTURE) -> Optimized:
-    """Decimate, compress and convert. Returns what it managed to produce."""
+        texture: int = TARGET_TEXTURE, scale: dict | None = None) -> Optimized:
+    """Decimate, resize, place and compress. Returns what it managed to produce.
+
+    `scale` is `{"axis": "width"|"length"|"height", "cm": 28}` - one real-world dimension,
+    any one, because the model supplies the aspect ratio for the other two. Someone may
+    know only the height of a burger or the diameter of a bowl, and demanding a specific
+    dimension fails for real people.
+
+    With no scale the model is still centred and seated on y=0 - AR needs that regardless,
+    and it costs nothing - but it ships at whatever size the engine invented.
+    """
     tc = toolchain()
     if not tc:
         return Optimized(
@@ -104,6 +124,11 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
                   "The master is kept either way - nothing is lost, it just is not "
                   "shippable yet.")
 
+    # Absolute, always. Every glTF-Transform call runs with cwd set to the scratch dir,
+    # so a relative --out silently resolves against the wrong place and the Draco stage
+    # fails with ENOENT on a file Python has just written perfectly well.
+    out_dir = out_dir.resolve()
+    master = master.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     opt = out_dir / "model_opt.glb"
     draco = out_dir / "model_draco.glb"
@@ -143,7 +168,30 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
             return Optimized(ok=False, toolchain=tc,
                              error=f"texture pass failed: {type(e).__name__}: {e}")
 
-        # 3. Draco for the web payload.
+        # 3. Place it in the real world: uniform scale to the given dimension, centred
+        #    on X/Z, standing on y=0. Both AR paths assume metres and a ground plane and
+        #    no generative engine provides either.
+        #
+        #    Before Draco, not after, and by wrapping the scene in one node rather than
+        #    rewriting vertices - Draco quantises positions in local space, so baking a
+        #    0.15x scale into the vertices first would throw away precision it needs.
+        try:
+            placed = work / "placed.glb"
+            measured = glb.bounds(opt)
+            factor = 1.0
+            if scale and scale.get("cm") and scale.get("axis") in SCALE_AXES:
+                extent = float(measured.get(scale["axis"]) or 0.0)
+                if extent > 0:
+                    factor = (float(scale["cm"]) / 100.0) / extent
+            place_stats = glb.place(opt, placed, factor=factor, seat=True)
+            place_stats["scale_axis"] = (scale or {}).get("axis", "")
+            place_stats["scale_cm"] = (scale or {}).get("cm", 0)
+            shutil.move(str(placed), str(opt))
+        except Exception as e:  # noqa: BLE001
+            return Optimized(ok=False, toolchain=tc,
+                             error=f"placement failed: {type(e).__name__}: {e}")
+
+        # 4. Draco for the web payload.
         ok, log = _run(base + ["draco", str(opt), str(draco)], work)
         if not ok:
             return Optimized(ok=False, toolchain=tc, error=f"draco failed: {log}",
@@ -160,6 +208,7 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         "result_triangles": glb.count_triangles(draco),
         "target_texture": texture,
         **tex_stats,
+        **place_stats,
     }
     # USDZ needs Apple's tooling or a converter that is not reliably present on Linux.
     # Meshy returns a USDZ of its own, so the pipeline uses that and skips the conversion
