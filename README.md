@@ -6,7 +6,10 @@ Nothing here names a vendor except `engines/meshy.py`. Meshy today; self-hosted 
 the VGGT hybrid slot in as more entries in the registry. This is module #1 of the scanning
 app, not a throwaway — the app will call the same `Engine.generate()`.
 
-Why it exists and what was decided: **[DECISIONS.md](DECISIONS.md)**.
+**New here (or a fresh session)? Read [HANDOFF.md](HANDOFF.md) first** - live state,
+environment gotchas, measurements not to re-derive, and mistakes already made. Then
+[ROADMAP.md](ROADMAP.md) for what to build next, [DECISIONS.md](DECISIONS.md) for why the
+engine works the way it does, and [COMPETITORS.md](COMPETITORS.md) for the market.
 
 ## Setup
 
