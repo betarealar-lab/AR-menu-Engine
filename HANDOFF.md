@@ -161,7 +161,10 @@ These are places where confident advice was wrong. They are the most useful thin
 - **AR-orbit live capture is a separate project** with low ROI right now. Photo *rejection*
   yes; live capture guidance no.
 - **Manual scanning uses many more than four photos**, on a pro camera, graded by hand. The
-  automatic path is a different workflow — do not collapse them.
+  automatic path is a different workflow — do not collapse them. `DECISIONS.md` §4 is now
+  split into 4a (manual/pro, today) and 4b (automatic/self-serve, the product). **The angle
+  spec was derived for the manual workflow** and is only a hypothesis for the automatic one —
+  it has never been tested with phone photos by an untrained person.
 
 ---
 

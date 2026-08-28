@@ -100,11 +100,36 @@ by someone with distribution into restaurants.
 
 ## 4. Capture
 
-**How we shoot:** professional camera → colour grade → export JPG → *then* KIRI.
-KIRI is not the capture device. Meshy takes graded JPGs directly and bypasses KIRI entirely.
+**Two different workflows. Do not collapse them.** They share a target — usable frames of a
+dish — and share almost nothing else.
+
+### 4a. Manual / pro (internal, today)
+
+Professional camera → colour grade by hand → export JPG → **then** KIRI photogrammetry.
+Many more than four photos. This is how Monday Greens' five dishes were made and it is the
+quality bar.
+
+KIRI is not the capture device, and **Meshy bypasses KIRI entirely** — it takes the graded
+JPGs directly, which makes the AI path strictly shorter than the photogrammetry one.
 
 Because it is a manual shoot, **file order carries no geometric meaning** and no heuristic
 can pick the canonical four. Frame selection is manual in the Studio, by design.
+
+### 4b. Automatic / self-serve (the product)
+
+A phone, a handful of photos, **no human grading and no KIRI**. Everything the pro workflow
+does by skill, the tool has to do by software:
+
+| Pro does by hand | Automatic must do in code |
+|---|---|
+| Grades each frame, consistently | Neutralise illuminant + match exposure across the set |
+| Knows which angles work | Shape picker → suggested angle |
+| Discards bad frames by eye | Algorithmic reject: blur, exposure, glare, inconsistency |
+| Shoots 20+ and picks | Works from 1–4, so each frame matters more |
+
+**The angle spec below was derived for 4a and is being carried into 4b as a hypothesis.**
+It has never been tested with phone photos by an untrained person. That test is the point of
+the fault tags.
 
 ### The angle spec
 
