@@ -47,6 +47,23 @@ FAULTS = [
 RUNNING: set[tuple[str, ...]] = set()
 RUN_LOCK = threading.Lock()
 
+# A run this process has no thread for is a GHOST: the record says `optimising` but the
+# worker that wrote it is gone - the container restarted, was redeployed, or was killed.
+# RUNNING lives in memory, so it empties on restart while the record does not, and the
+# old guards then refused to start a new run forever. That wedged the first real dish on
+# 2026-08-29 with no error and no way back. Until there is a real job queue (ROADMAP 1.2)
+# this is the recovery: if nothing is running here, the record is not to be believed.
+STALE_AFTER_SECONDS = 300
+
+
+def _is_ghost(rec: dict, key: tuple[str, ...]) -> bool:
+    if rec.get("status") != "optimising":
+        return False
+    with RUN_LOCK:
+        if key in RUNNING:
+            return False
+    return True
+
 
 def _model_key(rec: dict, stage: str) -> str:
     """Which GLB to hand back.
@@ -224,8 +241,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": "A dish is between 1 and 200 cm."}, 400)
                 rec["scale"] = {"axis": axis, "cm": cm, "shape": body.get("shape", ""),
                                 "set_by": who, "set_utc": dataset._now()} if cm else {}
-                if rec.get("model_key") and rec["status"] not in ("running", "optimising"):
-                    rec["status"] = "optimising"
+                key = (dataset.slug(dish), dataset.slug(variant), "opt")
+                live = rec["status"] in ("running", "optimising") and not _is_ghost(rec, key)
+                if rec.get("model_key") and not live:
+                    rec.update(status="optimising", stage="queued",
+                               optimising_since=dataset._now())
                     dataset.write(rec)
                     threading.Thread(target=self._optimize,
                                      args=(dish, variant, who), daemon=True).start()
@@ -236,9 +256,11 @@ class Handler(BaseHTTPRequestHandler):
                 rec = dataset.record(dish, variant)
                 if not rec.get("model_key"):
                     return self._json({"error": "Nothing generated yet."}, 400)
-                if rec["status"] in ("running", "optimising"):
+                key = (dataset.slug(dish), dataset.slug(variant), "opt")
+                if rec["status"] in ("running", "optimising") and not _is_ghost(rec, key):
                     return self._json({"status": rec["status"]})
-                rec.update(status="optimising", export_error="")
+                rec.update(status="optimising", stage="queued", export_error="",
+                           optimising_since=dataset._now())
                 dataset.write(rec)
                 threading.Thread(target=self._optimize,
                                  args=(dish, variant, who), daemon=True).start()
@@ -296,7 +318,8 @@ class Handler(BaseHTTPRequestHandler):
                                                        Path(path).read_bytes())
                 rec["master_keys"] = masters
                 rec["model_key"] = masters.get("glb", "")
-                rec["status"] = "optimising"
+                rec.update(status="optimising", stage="queued",
+                           optimising_since=dataset._now())
             else:
                 rec.update(status="failed", error=result.error)
             dataset.write(rec)
@@ -368,17 +391,19 @@ class Handler(BaseHTTPRequestHandler):
                 # The size moved while that pass ran. Go back to `optimising` before
                 # running again, so the page keeps polling instead of showing a file
                 # it is about to replace.
-                after["status"] = "optimising"
+                after.update(status="optimising", stage="queued",
+                             optimising_since=dataset._now())
                 dataset.write(after)
             # Three passes and the size is still moving under us. Stop chasing it, but
             # never leave the record saying `optimising` with nothing running - that is
             # a spinner the page polls forever.
             rec = dataset.record(dish, variant)
-            rec["status"] = "review"
+            rec.update(status="review", stage="", optimising_since="")
             dataset.write(rec)
         except Exception as e:  # noqa: BLE001
             rec = dataset.record(dish, variant)
-            rec.update(status="review", export_error=f"{type(e).__name__}: {e}")
+            rec.update(status="review", stage="", optimising_since="",
+                       export_error=f"{type(e).__name__}: {e}")
             dataset.write(rec)
         finally:
             with RUN_LOCK:
@@ -388,15 +413,26 @@ class Handler(BaseHTTPRequestHandler):
     def _optimize_once(self, dish: str, variant: str, who: str, rec: dict,
                        scale: dict, tmp: Path) -> bool:
         """One pass. False means stop - it failed and the record already says so."""
+        def stage(name: str) -> None:
+            """One small write per stage. The page shows it, and a run that dies leaves
+            the name of the step it died in - the only reason we would ever know."""
+            r = dataset.record(dish, variant)
+            if r.get("status") == "optimising":
+                r["stage"] = name
+                dataset.write(r)
+
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True, exist_ok=True)
+        stage("fetching master")
         master = tmp / "master.glb"
         master.write_bytes(dataset.read_model(rec["model_key"]) or b"")
 
-        res = optimize.run(master, tmp / "out", scale=scale or None)
+        res = optimize.run(master, tmp / "out", scale=scale or None, on_stage=stage)
+        stage("storing")
         rec = dataset.record(dish, variant)
         if not res.ok:
-            rec.update(status="review", export_error=res.error)
+            rec.update(status="review", stage="", optimising_since="",
+                       export_error=res.error)
             dataset.write(rec)
             return False
 
@@ -411,9 +447,9 @@ class Handler(BaseHTTPRequestHandler):
             if blob:
                 catalog["usdz"] = dataset.save_catalog(dish, variant, "model.usdz", blob)
 
-        rec.update(status="review", catalog_keys=catalog,
-                   export_stats=res.stats, catalogued_utc=dataset._now(),
-                   catalogued_by=who, export_error="")
+        rec.update(status="review", stage="", optimising_since="",
+                   catalog_keys=catalog, export_stats=res.stats,
+                   catalogued_utc=dataset._now(), catalogued_by=who, export_error="")
         dataset.write(rec)
         return True
 

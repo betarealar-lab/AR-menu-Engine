@@ -87,6 +87,11 @@ def blank(dish: str, variant: str) -> dict:
         # the engine invented - which is the single most common way a model has to be
         # remade, and why this sits next to the frames rather than buried in a setting.
         "scale": {},
+        # Where the optimiser is and when it started. Without these a worker that dies
+        # mid-run leaves `optimising` written with nothing running, and no button can
+        # clear it - which is exactly what happened on 2026-08-29. `stage` is also the
+        # only honest progress the page can show.
+        "stage": "", "optimising_since": "",
         "created_utc": _now(), "judged_by": "", "judged_utc": "",
     }
 

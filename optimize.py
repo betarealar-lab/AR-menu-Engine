@@ -29,6 +29,7 @@ to a diner.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -92,19 +93,33 @@ def available() -> bool:
     return bool(toolchain())
 
 
+# Node is given a heap ceiling on purpose. Measured: the geometry pass on a 70 MB,
+# 1.9M-triangle Meshy master finishes in ~3s inside a 192 MB heap. Uncapped, V8 grows
+# until the container's own limit kills the whole process - and a killed process cannot
+# write an error anywhere, which is how a run disappears leaving no trace. Capped, Node
+# fails loudly with a heap message we can store and show.
+NODE_HEAP_MB = 320
+SUBPROCESS_TIMEOUT = 300
+
+
 def _run(cmd: list[str], cwd: Path) -> tuple[bool, str]:
+    env = dict(os.environ)
+    env["NODE_OPTIONS"] = (env.get("NODE_OPTIONS", "") +
+                           f" --max-old-space-size={NODE_HEAP_MB}").strip()
     try:
         r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=900)
+                           encoding="utf-8", errors="replace",
+                           timeout=SUBPROCESS_TIMEOUT, env=env)
         return r.returncode == 0, (r.stderr or r.stdout)[-600:]
     except FileNotFoundError:
         return False, f"{cmd[0]} not found"
     except subprocess.TimeoutExpired:
-        return False, "timed out after 600s"
+        return False, f"timed out after {SUBPROCESS_TIMEOUT}s"
 
 
 def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
-        texture: int = TARGET_TEXTURE, scale: dict | None = None) -> Optimized:
+        texture: int = TARGET_TEXTURE, scale: dict | None = None,
+        on_stage=None) -> Optimized:
     """Decimate, resize, place and compress. Returns what it managed to produce.
 
     `scale` is `{"axis": "width"|"length"|"height", "cm": 28}` - one real-world dimension,
@@ -135,6 +150,8 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
     base = ([_exe("gltf-transform")] if tc == "gltf-transform" else
             [_exe("npx"), "--no-install", "@gltf-transform/cli"])
 
+    say = on_stage or (lambda _name: None)
+
     with tempfile.TemporaryDirectory() as tmp:
         work = Path(tmp)
         staged = work / "in.glb"
@@ -148,6 +165,7 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         #    The triangle target is converted to the ratio the CLI actually takes.
         #    Previously this passed only --simplify-error, so the "target" was reported
         #    in the stats and never enforced - the number was decoration.
+        say("geometry")
         src_tris = glb.count_triangles(staged)
         ratio = min(1.0, triangles / src_tris) if src_tris else 1.0
         ok, log = _run(base + [
@@ -163,6 +181,7 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         # 2. Textures, in Python. This is where the weight actually is: after decimation
         #    the salad was still 47 MB, of which 45 MB was three JPEGs.
         try:
+            say("textures")
             tex_stats = glb.resize_textures(geom, opt, max_edge=texture)
         except Exception as e:  # noqa: BLE001
             return Optimized(ok=False, toolchain=tc,
@@ -176,6 +195,7 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         #    rewriting vertices - Draco quantises positions in local space, so baking a
         #    0.15x scale into the vertices first would throw away precision it needs.
         try:
+            say("placing")
             placed = work / "placed.glb"
             measured = glb.bounds(opt)
             factor = 1.0
@@ -192,6 +212,7 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
                              error=f"placement failed: {type(e).__name__}: {e}")
 
         # 4. Draco for the web payload.
+        say("compressing")
         ok, log = _run(base + ["draco", str(opt), str(draco)], work)
         if not ok:
             return Optimized(ok=False, toolchain=tc, error=f"draco failed: {log}",

@@ -20,6 +20,10 @@
     --track:.16em;
   }
   *{box-sizing:border-box;margin:0}
+  /* Author styles beat the UA sheet's [hidden] rule regardless of specificity, so any
+     class carrying its own `display` silently ignores el.hidden. That is how the
+     Shipping/Master tabs stayed on screen for dishes with nothing to ship. */
+  [hidden]{display:none !important}
   html,body{height:100%}
   body{background:var(--void);color:var(--ink);
        font:400 14px/1.55 'Archivo',system-ui,sans-serif;
@@ -394,6 +398,16 @@ async function open(dish, variant) {
   paint(); refresh();
 }
 
+/* How long the current optimise has been going. The server stamps `optimising_since`
+   when it starts; a run that outlives its worker is only visible this way. */
+const seconds = d => d.optimising_since
+  ? Math.max(0, (Date.now() - Date.parse(d.optimising_since)) / 1000) : 0;
+const elapsed = d => {
+  const s = Math.round(seconds(d));
+  if (!d.optimising_since) return '';
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+};
+
 function paint() {
   if (!$('#plate')) $('#bench').replaceChildren($('#tpl-bench').content.cloneNode(true));
   const d = CUR;
@@ -425,34 +439,56 @@ function paint() {
       const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
       if (f.status !== 'running') { clearInterval(POLL); POLL = null; CUR = f; paint(); refresh(); }
     }, 4000);
-  } else if (d.status === 'optimising') {
-    stage.innerHTML = `<div class="stagemsg"><div class="spinner"></div>
-      <span class="lbl">Optimising</span><p>Decimating, resizing textures, placing at
-      real-world size. About five seconds.</p></div>`;
-    POLL ||= setInterval(async () => {
-      const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
-      if (f.status !== 'optimising') { clearInterval(POLL); POLL = null; CUR = f; paint(); refresh(); }
-    }, 3000);
   /* `catalogued` and `exporting` are the old names for this state. Records written
-     before the rename still carry them, and a record is not worth a migration. */
-  } else if (['review', 'catalogued', 'exporting'].includes(d.status)) {
+     before the rename still carry them, and a record is not worth a migration.
+
+     `optimising` is in here too, and that is the point: once generation has produced a
+     master there is a model to look at, and making someone watch a spinner while a
+     finished file sits in storage is just hiding it. The optimiser catches up in the
+     background and the panel swaps to the shipping file when it lands. */
+  } else if (['review', 'catalogued', 'exporting', 'optimising'].includes(d.status)
+             && d.model_key) {
     // You judge what SHIPS, not the master. A master can look perfect while the optimiser
     // has quietly eaten the garnish, and at ~216 MB of VRAM against ~52 MB it is also not
     // the thing a guest's phone has to survive. The Master tab is there to tell the two
     // apart when a verdict is contested.
+    const busy = d.status === 'optimising';
     const shippable = !!(d.catalog_keys && Object.keys(d.catalog_keys).length);
-    const stg = shippable ? STAGE : 'master';
-    stage.innerHTML = `<model-viewer src="/model?dish=${enc(DISH)}&variant=${enc(VAR)}&stage=${stg}&v=${Date.now()}"
+    /* While the optimiser runs, the master is the only file guaranteed to match this
+       generation - the catalogue, if any, is from the previous pass. */
+    const stg = (shippable && !busy) ? STAGE : 'master';
+    stage.innerHTML = `<model-viewer src="/model?dish=${enc(DISH)}&variant=${enc(VAR)}&stage=${stg}&v=${d.catalogued_utc || d.seconds}"
       camera-controls auto-rotate rotation-per-second="18deg" shadow-intensity="1"
       exposure="1.1" interaction-prompt="none" alt="Generated model of ${DISH}"></model-viewer>`;
     const tabs = $('#stagetabs');
-    tabs.hidden = !shippable;
+    tabs.hidden = !shippable || busy;
     $$('#stagetabs .minitab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.stage === stg)));
     const st = d.export_stats || {};
     const dims = (st.size_after || []).map(v => (v * 100).toFixed(1)).join(' x ');
-    $('#resultmeta').textContent = stg === 'master'
-      ? `master · ${d.engine} · ${d.seconds}s`
-      : `${(st.draco_bytes/1048576||0).toFixed(2)} MB draco · ${st.result_triangles||'?'} tris${dims ? ` · ${dims} cm` : ''}`;
+    $('#resultmeta').textContent = busy
+      ? `master · optimising: ${d.stage || 'starting'}${elapsed(d) ? ' · ' + elapsed(d) : ''}`
+      : stg === 'master'
+        ? `master · ${d.engine} · ${d.seconds}s`
+        : `${(st.draco_bytes/1048576||0).toFixed(2)} MB draco · ${st.result_triangles||'?'} tris${dims ? ` · ${dims} cm` : ''}`;
+    if (busy) {
+      POLL ||= setInterval(async () => {
+        const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+        CUR = f;
+        if (f.status !== 'optimising') { clearInterval(POLL); POLL = null; refresh(); }
+        paint();
+      }, 3000);
+    }
+  } else if (d.status === 'optimising') {
+    stage.innerHTML = `<div class="stagemsg"><div class="spinner"></div>
+      <span class="lbl">Optimising</span><p>${d.stage || 'starting'}</p></div>`;
+    $('#stagetabs').hidden = true;
+    $('#resultmeta').textContent = elapsed(d);
+    POLL ||= setInterval(async () => {
+      const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+      CUR = f;
+      if (f.status !== 'optimising') { clearInterval(POLL); POLL = null; refresh(); }
+      paint();
+    }, 3000);
   } else if (d.status === 'failed') {
     stage.innerHTML = `<div class="stagemsg"><span class="lbl">Failed</span>
       <p class="err">${d.error || 'no detail returned'}</p></div>`;
@@ -477,9 +513,17 @@ function paint() {
   const btn = $('#export-model'), note = $('#exportnote');
   if (btn) {
     const shippable = !!(d.catalog_keys && Object.keys(d.catalog_keys).length);
-    btn.disabled = !d.model_key || ['running','optimising'].includes(d.status);
+    const stuck = d.status === 'optimising' && seconds(d) > 180;
+    btn.disabled = !d.model_key || d.status === 'running' ||
+                   (d.status === 'optimising' && !stuck);
+    btn.textContent = stuck ? 'Restart optimise' : 'Re-optimise';
     note.className = 'hintline';
-    if (d.export_error) { note.textContent = d.export_error; note.classList.add('warn'); }
+    if (stuck) {
+      note.textContent = `Stalled at "${d.stage || 'starting'}" for ${elapsed(d)}. ` +
+        `The worker is gone — press Restart optimise.`;
+      note.classList.add('warn');
+    }
+    else if (d.export_error) { note.textContent = d.export_error; note.classList.add('warn'); }
     else if (shippable) {
       const st = d.export_stats || {};
       note.textContent = `${(st.draco_bytes/1048576||0).toFixed(2)} MB shipping, ${st.shrink||'?'}x smaller than the master`;
