@@ -130,6 +130,36 @@
   .rail textarea{width:100%;min-height:34px;max-height:90px;resize:vertical;
                  background:var(--plate);font-size:13px}
 
+  .viewtab{font-size:11px;letter-spacing:.09em;text-transform:uppercase;padding:7px 13px;
+           background:transparent}
+  .viewtab[aria-pressed="true"]{background:var(--raise);border-color:var(--rule-lit);color:var(--chalk)}
+  #library{height:calc(100% - 54px);overflow:auto;padding:var(--pad);
+           display:flex;flex-direction:column;gap:16px}
+  .libbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .filters{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font:500 12px/1 'Archivo',sans-serif;padding:7px 13px;border:1px solid var(--rule);
+        background:var(--plate);color:var(--ink-dim);border-radius:99px;cursor:pointer}
+  .chip[aria-pressed="true"]{background:var(--chalk);color:#151515;border-color:transparent;font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+  .card{background:var(--bench);border:1px solid var(--rule);border-radius:3px;
+        overflow:hidden;cursor:pointer;display:flex;flex-direction:column;text-align:left;
+        padding:0;color:inherit}
+  .card:hover{border-color:var(--rule-lit)}
+  .card .shot{aspect-ratio:1;background:
+      repeating-conic-gradient(#232323 0% 25%,#1c1c1c 0% 50%) 50%/18px 18px;
+      display:grid;place-items:center;overflow:hidden}
+  .card .shot img{width:100%;height:100%;object-fit:cover}
+  .card .shot span{color:var(--ink-faint);font-size:11px}
+  .card .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:4px}
+  .card b{font-weight:600;font-size:13px;line-height:1.3}
+  .card .sub{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--ink-faint)}
+  .card .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:2px}
+  .tagpill{font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:3px 7px;
+           border-radius:99px;border:1px solid currentColor}
+  .tagpill.catalogued{color:var(--chalk)} .tagpill.review{color:var(--amber)}
+  .tagpill.failed{color:var(--red)} .tagpill.ready,.tagpill.empty{color:var(--ink-faint)}
+  .tagpill.running,.tagpill.exporting{color:var(--amber)}
+  .v-good{color:var(--chalk)} .v-acceptable{color:var(--amber)} .v-reject{color:var(--red)}
   .empty{display:grid;place-items:center;height:100%;text-align:center;padding:40px}
   .empty h2{font-weight:600;font-size:15px;margin-bottom:8px}
   .empty p{color:var(--ink-faint);font-size:13px;max-width:380px}
@@ -185,6 +215,8 @@
 <header>
   <button id="menu" class="drawer-btn" aria-label="Show dishes" aria-expanded="false">☰</button>
   <span class="wordmark">Scan<span>·</span>Studio</span>
+  <button id="view-bench" class="viewtab" aria-pressed="true">Bench</button>
+  <button id="view-lib" class="viewtab" aria-pressed="false">Library</button>
   <select id="variant" title="Angle strategy"></select>
   <button id="newvariant">New variant</button>
   <span class="sp"></span>
@@ -204,6 +236,22 @@
   <div class="bench" id="bench"></div>
 </main>
 <div class="scrim" id="scrim"></div>
+
+<section id="library" hidden>
+  <div class="libbar">
+    <span class="lbl">Everything made</span>
+    <span class="sp"></span>
+    <div class="filters" id="libfilters" role="group" aria-label="Filter">
+      <button class="chip" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" data-f="catalogued" aria-pressed="false">Catalogued</button>
+      <button class="chip" data-f="review" aria-pressed="false">Awaiting judgement</button>
+      <button class="chip" data-f="good" aria-pressed="false">Good</button>
+      <button class="chip" data-f="reject" aria-pressed="false">Rejected</button>
+    </div>
+    <span id="libcount" class="hintline"></span>
+  </div>
+  <div class="grid" id="libgrid"></div>
+</section>
 
 <template id="tpl-bench">
   <div class="compare">
@@ -423,7 +471,12 @@ async function upload(files, startSlot) {
 /* ── events ─────────────────────────────────────────────── */
 document.addEventListener('click', async e => {
   const spec = e.target.closest('.spec');
-  if (spec) return open(spec.dataset.dish, null);
+  if (spec) {
+    // Open a variant that exists. Defaulting to 'default' made saved work look lost:
+    // a dish stored only as ring-25 would open an empty plate.
+    const row = LIST.find(d => d.dish === spec.dataset.dish);
+    return open(spec.dataset.dish, (row && row.variants[0]) || 'default');
+  }
 
   const clear = e.target.closest('[data-clear]');
   if (clear) {
@@ -498,6 +551,64 @@ $('#export-model').onclick = async () => {
 };
 
 $('#export').onclick = async () => say('Wrote ' + (await api('/api/export')).csv);
+
+let LIB = [], LIBFILTER = 'all';
+
+async function loadLibrary() {
+  LIB = (await api('/api/library')).items;
+  paintLibrary();
+}
+
+function paintLibrary() {
+  const f = LIBFILTER;
+  const rows = LIB.filter(r =>
+    f === 'all' ? true :
+    f === 'catalogued' ? r.status === 'catalogued' :
+    f === 'review' ? (r.status === 'review' && !r.verdict) :
+    r.verdict === f);
+  $('#libcount').textContent = `${rows.length} of ${LIB.length}`;
+  $('#libgrid').innerHTML = rows.length ? rows.map(r => `
+    <button class="card" data-d="${r.dish}" data-v="${r.variant}">
+      <span class="shot">${r.has_thumb
+        ? `<img loading="lazy" src="/thumb?dish=${enc(r.dish)}&variant=${enc(r.variant)}" alt="">`
+        : '<span>no preview</span>'}</span>
+      <span class="body">
+        <b>${r.dish}</b>
+        <span class="sub">${r.variant} · ${r.frames} frame${r.frames === 1 ? '' : 's'}${r.engine ? ' · ' + r.engine : ''}</span>
+        <span class="row">
+          <span class="tagpill ${r.status}">${r.status}</span>
+          ${r.verdict ? `<span class="v-${r.verdict}">${r.verdict}</span>` : ''}
+          ${r.draco_mb ? `<span class="sub">${r.draco_mb} MB</span>` : ''}
+        </span>
+        ${r.judged_by ? `<span class="sub">judged by ${r.judged_by}</span>` : ''}
+      </span>
+    </button>`).join('')
+    : '<p class="hintline">Nothing here yet.</p>';
+}
+
+function showView(which) {
+  const lib = which === 'library';
+  $('#library').hidden = !lib;
+  document.querySelector('main').style.display = lib ? 'none' : '';
+  $('#view-lib').setAttribute('aria-pressed', String(lib));
+  $('#view-bench').setAttribute('aria-pressed', String(!lib));
+  if (lib) loadLibrary();
+}
+
+$('#view-lib').onclick = () => showView('library');
+$('#view-bench').onclick = () => showView('bench');
+
+document.addEventListener('click', e => {
+  const chip = e.target.closest('#libfilters .chip');
+  if (chip) {
+    LIBFILTER = chip.dataset.f;
+    document.querySelectorAll('#libfilters .chip').forEach(c =>
+      c.setAttribute('aria-pressed', String(c === chip)));
+    return paintLibrary();
+  }
+  const card = e.target.closest('.card');
+  if (card) { showView('bench'); open(card.dataset.d, card.dataset.v); }
+});
 
 boot();
 </script>

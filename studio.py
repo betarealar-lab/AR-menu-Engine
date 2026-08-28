@@ -137,6 +137,13 @@ class Handler(BaseHTTPRequestHandler):
                 })
             if path == "/api/dishes":
                 return self._json({"dishes": self._dishes()})
+            if path == "/api/library":
+                return self._json({"items": self._library()})
+            if path == "/thumb":
+                q = self._q()
+                rec = dataset.record(q["dish"], q.get("variant", "default"))
+                return self._serve(dataset.MODELS,
+                                   rec.get("master_keys", {}).get("png", ""), "image/png")
             if path == "/api/dish":
                 q = self._q()
                 return self._json(self._detail(q["dish"], q.get("variant", "default")))
@@ -346,6 +353,32 @@ class Handler(BaseHTTPRequestHandler):
             out.append({"dish": d, "variants": vs or ["default"],
                         "judged": sum(1 for r in recs if r.get("verdict")),
                         "done": sum(1 for r in recs if r.get("status") == "done")})
+        return out
+
+    def _library(self) -> list[dict]:
+        """Everything ever made, newest first - the answer to "what have we already done".
+
+        Reads one record per dish+variant. Fine at the scale a single kitchen produces;
+        if this ever gets slow, the fix is an index object rather than a fan-out read.
+        """
+        out = []
+        for rec in dataset.catalogue():
+            st = rec.get("export_stats") or {}
+            out.append({
+                "dish": rec.get("dish"), "variant": rec.get("variant"),
+                "status": rec.get("status"), "verdict": rec.get("verdict"),
+                "faults": rec.get("faults", []), "engine": rec.get("engine"),
+                "frames": len(rec.get("frames", {})),
+                "has_thumb": bool(rec.get("master_keys", {}).get("png")),
+                "has_model": bool(rec.get("model_key")),
+                "draco_mb": round(st.get("draco_bytes", 0) / 1048576, 2) or None,
+                "shrink": st.get("shrink"),
+                "judged_by": rec.get("judged_by"), "judged_utc": rec.get("judged_utc"),
+                "created_utc": rec.get("created_utc"),
+                "catalogued_utc": rec.get("catalogued_utc"),
+            })
+        out.sort(key=lambda r: (r.get("catalogued_utc") or r.get("judged_utc")
+                                or r.get("created_utc") or ""), reverse=True)
         return out
 
     def _detail(self, dish: str, variant: str) -> dict:
