@@ -135,6 +135,29 @@ def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
     }
 
 
+def count_triangles(path: Path) -> int:
+    """Triangles in the whole file, counted from the accessors.
+
+    Needed to turn a triangle target into the ratio glTF-Transform actually wants, and to
+    report what a decimation really produced rather than what was asked for.
+    """
+    gltf, _ = _read(path)
+    accessors = gltf.get("accessors", [])
+    total = 0
+    for mesh in gltf.get("meshes", []):
+        for prim in mesh.get("primitives", []):
+            if prim.get("mode", 4) != 4:          # 4 = TRIANGLES
+                continue
+            idx = prim.get("indices")
+            if idx is not None:
+                total += accessors[idx]["count"] // 3
+            else:
+                pos = prim.get("attributes", {}).get("POSITION")
+                if pos is not None:
+                    total += accessors[pos]["count"] // 3
+    return total
+
+
 def summarize(path: Path) -> list[dict]:
     """What textures are in here, and how big - for diagnosing a bad master."""
     gltf, binary = _read(path)

@@ -119,11 +119,18 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         # 1. Geometry only. Texture work is explicitly disabled here because
         #    glTF-Transform routes it through sharp/libvips, which dies on Meshy's
         #    textures with "colourspace: parameter space not set" - see glb.py.
+        #
+        #    The triangle target is converted to the ratio the CLI actually takes.
+        #    Previously this passed only --simplify-error, so the "target" was reported
+        #    in the stats and never enforced - the number was decoration.
+        src_tris = glb.count_triangles(staged)
+        ratio = min(1.0, triangles / src_tris) if src_tris else 1.0
         ok, log = _run(base + [
             "optimize", str(staged), str(geom),
             "--compress", "false",
             "--texture-compress", "false",
-            "--simplify-error", "0.001",
+            "--simplify-ratio", f"{ratio:.6f}",
+            "--simplify-error", "0.01",
         ], work)
         if not ok:
             return Optimized(ok=False, toolchain=tc, error=f"geometry pass failed: {log}")
@@ -149,6 +156,8 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         "draco_bytes": draco.stat().st_size,
         "shrink": round(master.stat().st_size / max(draco.stat().st_size, 1), 1),
         "target_triangles": triangles,
+        "source_triangles": src_tris,
+        "result_triangles": glb.count_triangles(draco),
         "target_texture": texture,
         **tex_stats,
     }
