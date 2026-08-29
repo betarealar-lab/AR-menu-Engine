@@ -72,8 +72,15 @@ Windows. These have each cost time already:
 gitignored — verified against the actual remote tree, not just the ignore rule.
 
 ```
-MESHY_API_KEY  R2_ENDPOINT  R2_ACCESS_KEY_ID  R2_SECRET_ACCESS_KEY
+MESHY_API_KEY  MESHY_WEBHOOK_SECRET  R2_ENDPOINT  R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY
 R2_BUCKET_PHOTOS  R2_BUCKET_MODELS  STUDIO_USERS
+
+`MESHY_WEBHOOK_SECRET` is new and is the one that changes behaviour: set it and
+generation submits and returns, with Meshy calling `/hook/<secret>` when the model
+is ready. Unset - a laptop, which the internet cannot reach - it falls back to
+waiting through the ~175s. Register the URL at Meshy -> Settings -> API -> Webhooks
+(dashboard only; there is no API for it, and five webhooks maximum per account).
 ```
 
 Same seven are set in Render's dashboard. To copy them:
@@ -256,6 +263,7 @@ glb.py             GLB surgery in pure Python: texture resize, triangle count
 dataset.py         dishes, variants, frames, verdicts. Keys and records
 storage.py         R2 or local disk behind one interface
 config.py          .env loading
+check_webhook.py   17 checks of the submit/callback path with a stub engine, no credits
 check.py           40 checks over a real server on a temp store. Run before pushing:
                    `python check.py --master <a-meshy-master.glb>`. Never touches R2
 limits.py          what this container may use, and refusing jobs that will not fit

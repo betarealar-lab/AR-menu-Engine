@@ -160,57 +160,108 @@ class MeshyEngine(Engine):
             body["enable_pbr"] = self.enable_pbr
         return body
 
-    def generate(self, job: Job, out_dir: Path) -> Result:
-        res = Result(engine=self.name, variant=self.variant, dish=job.dish, ok=False,
-                     credits=self.cost_per_job)
-        started = time.time()
+    def _blank(self, dish: str) -> Result:
+        return Result(engine=self.name, variant=self.variant, dish=dish, ok=False,
+                      credits=self.cost_per_job)
+
+    def start(self, job: Job) -> Result:
+        """Hand the dish to Meshy and return the ticket. Nothing of ours waits."""
+        res = self._blank(job.dish)
         try:
-            r = requests.post(BASE, headers=self._headers(), json=self._payload(job), timeout=180)
+            r = requests.post(BASE, headers=self._headers(),
+                              json=self._payload(job), timeout=180)
+            if r.status_code == 429:
+                # The account's concurrent-task ceiling - 10 on the Pro plan. That is
+                # not a failure of this dish, it is a statement about how many are
+                # already in flight, so it is reported as something to retry rather
+                # than something to give up on. Sending more does not make Meshy
+                # faster; it makes it refuse.
+                res.error = ("Meshy is at its concurrent-task limit for this account. "
+                             "The dish is not lost - it starts when a slot frees.")
+                res.retryable = True
+                return res
             if r.status_code >= 400:
                 res.error = f"submit {r.status_code}: {r.text[:300]}"
                 return res
             res.task_id = r.json()["result"]
+            return res
+        except Exception as e:  # noqa: BLE001
+            res.error = f"{type(e).__name__}: {e}"
+            res.retryable = True
+            return res
 
-            # Poll. Production should use the webhook instead (Settings -> API),
-            # but for a batch of a dozen dishes polling is simpler and fine.
-            while True:
-                if time.time() - started > GIVE_UP_AFTER:
-                    res.error = f"timed out after {GIVE_UP_AFTER}s (task {res.task_id})"
-                    return res
-                time.sleep(POLL_SECONDS)
-                g = requests.get(f"{BASE}/{res.task_id}", headers=self._headers(), timeout=60)
-                if g.status_code >= 400:
-                    res.error = f"poll {g.status_code}: {g.text[:300]}"
-                    return res
-                task = g.json()
-                status = task.get("status")
-                if status == "SUCCEEDED":
-                    break
-                if status in ("FAILED", "CANCELED"):
-                    err = (task.get("task_error") or {}).get("message", "")
-                    res.error = f"{status}: {err}"
-                    return res
+    def collect(self, task_id: str, dish: str, out_dir: Path) -> Result:
+        """Ask Meshy about a ticket and download the files if they are ready.
 
-            res.seconds = round(time.time() - started, 1)
+        **The webhook is never trusted for content.** Meshy documents no signature, no
+        shared secret and no IP allowlist for webhook deliveries, so a payload arriving
+        at our URL proves nothing about who sent it. It is treated purely as a nudge -
+        something may have changed, go and look. The answer always comes from a GET
+        made with our own API key, over TLS, to Meshy's own domain. A forged delivery
+        can then do nothing worse than make us check a little early.
+        """
+        res = self._blank(dish)
+        res.task_id = task_id
+        try:
+            g = requests.get(f"{BASE}/{task_id}", headers=self._headers(), timeout=60)
+            if g.status_code >= 400:
+                res.error = f"status {g.status_code}: {g.text[:300]}"
+                res.retryable = g.status_code >= 500
+                return res
+            task = g.json()
+            status = task.get("status")
+            if status in ("PENDING", "IN_PROGRESS"):
+                res.pending = True
+                res.progress = int(task.get("progress") or 0)
+                return res
+            if status != "SUCCEEDED":
+                detail = (task.get("task_error") or {}).get("message", "")
+                res.error = f"{status}: {detail}"
+                return res
+
             out_dir.mkdir(parents=True, exist_ok=True)
-
-            # GLB and USDZ both come straight out of Meshy, which removes the
-            # separate USDZ conversion step the current pipeline does by hand.
+            # Meshy returns a USDZ as well. It is kept as a master artefact, but it is
+            # NOT what ships - the shipped one is built from our optimised GLB by
+            # usdz.py, because Meshy's is the undecimated master.
             for fmt in ("glb", "usdz"):
                 url = (task.get("model_urls") or {}).get(fmt)
                 if url:
-                    res.files[fmt] = _download(url, out_dir / f"{job.dish}.{fmt}")
+                    res.files[fmt] = _download(url, out_dir / f"{dish}.{fmt}")
             if task.get("thumbnail_url"):
-                res.files["thumb"] = _download(task["thumbnail_url"], out_dir / f"{job.dish}.png")
+                res.files["thumb"] = _download(task["thumbnail_url"], out_dir / f"{dish}.png")
 
             res.ok = "glb" in res.files
             if not res.ok:
                 res.error = "succeeded but returned no GLB"
             return res
-        except Exception as e:  # noqa: BLE001 - one bad dish must not kill the batch
+        except Exception as e:  # noqa: BLE001
             res.error = f"{type(e).__name__}: {e}"
-            res.seconds = round(time.time() - started, 1)
+            res.retryable = True
             return res
+
+    def generate(self, job: Job, out_dir: Path) -> Result:
+        """Submit and wait, for hosts that cannot receive a callback.
+
+        Kept for the laptop and for `runner.py`. Hosted, the webhook path is used
+        instead: this loop holds a whole process for ~175 seconds per dish, and every
+        one of those seconds is Meshy's GPU working while ours does nothing.
+        """
+        started = time.time()
+        res = self.start(job)
+        if res.error:
+            return res
+        task_id = res.task_id
+        while True:
+            if time.time() - started > GIVE_UP_AFTER:
+                out = self._blank(job.dish)
+                out.task_id = task_id
+                out.error = f"timed out after {GIVE_UP_AFTER}s (task {task_id})"
+                return out
+            time.sleep(POLL_SECONDS)
+            res = self.collect(task_id, job.dish, out_dir)
+            if not res.pending:
+                res.seconds = round(time.time() - started, 1)
+                return res
 
 
 def _download(url: str, dest: Path) -> Path:

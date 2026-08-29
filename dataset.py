@@ -92,6 +92,10 @@ def blank(dish: str, variant: str) -> dict:
         # clear it - which is exactly what happened on 2026-08-29. `stage` is also the
         # only honest progress the page can show.
         "stage": "", "optimising_since": "",
+        # The engine's ticket for this dish, and when we handed it over. Kept because
+        # a callback arrives knowing only the ticket, and because a run whose callback
+        # never comes has to be findable and resumable rather than simply stuck.
+        "task_id": "", "submitted_utc": "",
         "created_utc": _now(), "judged_by": "", "judged_utc": "",
     }
 
@@ -186,6 +190,31 @@ def save_model(dish: str, variant: str, engine: str, ext: str, data: bytes) -> s
     key = model_key(dish, variant, engine, ext)
     storage.backend().put(MODELS, key, data, ctype)
     return key
+
+
+# ── engine tickets ──────────────────────────────────────────────────
+#
+# A webhook tells us a task id and nothing else. Scanning every record to find the
+# owner would work at ten dishes and not at ten thousand, so the mapping is written
+# once, as its own small object, and read directly.
+
+def _ticket_key(task_id: str) -> str:
+    return f"tasks/{slug(task_id)}.json"
+
+
+def claim_task(task_id: str, dish: str, variant: str) -> None:
+    storage.backend().put(
+        PHOTOS, _ticket_key(task_id),
+        json.dumps({"dish": dish, "variant": variant, "task_id": task_id,
+                    "utc": _now()}).encode(), "application/json")
+
+
+def owner_of_task(task_id: str) -> tuple[str, str] | None:
+    raw = storage.backend().get(PHOTOS, _ticket_key(task_id))
+    if not raw:
+        return None
+    d = json.loads(raw)
+    return d["dish"], d["variant"]
 
 
 def read_model(key: str) -> bytes | None:

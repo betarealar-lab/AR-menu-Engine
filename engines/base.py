@@ -32,6 +32,13 @@ class Result:
     credits: int = 0
     files: dict[str, Path] = field(default_factory=dict)
     error: str = ""
+    # Still working - not a success and not a failure. Only `collect` sets this.
+    pending: bool = False
+    progress: int = 0
+    # The failure is about capacity or the network, not about this dish. Retrying the
+    # same job later is expected to work; retrying a `retryable=False` failure just
+    # spends credits reproducing the same bad result.
+    retryable: bool = False
 
 
 class Engine:
@@ -46,4 +53,30 @@ class Engine:
         return f"{self.name}:{self.variant}"
 
     def generate(self, job: Job, out_dir: Path) -> Result:
+        """Submit and wait. Simple, and the only option where nothing can call us back.
+
+        Prefer `start` + `collect` anywhere the engine can notify us: waiting costs a
+        whole process for minutes at a time, and on a platform that bills running
+        containers - or reclaims idle ones - that is both the largest line on the bill
+        and the way work gets lost.
+        """
+        raise NotImplementedError
+
+    # ── the asynchronous pair ───────────────────────────────────────
+    #
+    # Split deliberately. `start` hands the job over and returns a ticket; `collect`
+    # turns that ticket into files once the engine says it is done. Between the two,
+    # nothing of ours is running. An engine that cannot notify us can still implement
+    # `generate` alone, and the Studio falls back to waiting.
+
+    def start(self, job: Job) -> Result:
+        """Submit and return immediately. `task_id` is set; `files` is empty."""
+        raise NotImplementedError
+
+    def collect(self, task_id: str, dish: str, out_dir: Path) -> Result:
+        """Ask the engine about a ticket and download whatever is ready.
+
+        `ok` means finished and downloaded. `error` set means finished badly. Neither
+        means still working - ask again later.
+        """
         raise NotImplementedError

@@ -17,6 +17,8 @@ import argparse
 import base64
 import binascii
 import csv
+import datetime
+import hmac
 import io
 import json
 import os
@@ -71,6 +73,15 @@ STALE_AFTER_SECONDS = 300
 # queue in ROADMAP 1.2 - a `jobs` table and a worker - and this is the honest interim:
 # work that is either done or visibly not done, never silently lost.
 INLINE_JOBS = os.environ.get("JOBS", "inline").strip().lower() != "thread"
+
+
+def webhook_secret() -> str:
+    """The secret path segment Meshy calls us on, or empty when nobody can call us.
+
+    Empty is the honest default: a laptop has no address the internet can reach, so the
+    Studio waits through generation there instead of submitting into silence.
+    """
+    return os.environ.get("MESHY_WEBHOOK_SECRET", "").strip()
 
 
 def _dispatch(fn, *args) -> None:
@@ -174,6 +185,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         # The platform's health probe cannot send credentials, so it has to sit in front
         # of the auth check. It reveals nothing - a literal "ok" and the storage mode.
+        if path.startswith("/hook/"):
+            return self._hook(path)
         if path == "/healthz":
             # Storage backend and optimiser toolchain, both non-sensitive, so a deploy can
             # be verified from outside without handing anyone a login.
@@ -212,6 +225,8 @@ class Handler(BaseHTTPRequestHandler):
                                    rec.get("master_keys", {}).get("png", ""), "image/png")
             if path == "/api/dish":
                 q = self._q()
+                # Reading a dish is also when we notice one that has gone quiet.
+                self._nudge(dataset.record(q["dish"], q.get("variant", "default")))
                 return self._json(self._detail(q["dish"], q.get("variant", "default")))
             if path == "/frame":
                 q = self._q()
@@ -231,6 +246,8 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- POST ----------
 
     def do_POST(self) -> None:
+        if self.path.split("?")[0].startswith("/hook/"):
+            return self._hook(self.path.split("?")[0])
         who = self.whoami()
         if who is None:
             return self.challenge()
@@ -312,46 +329,92 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------- work ----------
 
-    def _generate(self, dish: str, variant: str, engine_name: str | None, who: str) -> None:
-        name = engine_name or self.engine_name
+    def _hook(self, path: str) -> None:
+        """Meshy calling to say a task changed.
+
+        Two things make this safe to expose without a login:
+
+        The path carries a secret only we and Meshy know (MESHY_WEBHOOK_SECRET), so an
+        unaddressed scan of the internet does not find it.
+
+        And **the body is never believed**. Meshy documents no signature, no shared
+        secret and no IP allowlist for deliveries, so a payload arriving here proves
+        nothing about who sent it. We take one thing from it - a task id - and then ask
+        Meshy ourselves, with our own key, over TLS. Someone who guesses the URL and
+        forges a body can make us check a task early. That is all.
+        """
+        secret = os.environ.get("MESHY_WEBHOOK_SECRET", "").strip()
+        given = path[len("/hook/"):].strip("/")
+        if not secret or not hmac.compare_digest(given, secret):
+            return self._send(404, b"not found", "text/plain")
+
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length) if length else b""
+        task_id = ""
+        try:
+            body = json.loads(raw or b"{}")
+            task_id = str(body.get("id") or body.get("result") or
+                          (body.get("data") or {}).get("id") or "")
+        except Exception:  # noqa: BLE001 - a body we cannot read is not worth an error
+            pass
+        # Answer before doing any work. Meshy wants a status under 400 and will disable
+        # a webhook that keeps failing or timing out; whether OUR pipeline then succeeds
+        # is our problem, not a reason for them to stop calling.
+        self._send(200, b"ok", "text/plain")
+        if task_id:
+            threading.Thread(target=self._resume, args=(task_id,), daemon=True).start()
+
+    # A webhook that never arrives must not strand a dish. Meshy can disable a webhook
+    # after repeated delivery failures, a deploy can land in the wrong second, and a
+    # network can simply eat one. So the page's own polling doubles as a safety net:
+    # if a submitted dish has been quiet for longer than a generation usually takes,
+    # ask Meshy directly. Cheap, because it only fires for records actually in flight.
+    NUDGE_AFTER_SECONDS = 45
+
+    def _nudge(self, rec: dict) -> None:
+        if rec.get("status") != "running" or not rec.get("task_id"):
+            return
+        since = rec.get("submitted_utc") or ""
+        try:
+            age = (datetime.datetime.now(datetime.timezone.utc)
+                   - datetime.datetime.fromisoformat(since)).total_seconds()
+        except ValueError:
+            age = self.NUDGE_AFTER_SECONDS + 1
+        if age < self.NUDGE_AFTER_SECONDS:
+            return
+        key = (dataset.slug(rec["dish"]), dataset.slug(rec["variant"]))
+        with RUN_LOCK:
+            if key in RUNNING:
+                return
+        threading.Thread(target=self._resume, args=(rec["task_id"],),
+                         daemon=True).start()
+
+    def _resume(self, task_id: str) -> None:
+        """Turn a ticket into files. Safe to call twice for the same task."""
+        owner = dataset.owner_of_task(task_id)
+        if not owner:
+            return
+        dish, variant = owner
         key = (dataset.slug(dish), dataset.slug(variant))
-        # Per variant: the finally clause empties this directory, and two dishes
-        # generating at once would delete each other's staged frames mid-call.
+        with RUN_LOCK:
+            if key in RUNNING:
+                return
+            RUNNING.add(key)
         tmp = self.out_dir / "_run" / f"{key[0]}--{key[1]}"
         try:
-            engine = engines.build(name)
-            # Engines take file paths, so stage the frames locally for the call only.
-            tmp.mkdir(parents=True, exist_ok=True)
-            paths = []
-            for i, blob in enumerate(dataset.frames(dish, variant)):
-                p = tmp / f"{key[0]}-{key[1]}-{i}.jpg"
-                p.write_bytes(blob)
-                paths.append(p)
-
-            result = engine.generate(Job(dish=key[0], images=paths), tmp)
-
             rec = dataset.record(dish, variant)
-            rec["engine"] = name
-            rec["seconds"] = result.seconds
-            rec["generated_by"] = who
-            if result.ok:
-                masters = {}
-                for ext, path in result.files.items():
-                    kind = "png" if ext == "thumb" else ext
-                    masters[kind] = dataset.save_model(dish, variant, name, kind,
-                                                       Path(path).read_bytes())
-                rec["master_keys"] = masters
-                rec["model_key"] = masters.get("glb", "")
-                rec.update(status="optimising", stage="queued",
-                           optimising_since=dataset._now())
-            else:
-                rec.update(status="failed", error=result.error)
-            dataset.write(rec)
-            # Optimise straight away rather than waiting for approval. Already on a
-            # background thread, five seconds, no credits - and it means review loads
-            # the thing that will actually ship instead of a ~200 MB master.
-            if result.ok:
-                self._optimize(dish, variant, who)
+            if rec.get("model_key") and rec.get("task_id") == task_id:
+                return                       # already collected; a duplicate delivery
+            engine = engines.build(rec.get("engine") or self.engine_name)
+            tmp.mkdir(parents=True, exist_ok=True)
+            res = engine.collect(task_id, key[0], tmp)
+            if res.pending:
+                rec = dataset.record(dish, variant)
+                if rec.get("status") == "running":
+                    rec["stage"] = f"generating {res.progress}%" if res.progress else "generating"
+                    dataset.write(rec)
+                return                       # not finished; another call will come
+            self._store_result(dish, variant, res, rec.get("generated_by", ""))
         except Exception as e:  # noqa: BLE001
             rec = dataset.record(dish, variant)
             rec.update(status="failed", error=f"{type(e).__name__}: {e}")
@@ -359,9 +422,96 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             with RUN_LOCK:
                 RUNNING.discard(key)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def _store_result(self, dish: str, variant: str, result, who: str) -> None:
+        """Engine output -> masters in R2 -> optimise. Shared by both paths."""
+        rec = dataset.record(dish, variant)
+        rec["seconds"] = result.seconds or rec.get("seconds", 0)
+        if not result.ok:
+            rec.update(status="failed", error=result.error)
+            dataset.write(rec)
+            return
+        masters = {}
+        for ext, path in result.files.items():
+            kind = "png" if ext == "thumb" else ext
+            masters[kind] = dataset.save_model(dish, variant, rec.get("engine") or "",
+                                               kind, Path(path).read_bytes())
+        rec["master_keys"] = masters
+        rec["model_key"] = masters.get("glb", "")
+        rec.update(status="optimising", stage="queued",
+                   optimising_since=dataset._now())
+        dataset.write(rec)
+        self._optimize(dish, variant, who)
+
+    def _generate(self, dish: str, variant: str, engine_name: str | None, who: str) -> None:
+        """Hand the dish to the engine.
+
+        Where a callback can reach us (MESHY_WEBHOOK_SECRET set), this SUBMITS and
+        returns. Generation is ~175 seconds of Meshy's GPU and none of ours; waiting
+        through it held a whole container - two gigabytes, doing nothing - and made
+        every dish cost thirteen times the compute it needs. It also meant a closed
+        tab, a deploy or a reclaimed instance destroyed work that was already paid for.
+
+        Where no callback can reach us - a laptop, `runner.py` - it falls back to
+        waiting, because that is better than never finishing.
+        """
+        name = engine_name or self.engine_name
+        key = (dataset.slug(dish), dataset.slug(variant))
+        # Per variant: the finally clause empties this directory, and two dishes
+        # generating at once would delete each other's staged frames mid-call.
+        tmp = self.out_dir / "_run" / f"{key[0]}--{key[1]}"
+        release = True
+        try:
+            engine = engines.build(name)
+            # Engines take file paths, so stage the frames locally for the call only.
+            tmp.mkdir(parents=True, exist_ok=True)
+            paths = []
+            for i, blob in enumerate(dataset.frames(dish, variant)):
+                path = tmp / f"{key[0]}-{key[1]}-{i}.jpg"
+                path.write_bytes(blob)
+                paths.append(path)
+
+            job = Job(dish=key[0], images=paths)
+            rec = dataset.record(dish, variant)
+            rec["engine"] = name
+            rec["generated_by"] = who
+            dataset.write(rec)
+
+            if webhook_secret() and hasattr(engine, "start"):
+                started = engine.start(job)
+                rec = dataset.record(dish, variant)
+                if started.error or not started.task_id:
+                    rec.update(status="failed", error=started.error or "no task id")
+                    dataset.write(rec)
+                    return
+                # The ticket is recorded BEFORE anything else can happen, and indexed
+                # so a callback can find its way home. If this process dies in the next
+                # second, the dish is still recoverable and the credits are not lost.
+                rec.update(task_id=started.task_id, submitted_utc=dataset._now(),
+                           status="running", error="")
+                dataset.write(rec)
+                dataset.claim_task(started.task_id, dish, variant)
+                return
+
+            result = engine.generate(job, tmp)
+            rec = dataset.record(dish, variant)
+            rec["task_id"] = result.task_id
+            dataset.write(rec)
+            self._store_result(dish, variant, result, who)
+        except Exception as e:  # noqa: BLE001
+            rec = dataset.record(dish, variant)
+            rec.update(status="failed", error=f"{type(e).__name__}: {e}")
+            dataset.write(rec)
+        finally:
+            if release:
+                with RUN_LOCK:
+                    RUNNING.discard(key)
             for f in tmp.glob("*"):
-                try: f.unlink()
-                except OSError: pass
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
 
     # 8 MB of GLB at a time. Big enough that a 70 MB master is ~9 writes, small enough
     # that the process never holds a whole model in memory to hand it to a browser.
