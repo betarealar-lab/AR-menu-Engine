@@ -84,6 +84,39 @@ unviable and self-hosting makes it rounding error.
   name Meshy 7. Newer being cheaper is normal — Meshy 6 is the priced-high legacy outlier in
   every row — but confirm by reading Settings → API → Daily Usage after one real call.
 
+### Ask the engine for what we ship, not for the most it can make
+
+Reversal of "do not pre-decimate at generation, ask for maximum detail and decimate
+ourselves". That rule was right about **why** - Meshy's decimator is a black box and food
+loses thin detail first - and wrong about the cost, which it assumed was zero.
+
+Measured on the same dish, both ways:
+
+| | master in | node peak | ships as |
+|---|---|---|---|
+| raw (1.9M tris, 4k textures) | 69.6 MB | **648 MB** | 3.00 MB draco · 39,968 tris |
+| lean (150k tris, 2k textures) | 7.8 MB | **193 MB** | 3.00 MB draco · 39,992 tris |
+
+**The shipped file is identical.** The difference is entirely in what it costs to produce
+it - and 648 MB against 193 MB is the difference between needing a paid host and running
+free. We were downloading 70 MB, spending 648 MB of memory on it, and discarding 97%.
+
+Two things preserve the original reasoning. **150k is still 3.75x what we ship**, so our
+own decimator does the final and largest reduction, which is the cut the rule was really
+about. And **`meshy-7` stays in the registry as the raw-master control** - the same dish
+can be run both ways and judged in the Shipping/Master toggle. If Meshy's first cut turns
+out to lose garnish ours would have kept, this reverses back, with evidence.
+
+`texture_resolution: "2k"` is not a compromise at all: the optimiser downscales to 2048px
+regardless, so asking for 4k was paying transfer and memory for pixels we always deleted.
+
+What is genuinely given up: we no longer keep a 1.9M-triangle master. Regenerating one
+from the stored photos costs credits and, because the engine is generative, returns a
+similar model rather than the same one. The photos remain the archive - they are what
+cannot be recreated.
+
+---
+
 ### After the engine: the optimiser, and real-world scale
 
 Generation runs the optimiser automatically, and the review screen loads its **output**,

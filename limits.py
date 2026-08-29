@@ -30,35 +30,49 @@ except ImportError:                   # pragma: no cover - Windows
 
 # ── measured, not guessed ───────────────────────────────────────────
 #
-# Peak RSS of the glTF-Transform geometry pass, sampled at 40 ms on the real Meshy
-# masters (2026-08-29):
+# Peak RSS of the glTF-Transform geometry pass, sampled at 30-40 ms on real masters:
 #
-#     1,902,278 triangles (69.6 MB master)    648.5 MB
-#       300,538 triangles (26.0 MB)           357.3 MB
-#     gltfpack on the same 1.9M master        521.6 MB   <- no better, also over
+#     triangles    textures        peak
+#        40,272    2.8 MB @2k     212.8 MB
+#       150,272    2.8 MB @2k     192.7 MB
+#       300,538     17 MB @4k     440.2 MB
+#     1,902,278     17 MB @4k     648.5 MB     <- gltfpack no better: 521.6 MB
 #
-# A straight line through those two points. Two points is a weak fit and the intercept
-# is doing most of the work, so it is used only to REFUSE obviously impossible jobs,
-# never to promise that a borderline one will succeed. Add measurements here as they
-# are taken; the model gets better for free.
-GEOMETRY_BASE_MB = 303.0
-GEOMETRY_MB_PER_1K_TRIANGLES = 0.182
+# The first two say the base cost is ~200 MB and barely moves with triangle count.
+# The jump to 440 MB comes with the textures, not the geometry. An earlier version of
+# this file fitted a line through the two big points alone, inferred a 303 MB constant,
+# and concluded a small master still needed ~460 MB. That was wrong, and wrong in the
+# direction that costs money: it made a 512 MB host look impossible when a leaner master
+# fits it with 290 MB to spare.
+#
+# So: both terms, and deliberately conservative. Every prediction below over-estimates
+# the measurement, which is the safe direction - a refused job costs a re-run, an
+# accepted job that does not fit costs the whole container.
+GEOMETRY_BASE_MB = 180.0
+GEOMETRY_MB_PER_1K_TRIANGLES = 0.20
+GEOMETRY_MB_PER_TEXTURE_MB = 12.0
 
 # What the Python side needs alongside it: interpreter, boto3, the texture pass, and
 # room for the OS. Measured at 28-78 MB peak for the pipeline itself; the rest is slack,
-# because being wrong in this direction only costs a dish that could have been optimised,
-# while being wrong the other way kills the container.
+# because being wrong in this direction only costs a dish that could have been
+# optimised, while being wrong the other way kills the container.
 OVERHEAD_MB = 150.0
 
+def estimate_optimise_mb(triangles: int, texture_mb: float = 0.0) -> float:
+    """Peak resident memory the geometry pass will want, in MB.
 
-def estimate_optimise_mb(triangles: int) -> float:
-    """Peak resident memory the geometry pass will want, in MB, for this many triangles."""
-    return GEOMETRY_BASE_MB + GEOMETRY_MB_PER_1K_TRIANGLES * (max(0, triangles) / 1000.0)
+    `texture_mb` is the embedded image bytes, not the file size. Leaving it at zero
+    under-estimates a texture-heavy master, so callers that can measure it should.
+    """
+    return (GEOMETRY_BASE_MB
+            + GEOMETRY_MB_PER_1K_TRIANGLES * (max(0, triangles) / 1000.0)
+            + GEOMETRY_MB_PER_TEXTURE_MB * max(0.0, texture_mb))
 
 
-def max_triangles(limit_mb: float) -> int:
-    """The largest master that fits, inverted from the same line."""
-    room = limit_mb - OVERHEAD_MB - GEOMETRY_BASE_MB
+def max_triangles(limit_mb: float, texture_mb: float = 2.8) -> int:
+    """The largest master that fits, assuming textures already at our 2048px target."""
+    room = (limit_mb - OVERHEAD_MB - GEOMETRY_BASE_MB
+            - GEOMETRY_MB_PER_TEXTURE_MB * texture_mb)
     return max(0, int(room / GEOMETRY_MB_PER_1K_TRIANGLES * 1000))
 
 
@@ -133,23 +147,24 @@ def budget_mb() -> float | None:
     return None if limit is None else limit / 1048576.0
 
 
-def check_optimise(triangles: int) -> str:
+def check_optimise(triangles: int, texture_mb: float = 0.0) -> str:
     """Empty when the job fits. Otherwise the reason, written for the person who has to
     act on it - naming what was needed, what exists, and what to do about it."""
     limit = budget_mb()
     if limit is None:
         return ""
-    need = estimate_optimise_mb(triangles) + OVERHEAD_MB
+    need = estimate_optimise_mb(triangles, texture_mb) + OVERHEAD_MB
     if need <= limit:
         return ""
     return (
-        f"This master is {triangles:,} triangles and the optimiser needs about "
+        f"This master is {triangles:,} triangles with {texture_mb:.0f} MB of textures, "
+        f"and the optimiser needs about "
         f"{need:.0f} MB for it. This container has {limit:.0f} MB, so the run would be "
         f"killed rather than finish - and a killed run cannot report anything. "
         f"Nothing is lost: the master is stored and still viewable. "
         f"Either give the service more memory (about {need * 1.25:.0f} MB is comfortable) "
-        f"or generate at a lower polycount - this box tops out near "
-        f"{max_triangles(limit):,} triangles."
+        f"or generate a leaner master - ask the engine to remesh and to return 2k "
+        f"textures, which is what `meshy-7-lean` does and what fits a small host."
     )
 
 
