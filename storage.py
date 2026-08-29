@@ -70,6 +70,21 @@ class Backend:
     def delete_prefix(self, bucket: str, prefix: str) -> None: ...
     def list_keys(self, bucket: str, prefix: str) -> list[str]: ...
 
+    def download(self, bucket: str, key: str, dest: Path) -> bool:
+        """Object straight to a file, never through a bytes object.
+
+        `get` is fine for records and photos. It is not fine for a 70 MB master: that
+        allocation, plus the copy every reader then makes of it, is most of a 512 MB
+        container before Node has even started. Render OOM-killed the instance mid-run
+        on 2026-08-29 and the job vanished without writing an error, because a killed
+        process cannot write anything. Anything master-sized goes through here.
+        """
+        data = self.get(bucket, key)
+        if data is None:
+            return False
+        dest.write_bytes(data)
+        return True
+
     def signed_url(self, bucket: str, key: str, seconds: int = 900) -> str | None:
         """A direct, time-limited URL, or None if this backend cannot make one."""
         return None
@@ -102,6 +117,14 @@ class LocalBackend(Backend):
     def get(self, bucket, key):
         p = self._p(bucket, key)
         return p.read_bytes() if p.is_file() else None
+
+    def download(self, bucket, key, dest):
+        p = self._p(bucket, key)
+        if not p.is_file():
+            return False
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(p, dest)
+        return True
 
     def delete_prefix(self, bucket, prefix):
         p = self._p(bucket, prefix)
@@ -139,6 +162,17 @@ class R2Backend(Backend):
             return _r2().get_object(Bucket=self._b(bucket), Key=key)["Body"].read()
         except Exception:      # NoSuchKey and friends - absence is not an error here
             return None
+
+    def download(self, bucket, key, dest):
+        """Streamed in chunks by boto3 - peak memory is the chunk, not the object."""
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with open(dest, "wb") as fh:
+                _r2().download_fileobj(self._b(bucket), key, fh)
+            return True
+        except Exception:
+            dest.unlink(missing_ok=True)
+            return False
 
     def delete_prefix(self, bucket, prefix):
         keys = self.list_keys(bucket, prefix)

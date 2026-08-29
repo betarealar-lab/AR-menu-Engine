@@ -192,6 +192,11 @@ def read_model(key: str) -> bytes | None:
     return storage.backend().get(MODELS, key)
 
 
+def fetch_model(key: str, dest) -> bool:
+    """A model straight to disk. Use this for masters - see storage.Backend.download."""
+    return storage.backend().download(MODELS, key, dest)
+
+
 # ── listing ─────────────────────────────────────────────────────────
 
 def dishes() -> list[str]:

@@ -93,12 +93,13 @@ def available() -> bool:
     return bool(toolchain())
 
 
-# Node is given a heap ceiling on purpose. Measured: the geometry pass on a 70 MB,
-# 1.9M-triangle Meshy master finishes in ~3s inside a 192 MB heap. Uncapped, V8 grows
-# until the container's own limit kills the whole process - and a killed process cannot
-# write an error anywhere, which is how a run disappears leaving no trace. Capped, Node
-# fails loudly with a heap message we can store and show.
-NODE_HEAP_MB = 320
+# Node is given a heap ceiling on purpose, and a tight one. Measured: the geometry pass
+# on a 70 MB, 1.9M-triangle Meshy master finishes in ~3s inside a 192 MB heap.
+# Uncapped, V8 grows until the CONTAINER's limit is hit and the whole instance is
+# killed - which is what Render did on 2026-08-29, taking the Python process and any
+# hope of an error message with it. Capped below the container, Node is the only thing
+# that dies, and it dies with a heap message we can store and show.
+NODE_HEAP_MB = 192
 SUBPROCESS_TIMEOUT = 300
 
 

@@ -32,35 +32,66 @@ def _pad(n: int) -> int:
     return (_PAD - (n % _PAD)) % _PAD
 
 
+def _read_json(path: Path) -> dict:
+    """The JSON chunk alone, without touching the binary.
+
+    Triangle counts and bounding boxes both live entirely in the accessors, so reading a
+    70 MB master to answer either of them costs ~140 MB - the file, plus the slice copy
+    of the BIN chunk - for data that sits in the first few hundred kilobytes. On a 512 MB
+    container that allocation is the difference between a run finishing and the whole
+    instance being OOM-killed, which is what happened on 2026-08-29.
+
+    GLB puts the JSON chunk first by specification, so this is a seek and one small read.
+    """
+    with open(path, "rb") as fh:
+        head = fh.read(12)
+        magic, _version, _length = struct.unpack_from("<III", head, 0)
+        if magic != 0x46546C67:
+            raise ValueError(f"{path.name} is not a GLB")
+        clen, ctype = struct.unpack("<II", fh.read(8))
+        if ctype != JSON_CHUNK:
+            raise ValueError(f"{path.name}: first chunk is not JSON")
+        return json.loads(fh.read(clen).decode("utf-8"))
+
+
 def _read(path: Path) -> tuple[dict, bytes]:
     raw = path.read_bytes()
     magic, _version, length = struct.unpack_from("<III", raw, 0)
     if magic != 0x46546C67:
         raise ValueError(f"{path.name} is not a GLB")
+    # A memoryview, not a slice: slicing the BIN chunk out copies it, so the file is
+    # held twice at once. On the masters this pipeline handles that doubling is tens of
+    # megabytes for nothing.
+    view = memoryview(raw)
     gltf, binary, off = None, b"", 12
     while off < length:
         clen, ctype = struct.unpack_from("<II", raw, off)
-        data = raw[off + 8: off + 8 + clen]
         if ctype == JSON_CHUNK:
-            gltf = json.loads(data.decode("utf-8"))
+            gltf = json.loads(bytes(view[off + 8: off + 8 + clen]).decode("utf-8"))
         elif ctype == BIN_CHUNK:
-            binary = data
+            binary = view[off + 8: off + 8 + clen]
         off += 8 + clen
     if gltf is None:
         raise ValueError(f"{path.name} has no JSON chunk")
     return gltf, binary
 
 
-def _write(path: Path, gltf: dict, binary: bytes) -> None:
+def _write(path: Path, gltf: dict, binary) -> None:
+    """`binary` is any bytes-like. The reader hands back a memoryview so the chunk is
+    not copied, so padding is written rather than concatenated onto it."""
     js = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
     js += b" " * _pad(len(js))
-    binary += b"\x00" * _pad(len(binary))
-    total = 12 + 8 + len(js) + (8 + len(binary) if binary else 0)
+    blen = len(binary)
+    bpad = _pad(blen)
+    total = 12 + 8 + len(js) + (8 + blen + bpad if blen else 0)
     with open(path, "wb") as fh:
         fh.write(struct.pack("<III", 0x46546C67, 2, total))
         fh.write(struct.pack("<II", len(js), JSON_CHUNK)); fh.write(js)
-        if binary:
-            fh.write(struct.pack("<II", len(binary), BIN_CHUNK)); fh.write(binary)
+        if blen:
+            fh.write(struct.pack("<II", blen + bpad, BIN_CHUNK))
+            fh.write(binary)
+            if bpad:
+                fh.write(b"\x00" * bpad)
 
 
 def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
@@ -141,7 +172,7 @@ def count_triangles(path: Path) -> int:
     Needed to turn a triangle target into the ratio glTF-Transform actually wants, and to
     report what a decimation really produced rather than what was asked for.
     """
-    gltf, _ = _read(path)
+    gltf = _read_json(path)
     accessors = gltf.get("accessors", [])
     total = 0
     for mesh in gltf.get("meshes", []):
@@ -282,7 +313,7 @@ def bounds(path: Path) -> dict:
     what a person means by the width of a plate and what the `-30cm` naming convention
     already encodes. Which of X and Z each lands on is not knowable and does not matter.
     """
-    gltf, _ = _read(path)
+    gltf = _read_json(path)
     got = _bounds_of(gltf)
     if not got:
         return {}

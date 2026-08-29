@@ -425,7 +425,14 @@ class Handler(BaseHTTPRequestHandler):
         tmp.mkdir(parents=True, exist_ok=True)
         stage("fetching master")
         master = tmp / "master.glb"
-        master.write_bytes(dataset.read_model(rec["model_key"]) or b"")
+        # Streamed to disk, never held as bytes: a 70 MB master plus the copy every
+        # reader makes of it is most of a 512 MB container on its own.
+        if not dataset.fetch_model(rec["model_key"], master):
+            r = dataset.record(dish, variant)
+            r.update(status="review", stage="", optimising_since="",
+                     export_error=f"master not found in storage: {rec['model_key']}")
+            dataset.write(r)
+            return False
 
         res = optimize.run(master, tmp / "out", scale=scale or None, on_stage=stage)
         stage("storing")
