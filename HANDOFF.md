@@ -256,6 +256,10 @@ glb.py             GLB surgery in pure Python: texture resize, triangle count
 dataset.py         dishes, variants, frames, verdicts. Keys and records
 storage.py         R2 or local disk behind one interface
 config.py          .env loading
+check.py           40 checks over a real server on a temp store. Run before pushing:
+                   `python check.py --master <a-meshy-master.glb>`. Never touches R2
+limits.py          what this container may use, and refusing jobs that will not fit
+usdz.py            optimised GLB -> USDZ for iOS. Never converts the master
 preflight.py       verify key + R2 round-trip before spending anything
 runner.py          batch re-run the dataset against another engine
 Dockerfile         Python + Node, for the optimise stage
