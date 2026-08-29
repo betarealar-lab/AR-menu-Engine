@@ -363,25 +363,52 @@ class Handler(BaseHTTPRequestHandler):
                 try: f.unlink()
                 except OSError: pass
 
-    def _serve(self, bucket: str, key: str, ctype: str) -> None:
-        """Redirect to a signed R2 URL where possible, stream the bytes where not.
+    # 8 MB of GLB at a time. Big enough that a 70 MB master is ~9 writes, small enough
+    # that the process never holds a whole model in memory to hand it to a browser.
+    CHUNK = 1 << 23
 
-        The redirect keeps model and photo traffic off the app server entirely - R2 egress
-        is free, the host's bandwidth allowance is not. Local disk has nothing to sign
-        against, so it falls back to streaming.
+    def _serve(self, bucket: str, key: str, ctype: str) -> None:
+        """Stream the object from our own origin, in chunks.
+
+        This used to redirect to a signed R2 URL, to keep model traffic off the app
+        server. It also stopped the 3D viewer from ever displaying anything on the
+        hosted Studio: **R2 answers a signed request with the bytes and no
+        Access-Control-Allow-Origin header**, so the browser fetches the model, applies
+        the same-origin rule, discards it, and leaves an empty panel. It looked like a
+        broken viewer. It was a missing header, and it was invisible in every local test
+        because local disk has no signed URL to redirect to - it always streamed, always
+        same-origin, always worked.
+
+        Same-origin bytes cannot fail that way. The bandwidth argument was real but it
+        was about diners, and diners never touch this app - they load models from the
+        public catalogue over Cloudflare's CDN. This is five people judging dishes.
         """
         if not key:
             return self._send(404, b"not found", "text/plain")
-        url = storage.backend().signed_url(bucket, key)
-        if url:
-            self.send_response(302)
-            self.send_header("Location", url)
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", "0")
+        body, size = storage.backend().stream(bucket, key)
+        if body is None:
+            return self._send(404, b"not found", "text/plain")
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            if size:
+                self.send_header("Content-Length", str(size))
+            # The URL carries a version marker, so a model may be cached hard; a record
+            # that is re-optimised changes that marker and busts it.
+            self.send_header("Cache-Control", "private, max-age=300")
             self.end_headers()
-            return
-        blob = storage.backend().get(bucket, key)
-        return self._send(200, blob, ctype) if blob else                self._send(404, b"not found", "text/plain")
+            while True:
+                chunk = body.read(self.CHUNK)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass                      # someone navigated away mid-download; not an error
+        finally:
+            try:
+                body.close()
+            except Exception:         # noqa: BLE001 - closing a stream must never raise
+                pass
 
     def _optimize(self, dish: str, variant: str, who: str) -> None:
         """Master -> the files a menu ships, at real-world size.

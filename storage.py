@@ -70,6 +70,22 @@ class Backend:
     def delete_prefix(self, bucket: str, prefix: str) -> None: ...
     def list_keys(self, bucket: str, prefix: str) -> list[str]: ...
 
+    def stream(self, bucket: str, key: str):
+        """(file-like, size) for reading an object in chunks, or (None, 0) if absent.
+
+        Used to serve models to the browser from our own origin. The obvious alternative
+        - redirect to a signed R2 URL - is what the Studio did until 2026-08-29, and it
+        silently broke the 3D viewer: R2 answers a signed request with the bytes but with
+        no Access-Control-Allow-Origin header, so the browser fetches it, discards it,
+        and shows an empty panel. Nothing appears in the network tab as an error.
+        Same-origin bytes have no such rule to break.
+        """
+        data = self.get(bucket, key)
+        if data is None:
+            return None, 0
+        import io as _io
+        return _io.BytesIO(data), len(data)
+
     def download(self, bucket: str, key: str, dest: Path) -> bool:
         """Object straight to a file, never through a bytes object.
 
@@ -118,6 +134,12 @@ class LocalBackend(Backend):
         p = self._p(bucket, key)
         return p.read_bytes() if p.is_file() else None
 
+    def stream(self, bucket, key):
+        p = self._p(bucket, key)
+        if not p.is_file():
+            return None, 0
+        return open(p, "rb"), p.stat().st_size
+
     def download(self, bucket, key, dest):
         p = self._p(bucket, key)
         if not p.is_file():
@@ -162,6 +184,13 @@ class R2Backend(Backend):
             return _r2().get_object(Bucket=self._b(bucket), Key=key)["Body"].read()
         except Exception:      # NoSuchKey and friends - absence is not an error here
             return None
+
+    def stream(self, bucket, key):
+        try:
+            r = _r2().get_object(Bucket=self._b(bucket), Key=key)
+            return r["Body"], int(r.get("ContentLength") or 0)
+        except Exception:
+            return None, 0
 
     def download(self, bucket, key, dest):
         """Streamed in chunks by boto3 - peak memory is the chunk, not the object."""
