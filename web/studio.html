@@ -103,6 +103,11 @@
          repeating-conic-gradient(#232323 0% 25%,#1c1c1c 0% 50%) 50%/22px 22px;
          display:grid;place-items:center;position:relative;overflow:hidden}
   model-viewer{width:100%;height:100%;--poster-color:transparent}
+  .stage{position:relative}
+  .mvstate{position:absolute;left:0;right:0;bottom:10px;display:flex;gap:8px;
+    align-items:center;justify-content:center;font-size:12px;color:var(--ink-faint);
+    pointer-events:none;text-align:center;padding:0 16px}
+  .mvstate.bad{color:var(--red);pointer-events:auto}
   .stagemsg{text-align:center;padding:28px;max-width:340px}
   .stagemsg p{color:var(--ink-faint);font-size:13px;margin-top:6px}
   .err{color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:12px;
@@ -398,6 +403,50 @@ async function open(dish, variant) {
   paint(); refresh();
 }
 
+/* A blank 3D panel used to mean anything at all: a model that had not downloaded, a
+   decoder that had not arrived, a file the browser refused. Now it says which.
+
+   Worth knowing what a Draco model actually needs: model-viewer fetches the Draco
+   decoder from www.gstatic.com the first time it meets one. That is a second network
+   dependency beyond our own server, it is not obvious from anywhere in the UI, and if
+   it fails the model silently never appears. If this ever starts reporting decode
+   failures on a good connection, that is the thing to suspect. */
+function watchViewer(mv, src) {
+  if (!mv) return;
+  const badge = $('#mvstate');
+  const show = (text, cls) => {
+    if (!badge) return;
+    badge.className = 'mvstate' + (cls ? ' ' + cls : '');
+    badge.innerHTML = cls === 'busy'
+      ? `<div class="spinner"></div><span>${text}</span>` : `<span>${text}</span>`;
+    badge.hidden = !text;
+  };
+  show('loading', 'busy');
+  mv.addEventListener('progress', e => {
+    const pct = Math.round((e.detail.totalProgress || 0) * 100);
+    if (pct < 100) show(`loading ${pct}%`, 'busy');
+  });
+  mv.addEventListener('load', () => show(''));
+  mv.addEventListener('error', async e => {
+    const kind = (e.detail && e.detail.type) || 'unknown';
+    /* Ask the server ourselves, so the message separates "the file is not there" from
+       "the browser would not accept it" - two very different problems that look the
+       same from inside model-viewer. */
+    let reachable = '';
+    try {
+      const r = await fetch(src, {method: 'GET'});
+      reachable = r.ok ? `the file downloads fine (${r.status})` : `server said ${r.status}`;
+    } catch (err) { reachable = 'the browser blocked the download'; }
+    show(`could not display this model — ${kind}; ${reachable}`, 'bad');
+  });
+  /* A model that never fires load or error at all is its own symptom. */
+  setTimeout(() => {
+    if (!mv.loaded && badge && !badge.hidden && !badge.classList.contains('bad')) {
+      show('still loading — large file, or the Draco decoder has not arrived', 'busy');
+    }
+  }, 20000);
+}
+
 /* How long the current optimise has been going. The server stamps `optimising_since`
    when it starts; a run that outlives its worker is only visible this way. */
 const seconds = d => d.optimising_since
@@ -457,9 +506,12 @@ function paint() {
     /* While the optimiser runs, the master is the only file guaranteed to match this
        generation - the catalogue, if any, is from the previous pass. */
     const stg = (shippable && !busy) ? STAGE : 'master';
-    stage.innerHTML = `<model-viewer src="/model?dish=${enc(DISH)}&variant=${enc(VAR)}&stage=${stg}&v=${d.catalogued_utc || d.seconds}"
+    const src = `/model?dish=${enc(DISH)}&variant=${enc(VAR)}&stage=${stg}&v=${d.catalogued_utc || d.seconds}`;
+    stage.innerHTML = `<model-viewer src="${src}"
       camera-controls auto-rotate rotation-per-second="18deg" shadow-intensity="1"
-      exposure="1.1" interaction-prompt="none" alt="Generated model of ${DISH}"></model-viewer>`;
+      exposure="1.1" interaction-prompt="none" alt="Generated model of ${DISH}"></model-viewer>
+      <div class="mvstate" id="mvstate"><div class="spinner"></div><span>loading</span></div>`;
+    watchViewer(stage.querySelector('model-viewer'), src);
     const tabs = $('#stagetabs');
     tabs.hidden = !shippable || busy;
     $$('#stagetabs .minitab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.stage === stg)));
