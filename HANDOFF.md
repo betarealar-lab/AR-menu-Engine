@@ -28,7 +28,7 @@ different repo — `github.com/Nikoloz-Chachua/Restaurant-AR`, working copy at
 | **Repo** | `github.com/betarealar-lab/AR-menu-Engine`, branch `main`, auto-deploys on push |
 | **Scan Studio** | **Cloud Run**, 2 GiB, scales to zero. Deploy: `bash deploy/cloudrun.sh` |
 | ~~Render~~ | `https://ar-menu-engine.onrender.com` — 512 MB, OOM-killed by the first real dish. Kept only until Cloud Run is verified |
-| **Storage** | Cloudflare R2, buckets `betareal-photos` and `betareal-models` |
+| **Storage** | Cloudflare R2, buckets `betareal-photos` and `betareal-models`. **Meshy deletes its copy after 3 days — R2 is the only copy** |
 | **Engine** | Meshy API, Pro plan (**10 concurrent tasks**), ~1,200 credits shared |
 | **Default preset** | `meshy-7-lean` — remesh to 150k, 2k textures. Same shipped file, 1/3 the memory. `meshy-7` keeps the raw master for comparison |
 | **Users** | temo, niko, gio, davit, ilia — HTTP basic auth via `STUDIO_USERS` |

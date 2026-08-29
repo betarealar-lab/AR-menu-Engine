@@ -410,6 +410,8 @@ class Handler(BaseHTTPRequestHandler):
             res = engine.collect(task_id, key[0], tmp)
             if res.pending:
                 rec = dataset.record(dish, variant)
+                if res.expires_utc:
+                    rec["engine_expires_utc"] = res.expires_utc
                 if rec.get("status") == "running":
                     rec["stage"] = f"generating {res.progress}%" if res.progress else "generating"
                     dataset.write(rec)

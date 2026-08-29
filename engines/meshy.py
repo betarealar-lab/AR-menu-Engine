@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+import datetime
 import time
 from pathlib import Path
 
@@ -204,11 +205,28 @@ class MeshyEngine(Engine):
         res.task_id = task_id
         try:
             g = requests.get(f"{BASE}/{task_id}", headers=self._headers(), timeout=60)
+            if g.status_code == 404:
+                # Gone rather than broken. Meshy retains API output for 3 days on Pro,
+                # so a task that has vanished was almost certainly never collected in
+                # time - which means the credits for it are spent and unrecoverable.
+                res.error = ("Meshy no longer has this task. API output is kept for "
+                             "3 days; after that the model and its credits are gone. "
+                             "The photos are still here - generate again.")
+                return res
             if g.status_code >= 400:
                 res.error = f"status {g.status_code}: {g.text[:300]}"
                 res.retryable = g.status_code >= 500
                 return res
             task = g.json()
+            # Milliseconds since the epoch. Meshy deletes the task and every download
+            # URL at this moment; on Pro that is 3 days after it succeeded.
+            stamp = task.get("expires_at")
+            if stamp:
+                try:
+                    res.expires_utc = datetime.datetime.fromtimestamp(
+                        int(stamp) / 1000, datetime.timezone.utc).isoformat(timespec="seconds")
+                except (TypeError, ValueError, OSError):
+                    pass
             status = task.get("status")
             if status in ("PENDING", "IN_PROGRESS"):
                 res.pending = True

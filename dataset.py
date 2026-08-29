@@ -95,7 +95,7 @@ def blank(dish: str, variant: str) -> dict:
         # The engine's ticket for this dish, and when we handed it over. Kept because
         # a callback arrives knowing only the ticket, and because a run whose callback
         # never comes has to be findable and resumable rather than simply stuck.
-        "task_id": "", "submitted_utc": "",
+        "task_id": "", "submitted_utc": "", "engine_expires_utc": "",
         "created_utc": _now(), "judged_by": "", "judged_utc": "",
     }
 

@@ -35,6 +35,10 @@ class Result:
     # Still working - not a success and not a failure. Only `collect` sets this.
     pending: bool = False
     progress: int = 0
+    # When the ENGINE deletes its copy. Meshy keeps API output for 3 days on Pro plans;
+    # after that the task and every download URL are gone and the credits with them. Our
+    # own storage is the only copy from then on, so this is a real deadline, not trivia.
+    expires_utc: str = ""
     # The failure is about capacity or the network, not about this dish. Retrying the
     # same job later is expected to work; retrying a `retryable=False` failure just
     # spends credits reproducing the same bad result.

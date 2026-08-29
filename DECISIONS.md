@@ -84,6 +84,30 @@ unviable and self-hosting makes it rounding error.
   name Meshy 7. Newer being cheaper is normal — Meshy 6 is the priced-high legacy outlier in
   every row — but confirm by reading Settings → API → Daily Usage after one real call.
 
+### Meshy keeps nothing: 3 days, then it is gone
+
+**API output is retained for 3 days on Pro and Studio plans.** After that the task and
+every download URL are deleted; only Enterprise gets permanent links. Every task response
+carries an `expires_at` timestamp saying exactly when.
+
+Three consequences, all load-bearing:
+
+**R2 is not a convenience, it is the only copy.** Seventy-two hours after a generation,
+our stored master is the sole surviving artefact. That is why the pipeline downloads and
+stores immediately rather than keeping a reference.
+
+**An uncollected generation is money burned.** If a webhook is never delivered and nobody
+notices for three days, the credits are spent and the model is unrecoverable - the photos
+survive, but it has to be generated again and paid for again. This is the strongest
+argument for the safety net that re-checks a quiet task, and later for a real job queue
+with dead-lettering: the cost of a silently dropped job is not a delay, it is cash.
+
+**A 404 from the task endpoint means expired, not broken.** It is reported as such,
+because "generate it again" and "retry the download" are different instructions and only
+one of them works.
+
+---
+
 ### Ask the engine for what we ship, not for the most it can make
 
 Reversal of "do not pre-decimate at generation, ask for maximum detail and decimate
