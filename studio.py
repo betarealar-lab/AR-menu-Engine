@@ -264,6 +264,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/clear-frame":
                 return self._json(self._shape(
                     dataset.clear_frame(dish, variant, int(body["slot"]))))
+            if path == "/api/rename":
+                n = dataset.rename(dish, body.get("title", ""))
+                return self._json({"ok": True, "variants": n})
             if path == "/api/delete":
                 dataset.delete(dish, body.get("only_variant"))
                 return self._json({"ok": True})
@@ -676,7 +679,8 @@ class Handler(BaseHTTPRequestHandler):
         for d in dataset.dishes():
             vs = dataset.variants_of(d)
             recs = [dataset.record(d, v) for v in vs]
-            out.append({"dish": d, "variants": vs or ["default"],
+            out.append({"dish": d, "title": dataset.title_of(d),
+                        "variants": vs or ["default"],
                         "judged": sum(1 for r in recs if r.get("verdict")),
                         "shipping": sum(1 for r in recs if r.get("catalog_keys"))})
         return out
@@ -691,7 +695,8 @@ class Handler(BaseHTTPRequestHandler):
         for rec in dataset.catalogue():
             st = rec.get("export_stats") or {}
             out.append({
-                "dish": rec.get("dish"), "variant": rec.get("variant"),
+                "dish": rec.get("dish"), "title": rec.get("title", ""),
+                "variant": rec.get("variant"),
                 "status": rec.get("status"), "verdict": rec.get("verdict"),
                 "faults": rec.get("faults", []), "engine": rec.get("engine"),
                 "frames": len(rec.get("frames", {})),

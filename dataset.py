@@ -74,6 +74,12 @@ def _record_key(dish: str, variant: str) -> str:
 def blank(dish: str, variant: str) -> dict:
     return {
         "dish": dish, "dish_id": slug(dish), "variant": variant,
+        # What a person calls this dish, as opposed to what storage calls it. Renaming
+        # sets this and moves nothing: the R2 keys stay keyed on the original id, so a
+        # rename cannot break a URL a menu is already pointing at, and cannot half-
+        # succeed across the dozens of objects a dish owns. Empty means nobody has
+        # renamed it, and the id is shown.
+        "title": "",
         "frames": {}, "status": "empty", "verdict": "", "faults": [], "note": "",
         "engine": "", "seconds": 0, "error": "", "model_key": "",
         # What generation produced untouched (`master_keys`) and what the optimiser
@@ -234,6 +240,27 @@ def dishes() -> list[str]:
 
 def variants_of(dish: str) -> list[str]:
     return storage.backend().children(PHOTOS, f"dishes/{slug(dish)}/")
+
+
+def rename(dish: str, title: str) -> int:
+    """Set the display name on every variant of a dish. Returns how many were touched."""
+    title = (title or "").strip()[:120]
+    touched = 0
+    for v in variants_of(dish) or ["default"]:
+        rec = record(dish, v)
+        rec["title"] = title
+        write(rec)
+        touched += 1
+    return touched
+
+
+def title_of(dish: str) -> str:
+    """The display name, or empty if it has never been renamed."""
+    for v in variants_of(dish) or ["default"]:
+        t = (record(dish, v).get("title") or "").strip()
+        if t:
+            return t
+    return ""
 
 
 def delete(dish: str, variant: str | None = None) -> None:

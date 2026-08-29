@@ -235,13 +235,36 @@ def main() -> int:
         print("\n== the memory guard ==")
         import limits
         os.environ["MEMORY_LIMIT_MB"] = "512"
-        message = limits.check_optimise(1_902_278)
-        check("a 512 MB box refuses a 1.9M-triangle master", bool(message))
-        check("the refusal names both numbers",
-              "512 MB" in message and "MB for it" in message)
+        message = limits.check_optimise(1_902_278, 17.0)
+        check("a 512 MB box refuses a raw 1.9M-triangle master", bool(message))
+        check("the refusal names what it needs and what it has",
+              "512 MB" in message and "914 MB" in message, message[:70])
+        check("and names the fix", "meshy-7-lean" in message)
+        # The whole point of the lean preset: the same box can do the same dish.
+        check("the same box accepts a lean master",
+              not limits.check_optimise(150_272, 2.8))
         os.environ["MEMORY_LIMIT_MB"] = "2048"
-        check("a 2 GB box accepts the same job", not limits.check_optimise(1_902_278))
+        check("a 2 GB box accepts either", not limits.check_optimise(1_902_278, 17.0))
         os.environ.pop("MEMORY_LIMIT_MB", None)
+
+        print("\n== renaming ==")
+        api("/api/rename", {"dish": dish, "title": "Chicken Shqmeruli"})
+        d = api(f"/api/dish?dish={dish}&variant={variant}")
+        check("title is stored", d.get("title") == "Chicken Shqmeruli", d.get("title", ""))
+        listed = next((r for r in api("/api/dishes")["dishes"]
+                       if r["dish"] == dataset.slug(dish)), None)
+        check("the dish list shows the new name",
+              bool(listed and listed.get("title") == "Chicken Shqmeruli"))
+        shelf = next((r for r in api("/api/library")["items"] if r["dish"] == dish), None)
+        check("the library shows the new name",
+              bool(shelf and shelf.get("title") == "Chicken Shqmeruli"))
+        # A rename must not move storage, or every URL a live menu points at would rot.
+        code, blob = api(f"/model?dish={dish}&variant={variant}&stage=ship", raw=True)
+        check("renaming does not move the stored model",
+              code == 200 and blob[:4] == b"glTF")
+        api("/api/rename", {"dish": dish, "title": ""})
+        check("a name can be cleared again",
+              api(f"/api/dish?dish={dish}&variant={variant}").get("title") == "")
 
         print("\n== the record ==")
         status, csv = api("/api/export", raw=True)

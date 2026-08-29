@@ -157,14 +157,15 @@ def check_optimise(triangles: int, texture_mb: float = 0.0) -> str:
     if need <= limit:
         return ""
     return (
-        f"This master is {triangles:,} triangles with {texture_mb:.0f} MB of textures, "
-        f"and the optimiser needs about "
-        f"{need:.0f} MB for it. This container has {limit:.0f} MB, so the run would be "
-        f"killed rather than finish - and a killed run cannot report anything. "
-        f"Nothing is lost: the master is stored and still viewable. "
-        f"Either give the service more memory (about {need * 1.25:.0f} MB is comfortable) "
-        f"or generate a leaner master - ask the engine to remesh and to return 2k "
-        f"textures, which is what `meshy-7-lean` does and what fits a small host."
+        f"This master is {triangles:,} triangles with {texture_mb:.0f} MB of textures. "
+        f"Optimising it needs about {need:.0f} MB and this container has {limit:.0f} MB, "
+        f"so the run would be killed rather than finish - and a killed run cannot report "
+        f"anything, which is why it is refused here instead. "
+        f"Nothing in the pipeline can shrink a master that already exists: the memory "
+        f"goes on LOADING it, before any decimation happens. So re-generate this dish "
+        f"with the `meshy-7-lean` preset, which asks the engine for 150k triangles and "
+        f"2k textures and produces the same shipped file. The photos are still here and "
+        f"the master is still viewable in the meantime."
     )
 
 

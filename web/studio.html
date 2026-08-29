@@ -240,6 +240,7 @@
   <button id="view-lib" class="viewtab" aria-pressed="false">Library</button>
   <select id="variant" title="Angle strategy"></select>
   <button id="newvariant">New variant</button>
+  <button id="rename" title="Rename this dish">Rename</button>
   <span class="sp"></span>
   <span id="status"></span>
   <select id="engine"></select>
@@ -383,8 +384,8 @@ async function refresh() {
   LIST = (await api('/api/dishes')).dishes;
   $('#specimens').innerHTML = LIST.map(d => `
     <button class="spec" data-dish="${d.dish}" aria-current="${d.dish === DISH}">
-      <b>${d.dish}</b>
-      <small>${d.variants.length} variant${d.variants.length === 1 ? '' : 's'}${d.judged ? ` · ${d.judged} judged` : ''}${d.shipping ? ` · ${d.shipping} shipping` : ''}</small>
+      <b>${d.title || d.dish}</b>
+      <small>${d.title ? d.dish + ' · ' : ''}${d.variants.length} variant${d.variants.length === 1 ? '' : 's'}${d.judged ? ` · ${d.judged} judged` : ''}${d.shipping ? ` · ${d.shipping} shipping` : ''}</small>
     </button>`).join('');
 }
 
@@ -585,7 +586,7 @@ function paint() {
     else note.textContent = META.optimizer && META.optimizer !== 'none (masters kept, export unavailable)'
       ? `Toolchain: ${META.optimizer}` : 'No optimiser on this host — the master is kept regardless.';
   }
-  say(`${DISH} / ${VAR} · ${d.status}`);
+  say(`${d.title || DISH} / ${VAR} · ${d.status}`);
 }
 
 /* Real-world size. One dimension is enough - the model supplies the aspect ratio for
@@ -711,6 +712,18 @@ $('#newdish').onclick = async () => {
   CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
   paint();
 };
+$('#rename').onclick = async () => {
+  if (!DISH) return say('Open a dish first');
+  const now = (CUR && CUR.title) || DISH;
+  const next = prompt('Name for this dish', now);
+  if (next === null) return;
+  const r = await api('/api/rename', {dish: DISH, title: next.trim()});
+  if (r.error) return say(r.error);
+  CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+  paint(); refresh();
+  say(`Renamed to "${next.trim() || DISH}"`);
+};
+
 $('#newvariant').onclick = () => {
   if (!DISH) return say('Make a dish first');
   const v = prompt('Variant name — the angle strategy, e.g. ring-25');
@@ -785,7 +798,7 @@ function paintLibrary() {
         ? `<img loading="lazy" src="/thumb?dish=${enc(r.dish)}&variant=${enc(r.variant)}" alt="">`
         : '<span>no preview</span>'}</span>
       <span class="body">
-        <b>${r.dish}</b>
+        <b>${r.title || r.dish}</b>
         <span class="sub">${r.variant} · ${r.frames} frame${r.frames === 1 ? '' : 's'}${r.engine ? ' · ' + r.engine : ''}</span>
         <span class="row">
           <span class="tagpill ${r.shipping ? 'shipping' : r.status}">${r.shipping ? 'shipping' : r.status}</span>
