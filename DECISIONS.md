@@ -95,6 +95,16 @@ and one it drops, and a master can look perfect while the optimiser has quietly 
 garnish. The master stays one click away for when a verdict is contested — the only honest
 way to separate "the engine got it wrong" from "the optimiser did".
 
+**The USDZ is built, not borrowed.** Quick Look is the only AR path on iPhone and reads
+nothing but USDZ. The pipeline used to carry Meshy's own USDZ into the catalogue, on the
+grounds that Linux has no reliable converter — so every gain from decimation, texture
+resizing and real-world scale applied to Android and web and to nothing on iOS. Measured
+on the first real dish: 3.00 MB / 39,968 triangles / 22 cm on Android against **74.50 MB
+/ 1,902,278 triangles / 190 cm on iPhone**, the master byte for byte. It is now built
+from `model_opt.glb` with `usd-core`, a pip wheel that needs no system tooling:
+**4.06 MB, 39,968 triangles, identical size to the GLB.** The hand-built MondayGreens
+models ship 4.9–7.9 MB, so this is finally the same standard.
+
 **One dimension in centimetres is enough.** The model supplies the aspect ratio for the
 other two, so asking for all three is asking for two numbers nobody has. Which one a person
 knows varies — the height of a burger, the diameter of a bowl — so height, width and length

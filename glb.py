@@ -372,3 +372,68 @@ def place(src: Path, dst: Path, *, factor: float = 1.0, seat: bool = True) -> di
         "size_before": [hi[i] - lo[i] for i in range(3)],
         "size_after": size,
     }
+
+# ── reading vertex data ─────────────────────────────────────────────
+#
+# Everything above this point answers questions from the JSON header alone. Converting to
+# another format is the one job that needs the actual numbers, so this is the only place
+# that decodes buffers - and it is used on the OPTIMISED file (40k triangles), never on a
+# 1.9M-triangle master.
+
+_COMPONENT = {                      # glTF componentType -> (struct code, bytes)
+    5120: ("b", 1), 5121: ("B", 1), 5122: ("h", 2),
+    5123: ("H", 2), 5125: ("I", 4), 5126: ("f", 4),
+}
+_COUNT = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4, "MAT4": 16}
+
+
+def read_accessor(gltf: dict, binary, index: int) -> list[tuple]:
+    """One accessor as a list of tuples (or of scalars for SCALAR).
+
+    Handles byteStride, because glTF is allowed to interleave attributes in one
+    bufferView and Meshy's output does not - but a file that has been through
+    glTF-Transform may.
+    """
+    acc = gltf["accessors"][index]
+    code, size = _COMPONENT[acc["componentType"]]
+    n = _COUNT[acc["type"]]
+    count = acc["count"]
+    if "bufferView" not in acc:                       # sparse-only or all zeros
+        return [(0.0,) * n if n > 1 else 0 for _ in range(count)]
+    bv = gltf["bufferViews"][acc["bufferView"]]
+    start = bv.get("byteOffset", 0) + acc.get("byteOffset", 0)
+    stride = bv.get("byteStride") or size * n
+    out = []
+    for i in range(count):
+        off = start + i * stride
+        values = struct.unpack_from("<" + code * n, binary, off)
+        out.append(values[0] if n == 1 else values)
+    return out
+
+
+def image_bytes(gltf: dict, binary, index: int) -> tuple[bytes, str]:
+    """An embedded image and its file extension."""
+    img = gltf["images"][index]
+    bv = gltf["bufferViews"][img["bufferView"]]
+    off = bv.get("byteOffset", 0)
+    data = bytes(binary[off: off + bv["byteLength"]])
+    ext = {"image/png": ".png", "image/jpeg": ".jpg"}.get(img.get("mimeType", ""), ".bin")
+    return data, ext
+
+
+def world_transforms(gltf: dict) -> list[tuple[int, list[float]]]:
+    """(mesh index, world matrix) for every mesh instance in the default scene."""
+    nodes = gltf.get("nodes", [])
+    out: list[tuple[int, list[float]]] = []
+
+    def walk(idx: int, parent: list[float]) -> None:
+        node = nodes[idx]
+        m = _mat_mul(parent, _node_matrix(node))
+        if node.get("mesh") is not None:
+            out.append((node["mesh"], m))
+        for child in node.get("children", []):
+            walk(child, m)
+
+    for root in _scene_roots(gltf):
+        walk(root, _IDENTITY)
+    return out

@@ -469,14 +469,13 @@ class Handler(BaseHTTPRequestHandler):
 
         catalog = {}
         for kind, path in res.files.items():
-            name = {"draco": "model_draco.glb", "opt": "model_opt.glb"}.get(kind, path.name)
+            name = {"draco": "model_draco.glb", "opt": "model_opt.glb",
+                    "usdz": "model.usdz"}.get(kind, path.name)
             catalog[kind] = dataset.save_catalog(dish, variant, name, path.read_bytes())
-        # Meshy already returns a USDZ; carry it into the catalogue rather than
-        # converting one ourselves, since Linux has no reliable USDZ writer.
-        if rec.get("master_keys", {}).get("usdz"):
-            blob = dataset.read_model(rec["master_keys"]["usdz"])
-            if blob:
-                catalog["usdz"] = dataset.save_catalog(dish, variant, "model.usdz", blob)
+        # The USDZ is now BUILT from the optimised GLB (optimize.py step 5), not carried
+        # over from the master. Carrying it meant iOS got a 74.5 MB, 1.9M-triangle,
+        # 190 cm file while everyone else got 3 MB at 22 cm. The master's own USDZ stays
+        # in master_keys, untouched, like every other master artefact.
 
         rec.update(status="review", stage="", optimising_since="",
                    catalog_keys=catalog, export_stats=res.stats,

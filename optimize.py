@@ -38,6 +38,7 @@ from pathlib import Path
 
 import glb
 import limits
+import usdz
 
 TARGET_TRIANGLES = 40_000
 TARGET_TEXTURE = 2048
@@ -149,6 +150,7 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
     out_dir.mkdir(parents=True, exist_ok=True)
     opt = out_dir / "model_opt.glb"
     draco = out_dir / "model_draco.glb"
+    usdz_path = out_dir / "model.usdz"
     base = ([_exe("gltf-transform")] if tc == "gltf-transform" else
             [_exe("npx"), "--no-install", "@gltf-transform/cli"])
 
@@ -226,7 +228,22 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
             return Optimized(ok=False, toolchain=tc, error=f"draco failed: {log}",
                              files={"opt": opt}, stats=tex_stats)
 
+        # 5. USDZ for iOS, built FROM `opt` - the decimated, resized, placed file, never
+        #    from the master. Quick Look is the only AR path on iPhone and it reads
+        #    nothing else, so a pipeline without this step optimises for Android and web
+        #    and ships the raw master to iOS, which is what happened until 2026-08-29.
+        say("usdz")
+        usdz_stats: dict = {}
+        try:
+            usdz_stats = usdz.from_glb(opt, usdz_path)
+        except Exception as e:  # noqa: BLE001
+            # Not fatal. The GLB catalogue is complete and correct for web and Android;
+            # only iOS AR is missing, and the reason is recorded rather than guessed at.
+            usdz_stats = {"usdz_error": f"{type(e).__name__}: {e}"}
+
     files = {"opt": opt, "draco": draco}
+    if usdz_path.exists():
+        files["usdz"] = usdz_path
     stats = {
         "master_bytes": master.stat().st_size,
         "opt_bytes": opt.stat().st_size,
@@ -241,10 +258,8 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         "memory_budget_mb": round(limits.budget_mb() or 0, 1),
         **tex_stats,
         **place_stats,
+        **usdz_stats,
     }
-    # USDZ needs Apple's tooling or a converter that is not reliably present on Linux.
-    # Meshy returns a USDZ of its own, so the pipeline uses that and skips the conversion
-    # rather than pretending. Revisit if the master ever diverges from what Meshy shipped.
     return Optimized(ok=True, files=files, stats=stats, toolchain=tc)
 
 
