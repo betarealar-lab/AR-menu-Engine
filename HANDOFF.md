@@ -107,15 +107,23 @@ target 15,000 -> 19,660 tris, 1.76 MB draco     2.6x fewer triangles = 5% smalle
 After decimation the salad was still 47 MB, of which **45 MB was three JPEGs**. An 8192²
 base colour map is ~256 MB of VRAM before anything is drawn.
 
-**Meshy API vs Meshy web app:**
+**Meshy API vs Meshy web app — the earlier note here was wrong:**
 
 ```
-web app     1,988,152 faces  (confirmed in Temo's UI)
-API max       300,000 target_polycount
+web app        1,988,152 faces   (confirmed in Temo's UI)
+API, measured  1,902,278 faces   (chicken master, 2026-08-29)
 ```
 
-The API gives a ~6.6x decimated master. `should_remesh: false` (`meshy-7-raw` preset) may
-bypass it — **untested, one generation would settle it.**
+This file previously said the API caps output at 300,000 and that the true master was
+"only reachable outside the API". It does not, and it is not. **`target_polycount` has no
+effect unless `should_remesh` is true**, and the client never sent `should_remesh` — so
+the 300,000 in every request was transmitted and ignored, and the API returned the raw
+master all along.
+
+That mattered: it made a dead parameter look like a working control, and nobody asked
+where 1.9M triangles were coming from until a 512 MB container was killed decimating
+them. `target_polycount` is no longer sent unless a caller also asks for a remesh
+(`meshy-7-web` does; nothing else should without a reason).
 
 **Us against a competitor:** Menu AR ships ~8.2 MB models (measured live: 6.12 / 8.22 / 8.23
 / 8.77 / 9.56 MB). Monday Greens ships ~1.6 MB. **We are 4–8x smaller than a competitor
@@ -189,7 +197,11 @@ These are places where confident advice was wrong. They are the most useful thin
 
 ## 9. Open questions
 
-- Does `should_remesh: false` return the true ~2M master? One generation settles it.
+- ~~Does `should_remesh: false` return the true ~2M master?~~ **Answered 2026-08-29:**
+  the default already does — no `should_remesh` at all returns 1,902,278 triangles.
+  The open question is now the reverse: is Meshy's remesh to 300k *better* on food
+  than our decimation from 1.9M? One generation on `meshy-7-web` against the same
+  dish would show it.
 - What does meshy-7 multi-image actually cost? Read Daily Usage after one call.
 - **Which angle wins?** ⚠ The shape/angle table in `ROADMAP.md` is entirely a guess,
   including a 40° that revises an earlier 25° guess. The fault tags exist to replace it.

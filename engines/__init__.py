@@ -25,8 +25,11 @@ REGISTRY: dict[str, callable] = {
 
     # Pre-decimated by Meshy. Kept only so the two reductions can be compared on the same
     # dish - if Meshy's decimator turns out to beat ours on food, this is how we find out.
+    # `should_remesh=True` is what makes target_polycount mean anything; without it the
+    # number was transmitted and ignored, and this entry was quietly identical to the
+    # default. Measured 2026-08-29.
     "meshy-7-web":     lambda: MeshyEngine("meshy-7", texture_resolution="2k",
-                                           target_polycount=25_000,
+                                           should_remesh=True, target_polycount=25_000,
                                            variant="meshy-7-web-25k"),
     "meshy-7-nopbr":   lambda: MeshyEngine("meshy-7", enable_pbr=False,
                                            variant="meshy-7-nopbr"),

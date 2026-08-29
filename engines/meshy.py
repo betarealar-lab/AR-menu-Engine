@@ -24,11 +24,18 @@ BASE = "https://api.meshy.ai/openapi/v1/multi-image-to-3d"
 MIN_IMAGES = 1          # Meshy accepts 1-4; one is a valid, if weaker, generation
 MAX_IMAGES = 4          # hard API limit — the constraint the hybrid exists to escape
 
-# The API caps target_polycount at 300k. That is NOT Meshy's raw export: the web UI
-# download of the burrata salad was 1.97M triangles / 99.3 MB, so the true master is
-# only reachable outside the API. 300k is as close as we get, and still ~7x more than
-# we would ever ship.
-API_MAX_POLYCOUNT = 300_000
+# `target_polycount` does NOTHING unless `should_remesh` is true, and we do not send
+# should_remesh. Measured 2026-08-29: this client asked for 300,000 and the API returned
+# a 1,902,278-triangle master. So the earlier note here - that 300k was "as close as we
+# get" to the raw export - was simply wrong, and it was wrong in the expensive direction:
+# it made a dead parameter look like a working control, and nobody questioned where 1.9M
+# triangles were coming from until a 512 MB container was killed trying to decimate them.
+#
+# The API does give the raw master. It is therefore not sent by default at all. Passing
+# it without should_remesh would be a lie in the request body; passing both is a real
+# instruction to Meshy to decimate, which is a quality decision and belongs in a named
+# registry entry where someone has chosen it on purpose.
+DEFAULT_POLYCOUNT = 300_000
 POLL_SECONDS = 5
 GIVE_UP_AFTER = 900
 
@@ -103,18 +110,21 @@ class MeshyEngine(Engine):
         should_texture: bool = True,
         texture_resolution: str = "4k",
         enable_pbr: bool = True,
-        target_polycount: int = API_MAX_POLYCOUNT,
+        target_polycount: int | None = None,
         topology: str = "triangle",
         should_remesh: bool | None = None,
         variant: str | None = None,
     ):
         # Ask for the most detail the API will give and decimate ourselves.
         #
-        # Letting Meshy pre-decimate to 25k hands the reduction to a black box we cannot
-        # inspect or tune, on geometry - thin garnish, crumb, sauce ridges - that naive
-        # decimation destroys first. Our own optimizer took a 1.97M-triangle master to
-        # 40k triangles at 1.99 MB, so a bigger input did not cost delivery size. You can
-        # always go down from a master; you cannot go back up without paying credits again.
+        # Letting Meshy pre-decimate hands the reduction to a black box we cannot inspect
+        # or tune, on geometry - thin garnish, crumb, sauce ridges - that naive decimation
+        # destroys first. Our own optimiser took a 1.97M-triangle master to 40k triangles
+        # at 1.99 MB, so a bigger input did not cost delivery size. You can always go down
+        # from a master; you cannot go back up without paying credits again.
+        #
+        # `target_polycount` is only sent when a caller asks Meshy to remesh, because that
+        # is the only case where it does anything. See the note above.
         self.ai_model = ai_model
         self.should_texture = should_texture
         self.texture_resolution = texture_resolution
@@ -136,11 +146,15 @@ class MeshyEngine(Engine):
             "image_urls": [_data_uri(p) for p in job.images[:MAX_IMAGES]],
             "ai_model": self.ai_model,
             "topology": self.topology,
-            "target_polycount": self.target_polycount,
             "should_texture": self.should_texture,
         }
         if self.should_remesh is not None:
             body["should_remesh"] = self.should_remesh
+        # Only meaningful alongside a remesh, so only sent alongside one. A parameter
+        # that is transmitted and ignored is worse than an absent one: it reads like a
+        # control.
+        if self.should_remesh and self.target_polycount:
+            body["target_polycount"] = self.target_polycount
         if self.should_texture:
             body["texture_resolution"] = self.texture_resolution
             body["enable_pbr"] = self.enable_pbr

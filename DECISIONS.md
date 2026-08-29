@@ -74,6 +74,10 @@ unviable and self-hosting makes it rounding error.
   monthly resets on the billing date.
 - `POST https://api.meshy.ai/openapi/v1/multi-image-to-3d`, models `meshy-5/6/7/latest`.
 - **Returns USDZ as well as GLB** — the separate USDZ conversion step disappears.
+- **`target_polycount` is inert without `should_remesh: true`.** Measured: a request for
+  300,000 returned 1,902,278 triangles. The raw master *is* what the API gives by default,
+  so "ask for maximum detail and decimate ourselves" is already what happens — but it was
+  happening by accident, while the request body claimed otherwise.
 - **On meshy-7, image 1 is the primary front view.** Image order is semantic; the capture
   guide must preserve it end to end.
 - Published cost table names only "Meshy 6" (20/30) and "other models" (5/15). It does not
