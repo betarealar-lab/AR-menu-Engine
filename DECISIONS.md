@@ -220,6 +220,48 @@ Where the product actually sits:
 > Serving a dish needs a 2 MB GLB. Training on it later needs 20–30 source photos ≈ 100 MB.
 > At 15,000 dishes that is ~1.5 TB of photos against ~30 GB of models.
 
+### Where the worker runs, and why 512 MB was never going to work
+
+**Sized by memory, not by CPU.** The Scan Studio ran on Render's free tier until
+2026-08-29, when the first real dish killed it. Generation succeeded; the optimiser then
+asked for more memory than the container had, the instance was OOM-killed, and because a
+killed process cannot write anything the job left no error and no log — just a spinner
+that ran for twenty minutes. Measured peak RSS of the geometry pass:
+
+| Input | glTF-Transform | gltfpack |
+|---|---|---|
+| 1,902,278 triangles (69.6 MB master) | **648.5 MB** | **521.6 MB** |
+| 300,538 triangles (26.0 MB) | 357.3 MB | — |
+
+Against a 512 MB container. **No toolchain choice fixes that** — both hold the mesh in
+Node Buffers and meshoptimizer's WASM heap, which a `--max-old-space-size` cap does not
+touch. CPU was never the constraint: the whole pipeline is ~2.5s of real work.
+
+**So: Cloud Run, 2 GiB, scale to zero.** The container already existed, it costs nothing
+idle, and 2 GiB fits masters up to ~8.7M triangles. Render stays only as the thing that
+proved the rule.
+
+**Three rules carried out of it, which matter more than the host:**
+
+1. **A process must know its own limits.** `limits.py` reads the container's memory
+   ceiling from cgroups — not from what a dashboard said at signup — and refuses a job
+   it cannot finish, in under a second, in a sentence naming the numbers. Being killed
+   is not an acceptable failure mode, because it is a *silent* one.
+2. **Work runs inside the request that asked for it.** A thread that outlives its
+   request is only safe where the process is guaranteed to stay alive and scheduled.
+   Render did not guarantee that; Cloud Run explicitly does not either — CPU is
+   allocated per request and an idle instance is throttled or shut down. Both hosts
+   break the same assumption, so the assumption goes. Generation (~175s) and
+   optimisation (~10s) both fit inside a request.
+3. **One instance until there is a queue.** In-flight state lives in this process's
+   memory, so `--max-instances 1` is load-bearing, not conservatism. Raising it before
+   ROADMAP 1.2 means two instances running the same dish and overwriting each other.
+
+Every measurement above is recorded per run in `export_stats` — `estimated_mb`,
+`memory_budget_mb`, `peak_child_mb` — so the two-point estimate becomes real data.
+
+---
+
 ### The five expensive-to-reverse decisions
 
 1. **Content-addressed asset paths.** Key by hash, not `slug/timestamp_filename.glb`.

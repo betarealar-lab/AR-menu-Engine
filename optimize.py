@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import glb
+import limits
 
 TARGET_TRIANGLES = 40_000
 TARGET_TEXTURE = 2048
@@ -168,6 +169,12 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         #    in the stats and never enforced - the number was decoration.
         say("geometry")
         src_tris = glb.count_triangles(staged)
+        # Refuse a job that cannot fit, in one second, with the numbers in the message.
+        # The alternative is what happened on Render: the container is killed, and a
+        # killed process writes no error, so the run just disappears.
+        too_big = limits.check_optimise(src_tris)
+        if too_big:
+            return Optimized(ok=False, toolchain=tc, error=too_big)
         ratio = min(1.0, triangles / src_tris) if src_tris else 1.0
         ok, log = _run(base + [
             "optimize", str(staged), str(geom),
@@ -229,6 +236,9 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         "source_triangles": src_tris,
         "result_triangles": glb.count_triangles(draco),
         "target_texture": texture,
+        "peak_child_mb": limits.peak_child_mb(),
+        "estimated_mb": round(limits.estimate_optimise_mb(src_tris), 1),
+        "memory_budget_mb": round(limits.budget_mb() or 0, 1),
         **tex_stats,
         **place_stats,
     }

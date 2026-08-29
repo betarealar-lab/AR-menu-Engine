@@ -26,7 +26,8 @@ different repo — `github.com/Nikoloz-Chachua/Restaurant-AR`, working copy at
 | | |
 |---|---|
 | **Repo** | `github.com/betarealar-lab/AR-menu-Engine`, branch `main`, auto-deploys on push |
-| **Scan Studio** | **https://ar-menu-engine.onrender.com** — Docker, free tier |
+| **Scan Studio** | **Cloud Run**, 2 GiB, scales to zero. Deploy: `bash deploy/cloudrun.sh` |
+| ~~Render~~ | `https://ar-menu-engine.onrender.com` — 512 MB, OOM-killed by the first real dish. Kept only until Cloud Run is verified |
 | **Storage** | Cloudflare R2, buckets `betareal-photos` and `betareal-models` |
 | **Engine** | Meshy API, Pro plan, ~1,200 credits shared across the team |
 | **Users** | temo, niko, gio, davit, ilia — HTTP basic auth via `STUDIO_USERS` |
@@ -131,6 +132,7 @@ attributable.
 
 | Bug | Fix |
 |---|---|
+| **The optimiser was OOM-killed and the job vanished.** 648 MB peak against a 512 MB container. Generation had succeeded; the optimiser died, and a killed process writes no error — so the record kept `optimising` with nothing running, the in-memory `RUNNING` set had emptied on restart, and every guard then refused to start a new run *forever* | Three things, none of them "a bigger box": `limits.py` reads the cgroup ceiling and refuses an impossible job in under a second; jobs run inside their request so nothing depends on a thread outliving one; a run with no thread behind it is a ghost and is restartable. See DECISIONS.md §5 |
 | **The whole page was dead on load.** `$('#export-model').onclick = ...` ran at parse time, but that button lives inside `<template id="tpl-bench">`, so it set `.onclick` on `null`, threw, and took every line after it — `boot()` included — down with it. The Studio rendered its shell and did nothing. Live in production from `eb29357` (2026-08-27) until 2026-08-29 — two days in which the Studio could not be used at all | Bound through the delegated `click` listener instead. **Anything inside that template must be delegated, never bound directly** |
 | **glTF-Transform's texture stage dies on Meshy JPEGs** — `colourspace: parameter space not set` from sharp/libvips, and it takes the whole `optimize` command down | Textures resized in Pillow (`glb.py`). The JPEGs are ordinary baseline files Pillow opens fine — the bug is in the resizer. **This also means no libvips in the container** |
 | `/healthz` sat behind basic auth, so the platform probe got a 401 and the deploy read unhealthy | Answers before the auth check |
@@ -199,24 +201,35 @@ These are places where confident advice was wrong. They are the most useful thin
 
 ## 10. Start here
 
-**Phase 0.1 and 0.2 are done** (2026-08-29) — generation optimises automatically, review
-loads the shipping file with a `Master` toggle beside it, and one real-world dimension
-(any of height / width / length) is baked into that file. `ROADMAP.md` Phase 0 records
-what shipped; `DECISIONS.md` §2 records why.
+**Phase 0.1 and 0.2 are done** (2026-08-29). Generation optimises automatically, review
+loads the shipping file with a `Master` toggle beside it, and one real-world dimension is
+baked into that file.
+
+**The host moved to Cloud Run the same night**, because Render's 512 MB could not run the
+optimiser on a real master and failed silently when it tried. `DECISIONS.md` §5 carries
+the measurements and the three rules that came out of it. To deploy:
+
+```bash
+gcloud auth login                    # interactive, do this yourself
+gcloud config set project <id>
+python deploy/make_env_yaml.py       # .env -> deploy/env.yaml, gitignored
+bash deploy/cloudrun.sh
+```
 
 Next, from `ROADMAP.md`:
 
-**1.1 — Metadata to Postgres.** `models`, `verdicts`, `faults`, `frames` as real tables;
-objects stay in R2. The verdict log is the research asset and today it cannot answer a
-single question. One dish to migrate — it only gets harder.
+**1.1 — Metadata to Postgres.** `models`, `verdicts`, `faults`, `frames` as real tables.
+The verdict log is the research asset and today it cannot be queried at all. One dish to
+migrate.
 
-**1.2 — The job queue.** Generation runs on a thread inside the web process with
-in-memory state. It loses jobs on every deploy and breaks at two containers. A `jobs`
-table plus a polling worker is free and survives restarts.
+**1.2 — The job queue.** Now load-bearing rather than tidy: work runs inside its request,
+which is correct but cannot survive a closed tab, and `--max-instances 1` is holding the
+system together. The queue lifts both.
 
-Both cost $0. Still open and cheap to settle: `should_remesh: false` (does it return the
-true ~2M master?) and what one meshy-7 call actually costs — one generation each, then
-read Settings → API → Daily Usage.
+Both cost $0. Still open and cheap: **the Meshy API ignores `target_polycount`** — we
+send 300,000 and the master came back with 1,902,278 triangles. `should_remesh: true`
+probably explains it, and one generation would settle it along with what meshy-7 really
+costs (Settings → API → Daily Usage).
 
 ## 11. Repo map
 

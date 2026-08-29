@@ -233,10 +233,13 @@ it harden into doctrine.
 harder. Right now there is one dish to move.*
 *Cost: $0.*
 
-**1.2 · Job queue**
+**1.2 · Job queue** 🔴 **now load-bearing**
 A `jobs` table, a worker loop, retries, dead-lettering, per-tenant concurrency caps.
-*Why now: generation on a web thread cannot survive a deploy or a second container. Every
-feature after this enqueues work.*
+*Why now: background threads have been removed entirely — work runs inside the request
+that asked for it, because neither Render nor Cloud Run guarantees a thread any CPU once
+its request has returned. That is correct but it cannot survive a closed tab, and
+`--max-instances 1` is currently load-bearing for the same reason. The queue is what
+lifts both limits.*
 *Cost: $0.*
 
 **1.3 · Generation history**

@@ -575,9 +575,11 @@ function paintScale(d) {
 }
 
 async function saveScale({shape, axis, cm}) {
+  if (CUR && CUR.model_key) { CUR.status = 'optimising'; CUR.stage = 'queued'; paint(); }
   const r = await api('/api/scale', {dish: DISH, variant: VAR, shape, axis, cm});
-  if (r.error) return say(r.error);
-  CUR = r; paint(); refresh();
+  if (r.error) { say(r.error); CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`); }
+  else CUR = r;
+  paint(); refresh();
 }
 
 const saveVerdict = () => api('/api/verdict',
@@ -664,9 +666,15 @@ $('#newvariant').onclick = () => {
 };
 $('#variant').onchange = e => open(DISH, e.target.value);
 $('#run').onclick = async () => {
-  const r = await api('/api/generate', {dish: DISH, variant: VAR, engine: $('#engine').value});
-  if (r.error) return say(r.error);
+  /* Paint first, await second. Jobs now run inside the request that starts them, so the
+     response does not arrive until the work is finished - three minutes for a
+     generation. Awaiting first would leave the panel blank for all of it. The record is
+     what the poll reads, so progress shows either way. */
   CUR.status = 'running'; paint();
+  const r = await api('/api/generate', {dish: DISH, variant: VAR, engine: $('#engine').value});
+  if (r && r.error) { say(r.error); }
+  CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+  paint(); refresh();
 };
 const drawer = on => { document.body.classList.toggle('drawer-open', on);
   $('#menu').setAttribute('aria-expanded', String(on)); };
@@ -694,9 +702,11 @@ document.addEventListener('click', async e => {
      so binding it directly at parse time set .onclick on null, threw, and took every
      line after it - boot() included - down with it. The page loaded and did nothing. */
   if (e.target.id === 'export-model') {
+    CUR.status = 'optimising'; CUR.stage = 'queued'; paint();
     const r = await api('/api/optimize', {dish: DISH, variant: VAR});
-    if (r.error) return say(r.error);
-    CUR.status = 'optimising'; paint();
+    if (r && r.error) say(r.error);
+    CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+    paint(); refresh();
   }
 });
 

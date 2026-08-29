@@ -28,6 +28,7 @@ from pathlib import Path
 
 import dataset
 import engines
+import limits
 import optimize
 import storage
 from config import load_env
@@ -54,6 +55,29 @@ RUN_LOCK = threading.Lock()
 # 2026-08-29 with no error and no way back. Until there is a real job queue (ROADMAP 1.2)
 # this is the recovery: if nothing is running here, the record is not to be believed.
 STALE_AFTER_SECONDS = 300
+
+# Jobs run INSIDE the request that asked for them, not on a detached thread.
+#
+# A thread that outlives its request is only safe on a host that keeps the process alive
+# and scheduled for as long as the thread needs. Render did not - the container was
+# OOM-killed and the work vanished. Cloud Run does not either: CPU is allocated for the
+# duration of a request, and an instance with no request in flight can be throttled to
+# nothing or shut down entirely. Both hosts break the same assumption, so the assumption
+# goes rather than the host.
+#
+# Generation is ~3 minutes and optimisation ~10 seconds; both fit inside a request with
+# room to spare, and the page already polls the record for progress. What this does not
+# survive is the tab being closed mid-generation. The real answer to that is the job
+# queue in ROADMAP 1.2 - a `jobs` table and a worker - and this is the honest interim:
+# work that is either done or visibly not done, never silently lost.
+INLINE_JOBS = os.environ.get("JOBS", "inline").strip().lower() != "thread"
+
+
+def _dispatch(fn, *args) -> None:
+    if INLINE_JOBS:
+        fn(*args)
+    else:
+        threading.Thread(target=fn, args=args, daemon=True).start()
 
 
 def _is_ghost(rec: dict, key: tuple[str, ...]) -> bool:
@@ -153,7 +177,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/healthz":
             # Storage backend and optimiser toolchain, both non-sensitive, so a deploy can
             # be verified from outside without handing anyone a login.
-            body = f"ok storage={storage.backend().kind} optimizer={optimize.toolchain() or 'none'}"
+            # The memory ceiling belongs here too. It is the number that decides whether
+            # this host can optimise a real master at all, and it was invisible until a
+            # container was killed by it.
+            body = (f"ok storage={storage.backend().kind} "
+                    f"optimizer={optimize.toolchain() or 'none'} {limits.describe()}")
             return self._send(200, body.encode(), "text/plain")
         who = self.whoami()
         if who is None:
@@ -247,8 +275,7 @@ class Handler(BaseHTTPRequestHandler):
                     rec.update(status="optimising", stage="queued",
                                optimising_since=dataset._now())
                     dataset.write(rec)
-                    threading.Thread(target=self._optimize,
-                                     args=(dish, variant, who), daemon=True).start()
+                    _dispatch(self._optimize, dish, variant, who)
                 else:
                     dataset.write(rec)
                 return self._json(self._shape(dataset.record(dish, variant)))
@@ -262,8 +289,7 @@ class Handler(BaseHTTPRequestHandler):
                 rec.update(status="optimising", stage="queued", export_error="",
                            optimising_since=dataset._now())
                 dataset.write(rec)
-                threading.Thread(target=self._optimize,
-                                 args=(dish, variant, who), daemon=True).start()
+                _dispatch(self._optimize, dish, variant, who)
                 return self._json({"ok": True})
             if path == "/api/generate":
                 key = (dataset.slug(dish), dataset.slug(variant))
@@ -278,9 +304,7 @@ class Handler(BaseHTTPRequestHandler):
                     RUNNING.add(key)
                 rec.update(status="running", error="", model_key="")
                 dataset.write(rec)
-                threading.Thread(target=self._generate,
-                                 args=(dish, variant, body.get("engine"), who),
-                                 daemon=True).start()
+                _dispatch(self._generate, dish, variant, body.get("engine"), who)
                 return self._json({"ok": True})
             self._send(404, b"not found", "text/plain")
         except Exception as e:  # noqa: BLE001
@@ -546,6 +570,8 @@ def main() -> int:
     print(f"  storage : {storage.describe()}")
     print(f"  engine  : {a.engine}")
     print(f"  optimizer: {optimize.describe()}")
+    print(f"  memory  : {limits.describe()}")
+    print(f"  jobs    : {'inline (in-request)' if INLINE_JOBS else 'background threads'}")
     print(f"  users   : {', '.join(accounts) if accounts else 'OPEN - no auth (set STUDIO_USERS)'}")
     print(f"  listen  : http://{a.host}:{a.port}")
     if a.host != "127.0.0.1" and not accounts:
