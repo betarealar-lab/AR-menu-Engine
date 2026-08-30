@@ -46,10 +46,16 @@ except ImportError:                   # pragma: no cover - Windows
 # 16 MB of RAM whether it arrived as a 0.4 MB JPEG or a 7.9 MB PNG, so compressed size
 # says nothing about what it costs to hold.
 #
-# Deliberately conservative: every one of the five measurements above comes in UNDER
-# what this predicts. A refused job costs a re-run; an accepted job that does not fit
-# costs the whole container and leaves no error behind.
-GEOMETRY_BASE_MB = 130.0
+# All five of those were sampled on Windows. The first production run reported
+# ru_maxrss of **314.8 MB** for the 156,397-triangle master that peaked at 235.7 MB
+# here - the real container costs ~80 MB more than the laptop for the same work,
+# presumably a different allocator returning less to the OS. The base is set from the
+# LINUX figure, because that is the machine that does the killing. Windows predictions
+# are now generous; that is the right direction to be wrong in.
+#
+# `peak_child_mb` is recorded on every run, so this stops being a fitted guess as soon
+# as there are a few dozen real jobs to read.
+GEOMETRY_BASE_MB = 195.0
 GEOMETRY_MB_PER_1K_TRIANGLES = 0.13
 GEOMETRY_MB_PER_MEGAPIXEL = 8.0
 

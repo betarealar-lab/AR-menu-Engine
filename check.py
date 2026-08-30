@@ -243,7 +243,7 @@ def main() -> int:
         message = limits.check_optimise(1_902_278, 37.7)
         check("a 512 MB box refuses a raw 1.9M-triangle master", bool(message))
         check("the refusal names what it needs and what it has",
-              "512 MB" in message and "829 MB" in message, message[:70])
+              "512 MB" in message and " MB and this container" in message, message[:70])
         check("and names the fix", "meshy-7-lean" in message)
         # The whole point of the lean preset: the same box does the same dish.
         check("the same box accepts a real lean master",
@@ -251,7 +251,7 @@ def main() -> int:
         # Every measurement taken so far must come in UNDER the estimate, or the guard
         # will one day wave through a job that kills the container.
         for tris, mpx, measured in ((40_272, 12.6, 212.8), (150_272, 12.6, 192.7),
-                                    (156_397, 12.6, 235.7), (300_538, 37.7, 440.2),
+                                    (156_397, 12.6, 314.8), (300_538, 37.7, 440.2),
                                     (1_902_278, 37.7, 648.5)):
             check(f"estimate covers the {tris:,}-triangle measurement",
                   limits.estimate_optimise_mb(tris, mpx) >= measured,
