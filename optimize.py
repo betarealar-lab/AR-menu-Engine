@@ -174,8 +174,8 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         # Refuse a job that cannot fit, in one second, with the numbers in the message.
         # The alternative is what happened on Render: the container is killed, and a
         # killed process writes no error, so the run just disappears.
-        src_tex_mb = sum(t.get("bytes") or 0 for t in glb.summarize(staged)) / 1048576
-        too_big = limits.check_optimise(src_tris, src_tex_mb)
+        src_mpx = glb.megapixels(staged)
+        too_big = limits.check_optimise(src_tris, src_mpx)
         if too_big:
             return Optimized(ok=False, toolchain=tc, error=too_big)
         ratio = min(1.0, triangles / src_tris) if src_tris else 1.0
@@ -255,8 +255,8 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         "result_triangles": glb.count_triangles(draco),
         "target_texture": texture,
         "peak_child_mb": limits.peak_child_mb(),
-        "estimated_mb": round(limits.estimate_optimise_mb(src_tris, src_tex_mb), 1),
-        "source_texture_mb": round(src_tex_mb, 2),
+        "estimated_mb": round(limits.estimate_optimise_mb(src_tris, src_mpx), 1),
+        "source_megapixels": src_mpx,
         "memory_budget_mb": round(limits.budget_mb() or 0, 1),
         **tex_stats,
         **place_stats,

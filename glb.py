@@ -94,9 +94,19 @@ def _write(path: Path, gltf: dict, binary) -> None:
                 fh.write(b"\x00" * bpad)
 
 
+# A texture already at the target resolution can still be enormous, because PNG is
+# lossless. Meshy returns a 2048px normal map as a 7.85 MB PNG - the same pixels a JPEG
+# stores in about one. Skipping it "because it is already 2048" shipped a 14 MB model
+# where 3 MB was expected, and nobody noticed, because the pixel check said it was fine.
+#
+# So there are two budgets. Pixels decide GPU memory; BYTES decide download size, and
+# they are not the same problem.
+MAX_TEXTURE_BYTES = 2_500_000
+
+
 def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
-                    quality: int = 90) -> dict:
-    """Shrink every embedded texture to `max_edge` and repack the buffer.
+                    quality: int = 90, max_bytes: int = MAX_TEXTURE_BYTES) -> dict:
+    """Shrink every embedded texture to `max_edge` AND `max_bytes`, then repack.
 
     Every bufferView is rewritten in order, because changing one image's length shifts
     every offset after it. Rebuilding the whole buffer is simpler than patching offsets
@@ -121,21 +131,41 @@ def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
         before += len(data)
         try:
             with Image.open(io.BytesIO(data)) as im:
-                if max(im.size) <= max_edge:
+                too_wide = max(im.size) > max_edge
+                too_heavy = len(data) > max_bytes
+                if not too_wide and not too_heavy:
                     after += len(data)
                     skipped += 1
                     continue
-                im = im.convert("RGB")
-                im.thumbnail((max_edge, max_edge), Image.LANCZOS)
-                buf = io.BytesIO()
-                im.save(buf, "JPEG", quality=quality, optimize=True)
-                new = buf.getvalue()
+                # Alpha is load-bearing where it exists - a cut-out leaf, a glass. JPEG
+                # has none, so a texture that uses it is only ever resized, never
+                # re-encoded, even if that leaves it large.
+                has_alpha = im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info
+                if too_wide:
+                    im.thumbnail((max_edge, max_edge), Image.LANCZOS)
+                if has_alpha:
+                    if not too_wide:
+                        after += len(data)
+                        skipped += 1
+                        continue
+                    buf = io.BytesIO()
+                    im.convert("RGBA").save(buf, "PNG", optimize=True)
+                    new, mime = buf.getvalue(), "image/png"
+                else:
+                    buf = io.BytesIO()
+                    im.convert("RGB").save(buf, "JPEG", quality=quality, optimize=True)
+                    new, mime = buf.getvalue(), "image/jpeg"
+                # Re-encoding is only ever an improvement if it actually shrinks.
+                if len(new) >= len(data) and not too_wide:
+                    after += len(data)
+                    skipped += 1
+                    continue
         except Exception:                    # unreadable - keep the original untouched
             after += len(data)
             skipped += 1
             continue
         replacement[vi] = new
-        img["mimeType"] = "image/jpeg"
+        img["mimeType"] = mime
         after += len(new)
         resized += 1
 
@@ -163,7 +193,24 @@ def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
         "texture_bytes_before": before,
         "texture_bytes_after": after,
         "max_edge": max_edge,
+        "max_texture_bytes": max_bytes,
     }
+
+
+def megapixels(path: Path) -> float:
+    """Total decoded texture pixels, in millions.
+
+    The honest proxy for what textures cost in memory. A 2048x2048 image decodes to
+    16 MB of RAM whether it arrived as a 0.4 MB JPEG or a 7.9 MB PNG, so counting
+    compressed bytes - which limits.py did until 2026-08-30 - measures the wrong thing
+    and refuses jobs that would have fitted.
+    """
+    total = 0.0
+    for t in summarize(path):
+        size = t.get("size")
+        if size:
+            total += size[0] * size[1]
+    return round(total / 1_000_000, 2)
 
 
 def count_triangles(path: Path) -> int:

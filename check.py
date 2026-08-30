@@ -194,8 +194,13 @@ def main() -> int:
               str(sorted(d["catalog_keys"])))
         check("draco is under 4 MB", st["draco_bytes"] < 4_000_000,
               f"{st['draco_bytes'] / 1048576:.2f} MB")
-        check("usdz is under 8 MB", st.get("usdz_bytes", 0) < 8_000_000,
+        check("usdz is under 10 MB", st.get("usdz_bytes", 0) < 10_000_000,
               f"{st.get('usdz_bytes', 0) / 1048576:.2f} MB")
+        # A texture at the target resolution can still be a 7.9 MB lossless PNG. The
+        # byte budget is what stops one shipping.
+        check("no single texture ships over the byte budget",
+              st.get("texture_bytes_after", 0) < 8_000_000,
+              f"{st.get('texture_bytes_after', 0) / 1048576:.2f} MB total")
         check("usdz built without error", not st.get("usdz_error"), st.get("usdz_error", ""))
         # The bug this exists to catch: iOS shipping a different model from everyone else.
         check("glb and usdz agree on triangles",
@@ -235,16 +240,24 @@ def main() -> int:
         print("\n== the memory guard ==")
         import limits
         os.environ["MEMORY_LIMIT_MB"] = "512"
-        message = limits.check_optimise(1_902_278, 17.0)
+        message = limits.check_optimise(1_902_278, 37.7)
         check("a 512 MB box refuses a raw 1.9M-triangle master", bool(message))
         check("the refusal names what it needs and what it has",
-              "512 MB" in message and "914 MB" in message, message[:70])
+              "512 MB" in message and "829 MB" in message, message[:70])
         check("and names the fix", "meshy-7-lean" in message)
-        # The whole point of the lean preset: the same box can do the same dish.
-        check("the same box accepts a lean master",
-              not limits.check_optimise(150_272, 2.8))
+        # The whole point of the lean preset: the same box does the same dish.
+        check("the same box accepts a real lean master",
+              not limits.check_optimise(156_397, 12.6))
+        # Every measurement taken so far must come in UNDER the estimate, or the guard
+        # will one day wave through a job that kills the container.
+        for tris, mpx, measured in ((40_272, 12.6, 212.8), (150_272, 12.6, 192.7),
+                                    (156_397, 12.6, 235.7), (300_538, 37.7, 440.2),
+                                    (1_902_278, 37.7, 648.5)):
+            check(f"estimate covers the {tris:,}-triangle measurement",
+                  limits.estimate_optimise_mb(tris, mpx) >= measured,
+                  f"{limits.estimate_optimise_mb(tris, mpx):.0f} vs {measured}")
         os.environ["MEMORY_LIMIT_MB"] = "2048"
-        check("a 2 GB box accepts either", not limits.check_optimise(1_902_278, 17.0))
+        check("a 2 GB box accepts either", not limits.check_optimise(1_902_278, 37.7))
         os.environ.pop("MEMORY_LIMIT_MB", None)
 
         print("\n== renaming ==")

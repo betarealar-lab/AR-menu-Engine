@@ -84,6 +84,49 @@ unviable and self-hosting makes it rounding error.
   name Meshy 7. Newer being cheaper is normal — Meshy 6 is the priced-high legacy outlier in
   every row — but confirm by reading Settings → API → Daily Usage after one real call.
 
+### What the first real lean generation actually cost, and showed
+
+Run on the live server, 2026-08-30, `meshy-7-lean`, one photo:
+
+| | |
+|---|---|
+| submit returned in | **2.15 s** (was 175 s) |
+| finished in | 165 s, progress reported 45% -> 99% |
+| **credits** | **30** — settles a question open since day one |
+| master | 20.8 MB · 156,397 triangles · 3 x 2048px |
+| ships as | 5.67 MB draco · 61,391 tris · 8.46 MB usdz |
+
+**30 credits, not 15.** meshy-7 multi-image with texture bills at the "30 with texture"
+rate. That is ~33 dishes a month on the 1,000-credit Pro plan, which is a much harder
+ceiling than the money: at 30 restaurants x 7 dishes = 210 dishes/month, the plan needs
+to be six times bigger. The cost per dish is trivial (~$0.60); the **monthly credit
+allowance** is the real constraint on how fast onboarding can go.
+
+**Lean is not free.** Honest comparison of the same dish:
+
+| | raw master | lean master |
+|---|---|---|
+| optimiser peak | 648 MB — needs a paid host | **236 MB — fits the free one** |
+| ships as | **3.00 MB · 39,968 tris** | 5.67 MB · 61,391 tris |
+
+Two reasons lean ships heavier. meshopt cannot simplify a 156k mesh as far as a 1.9M one
+inside the same error budget - it stops at 61k, not 40k - because an already-decimated
+mesh has no redundancy left to spend. And downsampling 4096px to 2048px smooths detail,
+so it compresses better than re-encoding a 2048px map that was never resampled.
+
+So the choice is explicit: **free hosting and a 5.67 MB model, or a paid host and a
+3.00 MB one.** For reference, a competitor ships 8.2 MB and the hand-built MondayGreens
+models ship 1.1-2.2 MB. Lean is worse than our best and better than the field.
+
+**And one bug this exposed.** The texture pass only ever checked resolution. Meshy
+returned a 2048px normal map as a **7.85 MB lossless PNG**, which passed the "already
+2048" test untouched and shipped a 14 MB model. Textures now have a byte budget as well
+as a pixel one, and are re-encoded to JPEG when they exceed it and carry no alpha:
+14.08 MB -> 5.67 MB. Pixels decide GPU memory; bytes decide download size; they are not
+the same problem and one check cannot cover both.
+
+---
+
 ### Meshy keeps nothing: 3 days, then it is gone
 
 **API output is retained for 3 days on Pro and Studio plans.** After that the task and

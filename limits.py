@@ -30,49 +30,49 @@ except ImportError:                   # pragma: no cover - Windows
 
 # ── measured, not guessed ───────────────────────────────────────────
 #
-# Peak RSS of the glTF-Transform geometry pass, sampled at 30-40 ms on real masters:
+# Peak RSS of the glTF-Transform geometry pass, sampled at 30 ms on real masters:
 #
-#     triangles    textures        peak
-#        40,272    2.8 MB @2k     212.8 MB
-#       150,272    2.8 MB @2k     192.7 MB
-#       300,538     17 MB @4k     440.2 MB
-#     1,902,278     17 MB @4k     648.5 MB     <- gltfpack no better: 521.6 MB
+#     triangles   texture pixels        peak     source
+#        40,272   12.6 Mpx (3x2048)   212.8 MB   our own optimised output
+#       150,272   12.6 Mpx (3x2048)   192.7 MB   simulated lean master
+#       156,397   12.6 Mpx (3x2048)   235.7 MB   REAL meshy-7-lean master
+#       300,538   37.7 Mpx (2x4096+)  440.2 MB   decimated raw master
+#     1,902,278   37.7 Mpx (2x4096+)  648.5 MB   raw master; gltfpack 521.6 MB
 #
-# The first two say the base cost is ~200 MB and barely moves with triangle count.
-# The jump to 440 MB comes with the textures, not the geometry. An earlier version of
-# this file fitted a line through the two big points alone, inferred a 303 MB constant,
-# and concluded a small master still needed ~460 MB. That was wrong, and wrong in the
-# direction that costs money: it made a 512 MB host look impossible when a leaner master
-# fits it with 290 MB to spare.
+# **Pixels, not bytes.** An earlier version of this counted compressed texture bytes and
+# was wrong in a way that cost a real generation: Meshy returned a 2048px normal map as
+# a 7.85 MB PNG, the model read "14 MB of textures", predicted 524 MB against a 512 MB
+# container and refused the job. The true peak was 236 MB. A 2048x2048 image decodes to
+# 16 MB of RAM whether it arrived as a 0.4 MB JPEG or a 7.9 MB PNG, so compressed size
+# says nothing about what it costs to hold.
 #
-# So: both terms, and deliberately conservative. Every prediction below over-estimates
-# the measurement, which is the safe direction - a refused job costs a re-run, an
-# accepted job that does not fit costs the whole container.
-GEOMETRY_BASE_MB = 180.0
-GEOMETRY_MB_PER_1K_TRIANGLES = 0.20
-GEOMETRY_MB_PER_TEXTURE_MB = 12.0
+# Deliberately conservative: every one of the five measurements above comes in UNDER
+# what this predicts. A refused job costs a re-run; an accepted job that does not fit
+# costs the whole container and leaves no error behind.
+GEOMETRY_BASE_MB = 130.0
+GEOMETRY_MB_PER_1K_TRIANGLES = 0.13
+GEOMETRY_MB_PER_MEGAPIXEL = 8.0
 
 # What the Python side needs alongside it: interpreter, boto3, the texture pass, and
-# room for the OS. Measured at 28-78 MB peak for the pipeline itself; the rest is slack,
-# because being wrong in this direction only costs a dish that could have been
-# optimised, while being wrong the other way kills the container.
+# room for the OS. Measured at 28-78 MB peak for the pipeline itself; the rest is slack.
 OVERHEAD_MB = 150.0
 
-def estimate_optimise_mb(triangles: int, texture_mb: float = 0.0) -> float:
+
+def estimate_optimise_mb(triangles: int, megapixels: float = 0.0) -> float:
     """Peak resident memory the geometry pass will want, in MB.
 
-    `texture_mb` is the embedded image bytes, not the file size. Leaving it at zero
-    under-estimates a texture-heavy master, so callers that can measure it should.
+    `megapixels` is decoded texture area - `glb.megapixels()`. Leaving it at zero
+    under-estimates any textured master, so callers that can measure it should.
     """
     return (GEOMETRY_BASE_MB
             + GEOMETRY_MB_PER_1K_TRIANGLES * (max(0, triangles) / 1000.0)
-            + GEOMETRY_MB_PER_TEXTURE_MB * max(0.0, texture_mb))
+            + GEOMETRY_MB_PER_MEGAPIXEL * max(0.0, megapixels))
 
 
-def max_triangles(limit_mb: float, texture_mb: float = 2.8) -> int:
-    """The largest master that fits, assuming textures already at our 2048px target."""
+def max_triangles(limit_mb: float, megapixels: float = 12.6) -> int:
+    """The largest master that fits, assuming three 2048px maps - what lean returns."""
     room = (limit_mb - OVERHEAD_MB - GEOMETRY_BASE_MB
-            - GEOMETRY_MB_PER_TEXTURE_MB * texture_mb)
+            - GEOMETRY_MB_PER_MEGAPIXEL * megapixels)
     return max(0, int(room / GEOMETRY_MB_PER_1K_TRIANGLES * 1000))
 
 
@@ -147,17 +147,18 @@ def budget_mb() -> float | None:
     return None if limit is None else limit / 1048576.0
 
 
-def check_optimise(triangles: int, texture_mb: float = 0.0) -> str:
+def check_optimise(triangles: int, megapixels: float = 0.0) -> str:
     """Empty when the job fits. Otherwise the reason, written for the person who has to
     act on it - naming what was needed, what exists, and what to do about it."""
     limit = budget_mb()
     if limit is None:
         return ""
-    need = estimate_optimise_mb(triangles, texture_mb) + OVERHEAD_MB
+    need = estimate_optimise_mb(triangles, megapixels) + OVERHEAD_MB
     if need <= limit:
         return ""
     return (
-        f"This master is {triangles:,} triangles with {texture_mb:.0f} MB of textures. "
+        f"This master is {triangles:,} triangles with {megapixels:.1f} megapixels of "
+        f"texture. "
         f"Optimising it needs about {need:.0f} MB and this container has {limit:.0f} MB, "
         f"so the run would be killed rather than finish - and a killed run cannot report "
         f"anything, which is why it is refused here instead. "
