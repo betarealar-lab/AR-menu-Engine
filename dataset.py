@@ -46,6 +46,14 @@ SCALE_AXES = ("width", "length", "height")
 # Proposed defaults, so nobody starts from a blank number. **Every figure here is a
 # guess** carried over from ROADMAP 0.4 - the fault tags and ~30 real dishes are what will
 # replace it. Do not let it harden into doctrine.
+# What the optimiser can be told to aim for. Triangles are a target, not a promise -
+# meshopt stops early when it cannot cut further without breaking the surface. Texture
+# is capped at 2048 on purpose: an 8192px map is ~256 MB of video memory on the diner's
+# phone before anything is drawn, and 4k and 8k belong in GENERATION, where they give
+# the downscaler a better source, never in the file that ships.
+TRIANGLE_TARGETS = [20_000, 40_000, 80_000]
+TEXTURE_TARGETS = [1024, 2048]
+
 SHAPES = [
     {"id": "flat-plated", "label": "Flat plated", "axis": "width", "cm": 28},
     {"id": "deep-bowl", "label": "Deep bowl", "axis": "width", "cm": 18},
@@ -107,6 +115,9 @@ def blank(dish: str, variant: str) -> dict:
         # evidence - which dish, which photos, which fault - and deleting it throws away
         # the only record of what does not work.
         "archived": False,
+        # Per-dish optimiser targets. Empty means use the defaults in optimize.py.
+        # {"triangles": 40000, "texture": 2048}
+        "optimise": {},
         # Size of the stored master. Known the moment it lands, so the review panel can
         # decline to hand a browser a 70 MB file instead of finding out by stalling it.
         "master_bytes": 0, "master_triangles": 0,

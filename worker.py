@@ -63,6 +63,11 @@ def needs_work(rec: dict) -> str:
     if scale.get("cm") and (stats.get("scale_cm") != scale.get("cm")
                             or stats.get("scale_axis") != scale.get("axis")):
         return f"size changed to {scale['cm']} cm {scale.get('axis', '')}"
+    opt = rec.get("optimise") or {}
+    if opt.get("triangles") and stats.get("target_triangles") != opt["triangles"]:
+        return f"triangle target changed to {opt['triangles']:,}"
+    if opt.get("texture") and stats.get("target_texture") != opt["texture"]:
+        return f"texture target changed to {opt['texture']}px"
     return ""
 
 
@@ -95,8 +100,11 @@ def optimise_one(rec: dict, out_dir: Path, dry: bool = False) -> bool:
                 dataset.write(r)
 
         started = time.time()
+        settings = rec.get("optimise") or {}
         res = optimize.run(master, tmp / "out", scale=rec.get("scale") or None,
-                           on_stage=stage)
+                           on_stage=stage,
+                           triangles=settings.get("triangles") or optimize.TARGET_TRIANGLES,
+                           texture=settings.get("texture") or optimize.TARGET_TEXTURE)
         rec = dataset.record(dish, variant)
         if not res.ok:
             rec.update(status="review", stage="", optimising_since="",

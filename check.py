@@ -294,6 +294,45 @@ def main() -> int:
         check("Run engine is disabled once a model exists", "hasModel" in page)
         check("Regenerate exists as the deliberate path", 'id="regen"' in page)
 
+        print("\n== creating a dish, and the optimiser settings ==")
+        made = api("/api/new-dish", {"dish": "brand new dish", "variant": "default"})
+        check("a new dish is created server-side", made.get("dish") == "brand new dish")
+        # It has to EXIST, or the rail goes on showing the previous selection - which
+        # is exactly what "New dish does nothing" looked like.
+        listed = [r["dish"] for r in api("/api/dishes")["dishes"]]
+        check("and appears in the dish list", dataset.slug("brand new dish") in listed,
+              str(listed))
+        try:
+            api("/api/new-dish", {"dish": dish, "variant": variant})
+            check("it refuses to overwrite an existing dish", False)
+        except urllib.error.HTTPError as e:
+            check("it refuses to overwrite an existing dish", e.code == 409)
+
+        check("meta offers triangle targets", len(meta.get("triangle_targets", [])) >= 3)
+        check("texture targets stop at 2048 - an 8k map is 256 MB of phone VRAM",
+              max(meta.get("texture_targets", [0])) == 2048,
+              str(meta.get("texture_targets")))
+        out = api("/api/settings", {"dish": dish, "variant": variant,
+                                    "triangles": 20000, "texture": 1024})
+        check("settings are stored", out["optimise"] == {"triangles": 20000, "texture": 1024},
+              str(out.get("optimise")))
+        d2 = wait_for(dish, variant)
+        st2 = d2["export_stats"]
+        check("and applied to the shipped file",
+              st2.get("target_triangles") == 20000 and st2.get("target_texture") == 1024,
+              f"{st2.get('target_triangles')} tris / {st2.get('target_texture')}px")
+        check("a smaller target makes a smaller file", st2["draco_bytes"] < 3_000_000,
+              f"{st2['draco_bytes'] / 1048576:.2f} MB")
+        try:
+            api("/api/settings", {"dish": dish, "variant": variant, "texture": 8192})
+            check("an 8k shipped texture is refused", False)
+        except urllib.error.HTTPError as e:
+            check("an 8k shipped texture is refused", e.code == 400,
+                  json.loads(e.read())["error"])
+        api("/api/settings", {"dish": dish, "variant": variant,
+                              "triangles": 40000, "texture": 2048})
+        wait_for(dish, variant)
+
         print("\n== photos have their own shelf ==")
         shelf = api("/api/photos")["items"]
         row = next((r for r in shelf if r["dish"] == dish), None)

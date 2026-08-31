@@ -229,6 +229,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({
                     "faults": FAULTS, "slots": SLOTS, "slot_role": dataset.SLOT_ROLE,
                     "shapes": dataset.SHAPES, "scale_axes": dataset.SCALE_AXES,
+                    "triangle_targets": dataset.TRIANGLE_TARGETS,
+                    "texture_targets": dataset.TEXTURE_TARGETS,
                     "credits": credits_left(),
                     "engines": [self._engine_meta(n) for n in engines.REGISTRY],
                     "default_engine": self.engine_name,
@@ -336,6 +338,38 @@ class Handler(BaseHTTPRequestHandler):
                     _dispatch(self._optimize, dish, variant, who)
                 else:
                     dataset.write(rec)
+                return self._json(self._shape(dataset.record(dish, variant)))
+            if path == "/api/new-dish":
+                # A dish has to EXIST to appear in the list. Creating it client-side
+                # only meant the name was typed, nothing was written, and the rail went
+                # on showing whatever was selected before - which reads exactly like the
+                # button not working.
+                rec = dataset.record(dish, variant)
+                if rec.get("frames") or rec.get("model_key"):
+                    return self._json({"error": "That dish and variant already exist."}, 409)
+                rec["created_by"] = who
+                dataset.write(rec)
+                return self._json(self._shape(rec))
+            if path == "/api/settings":
+                rec = dataset.record(dish, variant)
+                tri = int(body.get("triangles") or 0)
+                tex = int(body.get("texture") or 0)
+                if tri and not 2_000 <= tri <= 500_000:
+                    return self._json({"error": "Triangles must be between 2,000 and "
+                                                "500,000."}, 400)
+                if tex and tex not in dataset.TEXTURE_TARGETS:
+                    return self._json({"error": f"Texture must be one of "
+                                                f"{dataset.TEXTURE_TARGETS}."}, 400)
+                rec["optimise"] = {k: v for k, v in
+                                   (("triangles", tri), ("texture", tex)) if v}
+                dataset.write(rec)
+                # Settings only mean anything once they are applied, so applying them is
+                # the same action - five seconds, no credits.
+                if rec.get("model_key") and rec["status"] not in ("running", "optimising"):
+                    rec.update(status="optimising", stage="queued",
+                               optimising_since=dataset._now())
+                    dataset.write(rec)
+                    _dispatch(self._optimize, dish, variant, who)
                 return self._json(self._shape(dataset.record(dish, variant)))
             if path == "/api/multiview":
                 # Predicts three further angles from the one photograph that exists and
@@ -761,7 +795,10 @@ class Handler(BaseHTTPRequestHandler):
             dataset.write(r)
             return False
 
-        res = optimize.run(master, tmp / "out", scale=scale or None, on_stage=stage)
+        settings = rec.get("optimise") or {}
+        res = optimize.run(master, tmp / "out", scale=scale or None, on_stage=stage,
+                           triangles=settings.get("triangles") or optimize.TARGET_TRIANGLES,
+                           texture=settings.get("texture") or optimize.TARGET_TEXTURE)
         stage("storing")
         rec = dataset.record(dish, variant)
         if not res.ok:
@@ -960,6 +997,8 @@ class Handler(BaseHTTPRequestHandler):
             "credits": e.cost_per_job,
             "uncertain": getattr(e, "cost_uncertain", False),
             "expect_triangles": e.expect_triangles,
+            # The only real difference between the entries, so the picker should say it.
+            "texture": getattr(e, "texture_resolution", ""),
             # Empty means this host can finish the job. Anything else is the reason it
             # cannot, in words meant for the person about to press the button.
             "cannot_optimise": ("This host has "

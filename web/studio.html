@@ -151,6 +151,8 @@
   /* Over the thumbnail, not under the text: these are occasional actions and they were
      taking a full row of every card for it. Hidden until the card is hovered or
      keyboard-focused, so a wall of cards stays a wall of dishes. */
+  body.norail aside{display:none}
+  body.norail main{grid-template-columns:1fr}
   .photogrid{padding:16px 20px 28px;display:flex;flex-direction:column;gap:20px;
              overflow:auto}
   .phrow{border:1px solid var(--rule);border-radius:3px;background:var(--bench)}
@@ -282,6 +284,7 @@
 
 <header>
   <button id="menu" class="drawer-btn" aria-label="Show dishes" aria-expanded="false">☰</button>
+  <button id="railtoggle" class="viewtab" title="Show or hide the dish rail" aria-pressed="true">Rail</button>
   <span class="wordmark">Scan<span>·</span>Studio</span>
   <button id="view-bench" class="viewtab" aria-pressed="true">Bench</button>
   <button id="view-lib" class="viewtab" aria-pressed="false">Models</button>
@@ -389,6 +392,14 @@
       <span class="unit mono">cm</span>
       <span id="scalenote" class="hintline"></span>
     </div>
+    <span class="lbl">Optimiser</span>
+    <div class="scalerow">
+      <select id="opttri" title="Triangle target for the shipped model"></select>
+      <input type="number" id="opttricustom" min="2000" max="500000" step="1000"
+             placeholder="custom" aria-label="Custom triangle target">
+      <select id="opttex" title="Texture size in the shipped model"></select>
+      <span id="optnote" class="hintline"></span>
+    </div>
     <span class="lbl">Shipping files</span>
     <div class="exportrow">
       <button id="export-model">Re-optimise</button>
@@ -449,8 +460,10 @@ async function boot() {
   META = await api('/api/meta');
   paintCredits();
   paintEngineWarning();
+  /* "meshy-7 · 30cr" said nothing about what distinguishes the entries. The only real
+     difference between them is texture resolution, so that is what the label shows. */
   $('#engine').innerHTML = META.engines.map(e =>
-    `<option value="${e.name}"${e.name === META.default_engine ? ' selected' : ''}>${e.name} · ${e.credits}cr</option>`).join('');
+    `<option value="${e.name}"${e.name === META.default_engine ? ' selected' : ''}>${e.name} · ${e.texture || '4k'} · ${e.credits}cr</option>`).join('');
   await refresh();
   LIST.length ? open(LIST[0].dish, LIST[0].variants[0]) : renderEmpty();
 }
@@ -656,6 +669,16 @@ function paint() {
       : stg === 'master'
         ? `master · ${d.engine} · ${d.seconds}s`
         : `${(st.draco_bytes/1048576||0).toFixed(2)} MB draco · ${st.result_triangles||'?'} tris${dims ? ` · ${dims} cm` : ''}`;
+    /* A dish with a master and no shipping file looked identical to a finished one
+       except that the Shipping tab did nothing. Silence is the worst possible answer
+       here, because the fix is usually one sentence away. */
+    if (!shippable && !busy) {
+      const why = d.export_error
+        || 'The optimiser has not run on this dish yet. Press Re-optimise, or run '
+           + 'worker.py on a machine with more memory if this host refused it.';
+      stage.insertAdjacentHTML('beforeend',
+        `<div class="mvstate bad" style="bottom:auto;top:10px">No shipping file yet — ${why}</div>`);
+    }
     if (busy) {
       POLL ||= setInterval(async () => {
         const f = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
@@ -693,6 +716,7 @@ function paint() {
     $('#stagetabs').hidden = true;
   }
   paintScale(d);
+  paintOptimiser(d);
   paintRail(d);
 }
 
@@ -769,6 +793,41 @@ function paintRail(d) {
    the other two - so the question is which one the person happens to know. The shape
    picker only PROPOSES a number; every figure behind it is a guess (dataset.SHAPES) that
    ~30 real dishes are meant to replace. */
+/* Targets for the SHIPPED file, not for generation. Texture stops at 2048 deliberately:
+   an 8192px map costs ~256 MB of video memory on a phone before anything is drawn, so
+   4k and 8k belong in the engine picker where they give the downscaler a better source,
+   never in the file a diner downloads. */
+function paintOptimiser(d) {
+  const tri = $('#opttri'), tex = $('#opttex'), custom = $('#opttricustom'), note = $('#optnote');
+  if (!tri) return;
+  const o = d.optimise || {};
+  const st = d.export_stats || {};
+  if (!tri.options.length) {
+    tri.innerHTML = (META.triangle_targets || [20000, 40000, 80000])
+      .map(n => `<option value="${n}">${(n / 1000)}k triangles</option>`).join('')
+      + '<option value="0">custom…</option>';
+    tex.innerHTML = (META.texture_targets || [1024, 2048])
+      .map(n => `<option value="${n}">${n}px textures</option>`).join('');
+  }
+  const currentTri = o.triangles || st.target_triangles || 40000;
+  const known = [...tri.options].some(x => +x.value === currentTri);
+  tri.value = known ? String(currentTri) : '0';
+  custom.hidden = known;
+  custom.value = known ? '' : currentTri;
+  tex.value = String(o.texture || st.target_texture || 2048);
+
+  note.className = 'hintline';
+  if (st.result_triangles) {
+    const asked = st.target_triangles || currentTri;
+    const got = st.result_triangles;
+    // meshopt stops early rather than break the surface, so asked and got often differ.
+    note.textContent = got > asked * 1.15
+      ? `asked ${asked.toLocaleString()}, got ${got.toLocaleString()} — it could not cut further`
+      : `${got.toLocaleString()} triangles`;
+    if (got > asked * 1.15) note.classList.add('warn');
+  } else note.textContent = '';
+}
+
 function paintScale(d) {
   const shape = $('#shape'), axis = $('#scaleaxis'), cm = $('#scalecm'), note = $('#scalenote');
   if (!shape) return;
@@ -801,6 +860,14 @@ function paintScale(d) {
   } else {
     note.textContent = `${sc.cm} cm ${sc.axis} — applied on the next optimise`;
   }
+}
+
+async function saveSettings(triangles, texture) {
+  if (CUR && CUR.model_key) { CUR.status = 'optimising'; CUR.stage = 'queued'; paint(); }
+  const r = await api('/api/settings', {dish: DISH, variant: VAR, triangles, texture});
+  if (r.error) { say(r.error); CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`); }
+  else CUR = r;
+  paint(); refresh();
 }
 
 async function saveScale({shape, axis, cm}) {
@@ -883,10 +950,18 @@ document.addEventListener('blur', e => { if (e.target.id === 'note') saveVerdict
 
 $('#newdish').onclick = async () => {
   const name = prompt('Dish name');
-  if (!name) return;
-  DISH = name.trim(); VAR = 'default';
-  CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+  if (!name || !name.trim()) return;
+  /* This used to set a variable and repaint, which wrote nothing and left the rail
+     showing whatever was selected before - indistinguishable from the button not
+     working. The dish is created on the server so it exists, and the rail is refreshed
+     so it appears. */
+  const next = name.trim();
+  const r = await api('/api/new-dish', {dish: next, variant: 'default'});
+  if (r.error) return say(r.error);
+  DISH = next; VAR = 'default'; CUR = r;
+  await refresh();
   paint();
+  say(`Created "${next}" — add a photo`);
 };
 $('#rename').onclick = async () => {
   if (!DISH) return say('Open a dish first');
@@ -976,6 +1051,13 @@ document.addEventListener('change', e => {
     const s = (META.shapes || []).find(x => x.id === e.target.value);
     if (!s) return;
     return saveScale({shape: s.id, axis: s.axis, cm: s.cm});
+  }
+  if (e.target.id === 'opttri' || e.target.id === 'opttex' || e.target.id === 'opttricustom') {
+    const picked = +$('#opttri').value;
+    const triangles = picked || (+$('#opttricustom').value || 0);
+    $('#opttricustom').hidden = !!picked;
+    if (!picked && !triangles) return;          // waiting for a custom number
+    return saveSettings(triangles, +$('#opttex').value);
   }
   if (e.target.id === 'scaleaxis' || e.target.id === 'scalecm') {
     const cm = parseFloat($('#scalecm').value) || 0;
@@ -1167,6 +1249,19 @@ function showView(which) {
 
 $('#view-lib').onclick = () => showView('library');
 $('#view-photos').onclick = () => showView('photos');
+
+/* The rail duplicates the Models view, which is a fair complaint - but it is the only
+   way to move between variants of a dish without leaving the bench, which is exactly
+   what comparing two angle strategies needs. So it stays, and it folds away.
+   The choice is remembered, because a preference you have to re-make is not one. */
+function setRail(open) {
+  document.body.classList.toggle('norail', !open);
+  $('#railtoggle').setAttribute('aria-pressed', String(open));
+  try { localStorage.setItem('betareal.rail', open ? '1' : '0'); } catch (e) {}
+}
+$('#railtoggle').onclick = () =>
+  setRail(document.body.classList.contains('norail'));
+try { setRail(localStorage.getItem('betareal.rail') !== '0'); } catch (e) {}
 $('#view-bench').onclick = () => showView('bench');
 
 document.addEventListener('click', e => {
