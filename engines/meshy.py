@@ -40,25 +40,52 @@ DEFAULT_POLYCOUNT = 300_000
 POLL_SECONDS = 5
 GIVE_UP_AFTER = 900
 
-# Published cost table (meshy.ai -> "API cost details", read 2026-08-26):
+# What a generation actually costs, MEASURED rather than inferred.
 #
-#   Multi Image to 3D
-#     Meshy 6 models :  20 credits (no texture)  /  30 credits (with texture)
-#     Other models   :   5 credits (no texture)  /  15 credits (with texture)
+# On 2026-08-30 a real meshy-7 multi-image generation with texture was run against the
+# live account and the balance read before and after through /openapi/v1/balance:
 #
-# The table does not name Meshy 7. It is almost certainly in "other models"
-# (15 with texture), but that is inference, not documentation — so anything
-# unlisted is flagged `cost_uncertain` and the runner shows the worst case too.
-# One real call settles it: Settings -> API -> Daily Usage reports the exact
-# charge.
-_EXPENSIVE = {"meshy-6"}          # billed at the Meshy 6 rate
-_LISTED = {"meshy-6", "meshy-5"}  # models the table accounts for explicitly
+#     1610 -> 1580     30 credits
+#
+# The published table lists "Meshy 6: 20 without texture / 30 with" and "other models:
+# 5 / 15", and does not name Meshy 7. This file previously assumed meshy-7 fell into
+# "other models" at 15. That assumption was wrong by a factor of two, and it mattered:
+# at 30 credits a 1,000-credit Pro plan is ~33 dishes a month, not 66. The monthly
+# ALLOWANCE, not the price, is the ceiling on how fast restaurants can be onboarded.
+#
+# Anything still unmeasured keeps `cost_uncertain` so the UI can say so rather than
+# quietly present a guess as a fact.
+_MEASURED = {                       # (model, textured) -> credits, confirmed on the account
+    ("meshy-7", True): 30,
+}
+_LISTED = {"meshy-6", "meshy-5", "meshy-7"}   # models we can price with confidence
+_EXPENSIVE = {"meshy-6", "meshy-7"}           # billed at the 20/30 rate
 
 
 def _cost(ai_model: str, textured: bool) -> int:
+    hit = _MEASURED.get((ai_model, textured))
+    if hit is not None:
+        return hit
     if ai_model in _EXPENSIVE:
         return 30 if textured else 20
     return 15 if textured else 5
+
+
+def balance() -> int | None:
+    """Credits left on the account, or None if it cannot be read.
+
+    Worth having in the UI rather than a dashboard: at 30 credits a dish, a 1,000-credit
+    month is about 33 dishes. That is the tightest limit in the whole system and it was
+    completely invisible - somebody would simply have found generation stopped working.
+    """
+    try:
+        r = requests.get("https://api.meshy.ai/openapi/v1/balance",
+                         headers={"Authorization": f"Bearer {meshy_key()}"}, timeout=20)
+        if r.status_code >= 400:
+            return None
+        return int(r.json().get("balance"))
+    except Exception:      # noqa: BLE001 - never let a status read break a page load
+        return None
 
 
 # Straight off a professional camera a graded JPEG is 10-25 MB, and base64

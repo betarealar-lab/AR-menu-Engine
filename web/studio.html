@@ -145,6 +145,10 @@
   .minitab[aria-pressed="true"]{background:var(--raise);border-color:var(--rule-lit);
            color:var(--chalk)}
   .stagetabs{display:flex;gap:4px}
+  /* Credits are the tightest limit in the system, so they are shown next to the button
+     that spends them, and turn amber then red as they run out. */
+  #credits{font-size:11.5px;color:var(--ink-dim);white-space:nowrap}
+  #credits.low{color:var(--amber)} #credits.out{color:var(--red)}
   .hintline{font-size:12px;color:var(--ink-faint)}
   .hintline.warn{color:var(--amber)}
   .hintline.ok{color:var(--chalk)}
@@ -243,6 +247,7 @@
   <button id="rename" title="Rename this dish">Rename</button>
   <span class="sp"></span>
   <span id="status"></span>
+  <span id="credits" class="mono" title="Meshy credits left on the account"></span>
   <select id="engine"></select>
   <button id="run" class="run">Run engine</button>
   <button id="export">Export</button>
@@ -374,10 +379,26 @@ const say = t => $('#status').textContent = t;
 
 async function boot() {
   META = await api('/api/meta');
+  paintCredits();
   $('#engine').innerHTML = META.engines.map(e =>
     `<option value="${e.name}"${e.name === META.default_engine ? ' selected' : ''}>${e.name} · ${e.credits}cr</option>`).join('');
   await refresh();
   LIST.length ? open(LIST[0].dish, LIST[0].variants[0]) : renderEmpty();
+}
+
+/* Credits, in dishes rather than in credits. "1,580" means nothing to someone deciding
+   whether to scan another plate; "52 dishes" does. */
+function paintCredits() {
+  const el = $('#credits');
+  if (!el) return;
+  const c = META.credits;
+  if (c === null || c === undefined) { el.textContent = ''; return; }
+  const per = Math.max(1, Math.min(...(META.engines || [{credits: 30}])
+    .map(e => e.credits || 30)));
+  const dishes = Math.floor(c / per);
+  el.textContent = `${c.toLocaleString()} cr · ~${dishes} dishes`;
+  el.className = 'mono' + (c < per ? ' out' : c < per * 5 ? ' low' : '');
+  el.title = `${c} Meshy credits left, about ${dishes} more generations at ${per} each`;
 }
 
 async function refresh() {

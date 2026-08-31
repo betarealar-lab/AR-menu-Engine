@@ -75,6 +75,25 @@ STALE_AFTER_SECONDS = 300
 INLINE_JOBS = os.environ.get("JOBS", "inline").strip().lower() != "thread"
 
 
+# The balance is an external call, and /api/meta runs on every page load. Cached, so
+# opening the Studio does not cost a round trip to Meshy every time.
+_BALANCE: dict = {"credits": None, "at": 0.0}
+BALANCE_TTL = 120.0
+
+
+def credits_left() -> int | None:
+    import time as _time
+    if _time.time() - _BALANCE["at"] < BALANCE_TTL:
+        return _BALANCE["credits"]
+    try:
+        from engines.meshy import balance
+        _BALANCE["credits"] = balance()
+    except Exception:      # noqa: BLE001
+        _BALANCE["credits"] = None
+    _BALANCE["at"] = _time.time()
+    return _BALANCE["credits"]
+
+
 def webhook_secret() -> str:
     """The secret path segment Meshy calls us on, or empty when nobody can call us.
 
@@ -207,6 +226,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({
                     "faults": FAULTS, "slots": SLOTS, "slot_role": dataset.SLOT_ROLE,
                     "shapes": dataset.SHAPES, "scale_axes": dataset.SCALE_AXES,
+                    "credits": credits_left(),
                     "engines": [{"name": n, "credits": engines.build(n).cost_per_job,
                                  "uncertain": getattr(engines.build(n), "cost_uncertain", False)}
                                 for n in engines.REGISTRY],
