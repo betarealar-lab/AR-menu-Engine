@@ -151,6 +151,24 @@
   /* Over the thumbnail, not under the text: these are occasional actions and they were
      taking a full row of every card for it. Hidden until the card is hovered or
      keyboard-focused, so a wall of cards stays a wall of dishes. */
+  .photogrid{padding:16px 20px 28px;display:flex;flex-direction:column;gap:20px;
+             overflow:auto}
+  .phrow{border:1px solid var(--rule);border-radius:3px;background:var(--bench)}
+  .phrow.archived{opacity:.5}
+  .phhead{padding:10px 12px;border-bottom:1px solid var(--rule);
+          display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .phhead b{font-weight:600;font-size:13px}
+  .phshots{display:flex;gap:10px;padding:12px;flex-wrap:wrap}
+  .shotcard{width:150px;margin:0}
+  .shotcard img{width:150px;height:150px;object-fit:cover;border-radius:2px;
+                background:var(--plate);display:block}
+  .shotcard figcaption{display:flex;gap:6px;align-items:center;justify-content:space-between;
+                       padding-top:5px;font-size:10.5px;color:var(--ink-faint);
+                       font-family:'IBM Plex Mono',monospace}
+  /* A predicted frame is marked on the picture itself, not only in a caption: it is the
+     difference between a photograph of the dish and a guess about it. */
+  .shotcard.predicted img{outline:1px solid var(--amber);outline-offset:-1px}
+  .predtag{color:var(--amber);text-transform:uppercase;letter-spacing:.06em;font-size:9.5px}
   .cardacts{position:absolute;top:6px;right:6px;display:flex;gap:4px;
             opacity:0;transition:opacity .12s;z-index:2}
   .card:hover .cardacts,.card:focus-within .cardacts{opacity:1}
@@ -251,6 +269,9 @@
     #variant,#engine{max-width:132px}
     #newvar{width:100%;order:10}
     .slot .lb{font-size:10px;padding:4px 6px}
+  .cell.predicted::after{content:'PREDICTED';position:absolute;left:6px;bottom:6px;
+    font:500 9px/1 'Archivo',sans-serif;letter-spacing:.08em;color:var(--amber);
+    background:rgba(0,0,0,.65);padding:3px 5px;border-radius:2px;pointer-events:none}
     #status{width:100%;max-width:none;order:11}
   }
 
@@ -263,7 +284,8 @@
   <button id="menu" class="drawer-btn" aria-label="Show dishes" aria-expanded="false">☰</button>
   <span class="wordmark">Scan<span>·</span>Studio</span>
   <button id="view-bench" class="viewtab" aria-pressed="true">Bench</button>
-  <button id="view-lib" class="viewtab" aria-pressed="false">Library</button>
+  <button id="view-lib" class="viewtab" aria-pressed="false">Models</button>
+  <button id="view-photos" class="viewtab" aria-pressed="false">Photos</button>
   <select id="variant" title="Angle strategy"></select>
   <button id="newvariant">New variant</button>
   <button id="rename" title="Rename this dish">Rename</button>
@@ -288,6 +310,15 @@
   <div class="bench" id="bench"></div>
 </main>
 <div class="scrim" id="scrim"></div>
+
+<section id="photos" hidden>
+  <header>
+    <span class="lbl">Every photo</span>
+    <span class="sp"></span>
+    <span class="lbl mono" id="photocount" style="color:var(--ink-faint)"></span>
+  </header>
+  <div class="photogrid" id="photogrid"></div>
+</section>
 
 <section id="library" hidden>
   <div class="libbar">
@@ -316,6 +347,10 @@
       <div class="plate" id="plate"></div>
       <div class="platefoot">
         <span>Drop a photo, or click a cell to browse</span>
+        <button id="multiview" class="ghost" hidden
+          title="Predict three more angles from this photo. They are guesses, not photographs.">Generate multi-view</button>
+        <span id="mvnote" class="hintline"></span>
+        <span class="sp"></span>
         <span id="platehint"></span>
       </div>
     </section>
@@ -537,7 +572,10 @@ function paint() {
   $('#plate').innerHTML = META.slots.map((name, i) => {
     const f = d.frames[i];
     const primary = i === 0 ? ' primary' : '';
-    return `<div class="cell${primary}" data-slot="${i}">
+    /* A predicted frame is labelled on the bench as well as in the photo shelf. Judging
+       a model without knowing which of its inputs were photographs is judging blind. */
+    const pred = f && f.generated ? ' predicted' : '';
+    return `<div class="cell${primary}${pred}" data-slot="${i}">
       <span class="no mono">0${i + 1}</span>
       ${f ? `<img src="/frame?dish=${enc(DISH)}&variant=${enc(VAR)}&slot=${i}&v=${Date.now()}" alt="${name}">
              <button class="x" data-clear="${i}" title="Remove">Clear</button>` : ''}
@@ -666,6 +704,19 @@ function paintRail(d) {
   /* Run engine is off once a model exists. Generating again overwrites it, and that
      has already cost one good model and 30 credits. Regenerate is the deliberate way. */
   const hasModel = !!d.model_key;
+  /* Offered only where it helps: exactly one photo, and no model yet. With two or more
+     real photographs a prediction is strictly worse than what is already there. */
+  const mv = $('#multiview'), mvnote = $('#mvnote');
+  if (mv) {
+    const offer = d.filled === 1 && !hasModel && d.status !== 'running';
+    mv.hidden = !offer;
+    if (mvnote) {
+      mvnote.className = 'hintline';
+      mvnote.textContent = offer
+        ? 'One photo. Three more angles can be predicted from it — or shoot them, which is better.'
+        : '';
+    }
+  }
   $('#run').disabled = d.status === 'running' || d.filled < 1 || hasModel;
   $('#run').title = hasModel
     ? 'This dish already has a model. Use Regenerate to replace it.' : '';
@@ -963,6 +1014,28 @@ document.addEventListener('click', async e => {
     location.href = `/download?dish=${enc(DISH)}&variant=${enc(VAR)}${master}`;
     return;
   }
+  if (e.target.id === 'multiview') {
+  if (!confirm('Predict three more angles from this photo?\n\n'
+    + 'They are generated, not photographed — the engine invents the back of the dish. '
+    + 'That usually makes a more consistent model, but nothing new about the real dish '
+    + 'is added, and four real photos beat this every time.\n\nThis spends credits.')) return;
+  const btn = $('#multiview');
+  btn.disabled = true;
+  $('#mvnote').textContent = 'Predicting three angles…';
+  try {
+    const r = await api('/api/multiview', {dish: DISH, variant: VAR});
+    if (r.error) { say(r.error); $('#mvnote').textContent = r.error; return; }
+    CUR = r;
+    META.credits = (META.credits === null || META.credits === undefined || !r.spent)
+      ? META.credits : META.credits - r.spent;
+    paintCredits();
+    paint(); refresh();
+    say(`Predicted ${r.generated} view${r.generated === 1 ? '' : 's'}`
+        + (r.spent ? ` · ${r.spent} credits` : ''));
+  } finally {
+    btn.disabled = false;
+  }
+  }
   if (e.target.id === 'export-model') {
     CUR.status = 'optimising'; CUR.stage = 'queued'; paint();
     const r = await api('/api/optimize', {dish: DISH, variant: VAR});
@@ -998,6 +1071,41 @@ $('#export').onclick = async () => {
     btn.disabled = false;
   }
 };
+
+/* Photographs and generated views, on their own shelf. They are the input side of the
+   pipeline: what a model is only ever as good as, and the one thing here that cannot be
+   remade for 30 credits if it is lost. Predicted frames are marked, because at review
+   time it has to be obvious which parts of a model came from a camera. */
+let PHOTOS = [];
+
+async function loadPhotos() {
+  PHOTOS = (await api('/api/photos')).items;
+  const total = PHOTOS.reduce((n, r) => n + r.shots.length, 0);
+  const predicted = PHOTOS.reduce((n, r) => n + r.predicted, 0);
+  $('#photocount').textContent =
+    `${total} photo${total === 1 ? '' : 's'} across ${PHOTOS.length} dish${PHOTOS.length === 1 ? '' : 'es'}`
+    + (predicted ? ` · ${predicted} predicted` : '');
+  $('#photogrid').innerHTML = PHOTOS.length ? PHOTOS.map(r => `
+    <div class="phrow${r.archived ? ' archived' : ''}">
+      <div class="phhead">
+        <b>${r.title || r.dish}</b>
+        <span class="sub">${r.variant} · ${r.real} photographed${r.predicted ? ` · ${r.predicted} predicted` : ''}${r.has_model ? ' · has a model' : ''}</span>
+      </div>
+      <div class="phshots">
+        ${r.shots.map(sh => `
+          <figure class="shotcard${sh.generated ? ' predicted' : ''}">
+            <img loading="lazy" alt="${sh.role}"
+                 src="/frame?dish=${enc(r.dish)}&variant=${enc(r.variant)}&slot=${sh.slot}">
+            <figcaption>
+              <span>${sh.role}</span>
+              ${sh.generated ? '<span class="predtag">predicted</span>'
+                             : `<span class="sub">${Math.round(sh.bytes / 1024)} KB</span>`}
+            </figcaption>
+          </figure>`).join('')}
+      </div>
+    </div>`).join('')
+    : '<p class="hintline">No photos yet.</p>';
+}
 
 let LIB = [], LIBFILTER = 'all';
 
@@ -1046,15 +1154,19 @@ function paintLibrary() {
 }
 
 function showView(which) {
-  const lib = which === 'library';
+  const lib = which === 'library', pho = which === 'photos';
   $('#library').hidden = !lib;
-  document.querySelector('main').style.display = lib ? 'none' : '';
+  $('#photos').hidden = !pho;
+  document.querySelector('main').style.display = (lib || pho) ? 'none' : '';
   $('#view-lib').setAttribute('aria-pressed', String(lib));
-  $('#view-bench').setAttribute('aria-pressed', String(!lib));
+  $('#view-photos').setAttribute('aria-pressed', String(pho));
+  $('#view-bench').setAttribute('aria-pressed', String(!lib && !pho));
   if (lib) loadLibrary();
+  if (pho) loadPhotos();
 }
 
 $('#view-lib').onclick = () => showView('library');
+$('#view-photos').onclick = () => showView('photos');
 $('#view-bench').onclick = () => showView('bench');
 
 document.addEventListener('click', e => {

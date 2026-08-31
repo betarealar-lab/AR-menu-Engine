@@ -136,7 +136,13 @@ def frame_key(dish: str, variant: str, slot: int) -> str:
 
 
 def save_frame(dish: str, variant: str, slot: int, data: bytes,
-               source_name: str, by: str = "") -> dict:
+               source_name: str, by: str = "", generated_from: int | None = None) -> dict:
+    """Store one frame. `generated_from` marks it as predicted rather than photographed.
+
+    That flag is not decoration. At review time it has to be obvious which parts of a
+    model came from a camera and which from an image model guessing at the back of a
+    plate - otherwise a confidently invented garnish is indistinguishable from a real one.
+    """
     if not 0 <= slot < 4:
         raise ValueError(f"slot {slot} out of range")
     key = frame_key(dish, variant, slot)
@@ -147,6 +153,8 @@ def save_frame(dish: str, variant: str, slot: int, data: bytes,
         "slot": SLOTS[slot], "key": key, "source_name": source_name,
         "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()[:16],
         "uploaded_utc": _now(), "uploaded_by": by,
+        "generated": generated_from is not None,
+        "generated_from": generated_from,
     }
     if rec["status"] in ("empty", ""):
         rec["status"] = "ready"

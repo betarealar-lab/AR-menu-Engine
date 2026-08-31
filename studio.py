@@ -32,6 +32,7 @@ from pathlib import Path
 import dataset
 import engines
 import glb
+from engines import images
 import limits
 import optimize
 import storage
@@ -236,6 +237,8 @@ class Handler(BaseHTTPRequestHandler):
                 })
             if path == "/api/dishes":
                 return self._json({"dishes": self._dishes()})
+            if path == "/api/photos":
+                return self._json({"items": self._photos()})
             if path == "/api/library":
                 return self._json({"items": self._library()})
             if path == "/thumb":
@@ -334,6 +337,42 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     dataset.write(rec)
                 return self._json(self._shape(dataset.record(dish, variant)))
+            if path == "/api/multiview":
+                # Predicts three further angles from the one photograph that exists and
+                # fills the empty slots with them. Refused when there is already more
+                # than one frame: a real photograph beats a predicted one every time,
+                # and this must never quietly overwrite one.
+                rec = dataset.record(dish, variant)
+                filled = sorted(int(k) for k in rec.get("frames", {}))
+                if len(filled) != 1:
+                    return self._json({"error":
+                        "Multi-view works from exactly one photo. This dish has "
+                        f"{len(filled)}." if filled else
+                        "Upload a photo first."}, 400)
+                if rec.get("status") in ("running", "optimising"):
+                    return self._json({"error": "Something is already running."}, 400)
+
+                source = filled[0]
+                blob = dataset.read_frame(dish, variant, source)
+                if not blob:
+                    return self._json({"error": "The photo is missing from storage."}, 400)
+
+                before = credits_left()
+                views, err = images.multiview(blob)
+                _BALANCE["at"] = 0.0            # the balance just changed; re-read it
+                after = credits_left()
+                if err:
+                    return self._json({"error": err}, 502)
+
+                slots = [i for i in range(4) if i != source][:len(views)]
+                for slot, view in zip(slots, views):
+                    dataset.save_frame(dish, variant, slot, view,
+                                       f"generated from {dataset.SLOTS[source]}",
+                                       who, generated_from=source)
+                out = self._shape(dataset.record(dish, variant))
+                out["generated"] = len(slots)
+                out["spent"] = (before - after) if (before and after) else None
+                return self._json(out)
             if path == "/api/archive":
                 rec = dataset.record(dish, variant)
                 rec["archived"] = bool(body.get("archived", True))
@@ -765,6 +804,47 @@ class Handler(BaseHTTPRequestHandler):
                         "variants": vs or ["default"],
                         "judged": sum(1 for r in recs if r.get("verdict")),
                         "shipping": sum(1 for r in recs if r.get("catalog_keys"))})
+        return out
+
+    def _photos(self) -> list[dict]:
+        """Every frame in the system, newest dish first.
+
+        Photographs and generated views are the input side of the pipeline and deserve
+        their own shelf: they are what a model is only as good as, they are the thing
+        that cannot be regenerated for 30 credits, and mixing them in with finished
+        models made both lists harder to read.
+        """
+        out = []
+        for rec in dataset.catalogue():
+            frames = rec.get("frames") or {}
+            if not frames:
+                continue
+            shots = []
+            for i in range(4):
+                f = frames.get(str(i))
+                if not f:
+                    continue
+                shots.append({
+                    "slot": i,
+                    "role": dataset.SLOTS[i],
+                    "bytes": f.get("bytes", 0),
+                    "generated": bool(f.get("generated")),
+                    "generated_from": f.get("generated_from"),
+                    "source_name": f.get("source_name", ""),
+                    "uploaded_by": f.get("uploaded_by", ""),
+                    "uploaded_utc": f.get("uploaded_utc", ""),
+                })
+            out.append({
+                "dish": rec.get("dish"), "title": rec.get("title", ""),
+                "variant": rec.get("variant"),
+                "archived": bool(rec.get("archived")),
+                "has_model": bool(rec.get("model_key")),
+                "shots": shots,
+                "real": sum(1 for s in shots if not s["generated"]),
+                "predicted": sum(1 for s in shots if s["generated"]),
+                "created_utc": rec.get("created_utc", ""),
+            })
+        out.sort(key=lambda r: r.get("created_utc") or "", reverse=True)
         return out
 
     def _library(self) -> list[dict]:

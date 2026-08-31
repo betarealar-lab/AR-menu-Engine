@@ -134,9 +134,18 @@ def main() -> int:
         status, raw = api("/", raw=True)
         page = raw.decode("utf-8", "replace")
         check("page serves", status == 200 and len(page) > 20000, f"{len(page)} bytes")
-        # These two are regressions that each took the whole UI down once.
-        check("no parse-time binding on a templated button",
-              "$('#export-model').onclick" not in page)
+        # This has now taken the whole UI down twice - once for #export-model, once for
+        # #multiview - so it is checked generally rather than by name. Anything inside
+        # <template id="tpl-bench"> does not exist when the script is parsed, so binding
+        # to it directly sets a property on null, throws, and kills every line after it
+        # including boot(). Those controls must go through the delegated click listener.
+        import re as _re
+        _tpl = page[page.index('<template id="tpl-bench">'):page.index("</template>")]
+        _tpl_ids = set(_re.findall(r'id="([\w-]+)"', _tpl))
+        _script = page[page.index("<script>"):]
+        _bound = [m for m in _re.findall(r"\$\('#([\w-]+)'\)\s*\.on\w+", _script)
+                  if m in _tpl_ids]
+        check("nothing inside the template is bound at parse time", not _bound, str(_bound))
         check("[hidden] beats a class that sets display",
               "[hidden]{display:none !important}" in page)
         check("model-viewer is loaded", "model-viewer.min.js" in page)
@@ -284,6 +293,36 @@ def main() -> int:
                   "REPLACES" in body.get("error", "") and body.get("needs_replace") is True)
         check("Run engine is disabled once a model exists", "hasModel" in page)
         check("Regenerate exists as the deliberate path", 'id="regen"' in page)
+
+        print("\n== photos have their own shelf ==")
+        shelf = api("/api/photos")["items"]
+        row = next((r for r in shelf if r["dish"] == dish), None)
+        check("the photo shelf lists the dish", bool(row))
+        check("it counts photographed frames", bool(row and row["real"] == 1),
+              str(row and row["real"]))
+        check("and none are predicted yet", bool(row and row["predicted"] == 0))
+        check("each frame says whether it was generated",
+              bool(row and row["shots"] and "generated" in row["shots"][0]))
+        check("the page has a Photos view", 'id="view-photos"' in page)
+        check("predicted frames are marked on the bench", "cell.predicted" in page)
+        check("multi-view is offered under the plate", 'id="multiview"' in page)
+
+        # It must never overwrite a real photograph with a guess. With two frames
+        # loaded there is nothing to predict and the call has to refuse - which is also
+        # how this test avoids spending credits.
+        buf2 = io.BytesIO()
+        Image.new("RGB", (900, 900), (30, 60, 90)).save(buf2, "JPEG")
+        api("/api/upload", {"dish": dish, "variant": variant, "slot": 1,
+                            "data": "data:image/jpeg;base64,"
+                                    + base64.b64encode(buf2.getvalue()).decode(),
+                            "name": "right.jpg"})
+        try:
+            api("/api/multiview", {"dish": dish, "variant": variant})
+            check("multi-view refuses when real photos already exist", False)
+        except urllib.error.HTTPError as e:
+            check("multi-view refuses when real photos already exist", e.code == 400,
+                  json.loads(e.read())["error"])
+        api("/api/clear-frame", {"dish": dish, "variant": variant, "slot": 1})
 
         print("\n== archiving ==")
         out = api("/api/archive", {"dish": dish, "variant": variant, "archived": True})
