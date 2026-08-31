@@ -264,6 +264,8 @@ glb.py             GLB surgery in pure Python: texture resize, triangle count
 dataset.py         dishes, variants, frames, verdicts. Keys and records
 storage.py         R2 or local disk behind one interface
 config.py          .env loading
+worker.py          optimises on THIS machine what a small host cannot. `--once`,
+                   `--dry-run`, or leave it watching. Same R2, no credits
 check_webhook.py   17 checks of the submit/callback path with a stub engine, no credits
 check.py           40 checks over a real server on a temp store. Run before pushing:
                    `python check.py --master <a-meshy-master.glb>`. Never touches R2
