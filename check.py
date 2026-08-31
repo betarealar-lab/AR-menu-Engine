@@ -272,6 +272,23 @@ def main() -> int:
         check("a 2 GB box accepts either", not limits.check_optimise(1_902_278, 37.7))
         os.environ.pop("MEMORY_LIMIT_MB", None)
 
+        print("\n== downloading the files ==")
+        code, zipped = api(f"/download?dish={dish}&variant={variant}", raw=True)
+        check("download returns a zip", code == 200 and zipped[:2] == b"PK",
+              f"{len(zipped) / 1048576:.2f} MB")
+        import zipfile as _zip, io as _io
+        with _zip.ZipFile(_io.BytesIO(zipped)) as z:
+            names = [n.split("/")[-1] for n in z.namelist()]
+        check("it holds all three shipping files",
+              {"model_opt.glb", "model_draco.glb", "model.usdz"} <= set(names), str(names))
+        check("and a readme explaining which is which", "README.txt" in names)
+        check("the master is not included by default", "model.glb" not in names)
+        code, withm = api(f"/download?dish={dish}&variant={variant}&master=1", raw=True)
+        with _zip.ZipFile(_io.BytesIO(withm)) as z:
+            names2 = [n.split("/")[-1] for n in z.namelist()]
+        check("asking for the master includes it", "model.glb" in names2,
+              f"{len(withm) / 1048576:.2f} MB")
+
         print("\n== renaming ==")
         api("/api/rename", {"dish": dish, "title": "Chicken Shqmeruli"})
         d = api(f"/api/dish?dish={dish}&variant={variant}")

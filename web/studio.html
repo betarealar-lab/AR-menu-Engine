@@ -147,6 +147,7 @@
   .stagetabs{display:flex;gap:4px}
   /* Credits are the tightest limit in the system, so they are shown next to the button
      that spends them, and turn amber then red as they run out. */
+  button.ghost{background:transparent;color:var(--ink-dim)}
   .warnpill{font-size:11.5px;color:var(--amber);max-width:340px;line-height:1.35}
   .run.risky{border-color:var(--amber)}
   #credits{font-size:11.5px;color:var(--ink-dim);white-space:nowrap}
@@ -334,6 +335,8 @@
     <span class="lbl">Shipping files</span>
     <div class="exportrow">
       <button id="export-model">Re-optimise</button>
+      <button id="download-files" title="GLB, Draco GLB and USDZ as one zip">Download files</button>
+      <button id="download-all" class="ghost" title="The same, plus the untouched engine master. Large.">+ master</button>
       <span id="exportnote" class="hintline"></span>
     </div>
   </div>
@@ -639,6 +642,11 @@ function paintRail(d) {
   const btn = $('#export-model'), note = $('#exportnote');
   if (btn) {
     const shippable = !!(d.catalog_keys && Object.keys(d.catalog_keys).length);
+    const shippable0 = !!(d.catalog_keys && Object.keys(d.catalog_keys).length);
+    ['#download-files', '#download-all'].forEach(sel => {
+      const b = $(sel);
+      if (b) b.disabled = !shippable0 && !(sel === '#download-all' && d.model_key);
+    });
     const stuck = d.status === 'optimising' && seconds(d) > 180;
     btn.disabled = !d.model_key || d.status === 'running' ||
                    (d.status === 'optimising' && !stuck);
@@ -841,6 +849,14 @@ document.addEventListener('click', async e => {
   /* Delegated for a second reason: #export-model lives inside <template id="tpl-bench">,
      so binding it directly at parse time set .onclick on null, threw, and took every
      line after it - boot() included - down with it. The page loaded and did nothing. */
+  if (e.target.id === 'download-files' || e.target.id === 'download-all') {
+    /* A plain link rather than fetch-then-blob: the file can be 70 MB with the master
+       included, and the browser's own download handles that without our holding it
+       in memory first. */
+    const master = e.target.id === 'download-all' ? '&master=1' : '';
+    location.href = `/download?dish=${enc(DISH)}&variant=${enc(VAR)}${master}`;
+    return;
+  }
   if (e.target.id === 'export-model') {
     CUR.status = 'optimising'; CUR.stage = 'queued'; paint();
     const r = await api('/api/optimize', {dish: DISH, variant: VAR});
