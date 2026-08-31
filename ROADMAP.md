@@ -176,188 +176,192 @@ Revenue ~€49,000/mo. Not the binding constraint — support and production cap
 
 ## Part 4 — Roadmap
 
-Phases are dependency-ordered, not calendar-ordered. Each says why it comes before the
-next.
+Rewritten 2026-08-31 around the product Temo actually wants, rather than the order the
+code happened to grow in. Phases are dependency-ordered, not calendar-ordered.
+
+### The product, in his words
+
+> Completely self-serve, automated website creation with item management, 3D model
+> creation and addition, a photo enhancer that makes normal photos look professional —
+> upscaling, colour grading, maybe background change — and an internal statistics
+> dashboard with AI recommendations for next actions.
+
+Four products, and they are not equal. **The 3D pipeline is the only one nobody else has
+solved for restaurant food.** Website building is a solved commodity; photo enhancement is
+a feature of every phone; dashboards are table stakes. What no competitor can do is take
+photographs from a phone in a Tbilisi kitchen and return a model a diner will put on their
+table. Everything else is what makes that sellable — not what makes it defensible.
+
+So the order below is: finish the moat, then wrap it in the product.
+
+**Current priority, stated:** 3D generation from user photos. Within that, first *reliable
+generation and correct model handling, made fast*; second *multi-view generation*.
 
 ---
 
 ### Phase 0 — Correct what is already wrong
 
-*Days. Do before anything is built on top.*
+*Done, except where marked.*
 
-**0.1 · Judge the optimised model, not the master** ✅ **done**
-Generation now runs the optimiser itself, and review loads the result. A `Shipping` /
-`Master` toggle sits above the viewer, defaulting to shipping, so a contested verdict can
-still be checked against the original — the only honest way to separate "the engine got it
-wrong" from "the optimiser did". `catalogued` stopped being a status: a variant is
-shippable when it *has* catalogue files, which is a fact about the object graph rather than
-a flag someone has to remember to set.
+**0.1 · Judge the optimised model, not the master** ✅
+Review loads what ships. A `Shipping` / `Master` toggle separates "the engine got it
+wrong" from "the optimiser did".
 
-**0.2 · Real-world scale** ✅ **done**
-One dimension — height, width or length, any one — typed into the review rail, with a shape
-picker that proposes a starting number. Setting it re-runs the optimiser (5 seconds, no
-credits), because the size is baked into the shipped file rather than applied by the
-viewer, and the model is centred and seated on y=0 whether or not anyone has given a size.
-Measured: 104 MB master → 1.85 MB Draco at exactly 28.0 cm across.
-See [DECISIONS.md](DECISIONS.md) §2 for why one dimension is enough, what `width` means,
-and why placement happens before Draco rather than after.
+**0.2 · Real-world scale** ✅
+One dimension — height, width or length — baked into the shipped file, GLB and USDZ alike.
 
 **0.3 · Live resize in AR**
-Pinch-to-scale in the AR view, saved back to the model. Partly rescues 0.2 — a typed
-dimension becomes a starting point rather than a single point of failure.
+Pinch-to-scale in the AR view, saved back. Partly rescues 0.2 — a typed dimension becomes
+a starting point rather than a single point of failure.
 
-**0.4 · Shape and angle picker** ⚠ **placeholder**
-Four shapes driving suggested angle and default size:
-
-| Shape | Angle | Default size |
-|---|---|---|
-| Tall / stacked | 25–30° | 12 cm |
-| Flat plated | 40° | 28 cm |
-| Deep bowl | 50–60° | 18 cm |
-| Wide flat | 45–55° | 35 cm |
-
-**Every number in that table is a guess.** The categories may be wrong, the angles are
-untested, and 40° is a revision of an earlier 25° that was also a guess. This ships as a
-*hypothesis the fault tags will settle* — after ~30 dishes the data replaces it. Do not let
-it harden into doctrine.
+**0.4 · Shape and angle picker** ⚠ **placeholder, unchanged**
+Every number in that table is still a guess, and will be until ~30 dishes have been shot
+and tagged. See below: this is blocked on capture, not on code.
 
 ---
 
-### Phase 1 — Make the foundation queryable and durable
+### Phase 1 — The 3D pipeline, finished
 
-*1–3 weeks. Everything after this depends on it.*
+*The stated first priority. Everything here is about generating reliably, storing
+correctly, and being fast.*
 
-**1.1 · Metadata to Postgres** 🔴
-`models`, `verdicts`, `faults`, `frames` as real tables. Objects stay in R2.
-*Why now: the research data is worthless if it cannot be queried, and migration only gets
-harder. Right now there is one dish to move.*
+**1.1 · Job queue** 🔴 **the blocker**
+A `jobs` table, a worker loop, retries, dead-lettering, and a cap that respects Meshy's
+concurrent-task limit.
+*Why first: at two people pressing Generate simultaneously somebody's work is already at
+risk, and the eleventh dish account-wide is refused outright. Work also dies with a closed
+tab. And every dish that fails silently is 30 credits burned, not a delay — Meshy deletes
+its copy after 3 days.*
 *Cost: $0.*
 
-**1.2 · Job queue** 🔴 **now load-bearing**
-A `jobs` table, a worker loop, retries, dead-lettering, per-tenant concurrency caps.
-*Why now: background threads have been removed entirely — work runs inside the request
-that asked for it, because neither Render nor Cloud Run guarantees a thread any CPU once
-its request has returned. That is correct but it cannot survive a closed tab, and
-`--max-instances 1` is currently load-bearing for the same reason. The queue is what
-lifts both limits.*
+**1.2 · Metadata in Postgres**
+`models`, `verdicts`, `faults`, `frames`, `jobs` as real tables. Objects stay in R2.
+*Why here: the verdict log is the research asset and today it cannot answer one question —
+which dishes fail, which angle wins, what the approval rate is. It is also what the
+statistics dashboard is eventually built on. Migrating is cheapest now.*
 *Cost: $0.*
 
 **1.3 · Generation history**
-Key masters by run, not by engine. Today a re-run overwrites the previous master — judge
-one "acceptable", re-run hoping for better, get worse, and the good one is gone.
-*Cost: $0.*
+Key masters by run, not by engine. Today a re-run overwrites the previous master: judge
+one "acceptable", re-run hoping for better, get worse, and the good one is gone — along
+with the 30 credits that made it.
 
-**1.4 · Photo QC, algorithmic**
-Blur, exposure, glare, colour cast, and **consistency across the four frames** — the last
-being the highest-value check, since inconsistent frames bake patchiness into the texture.
-Rejection messages say what to do (*"light the dish more"*), never what failed.
-*Cost: $0. ~50 ms/image.*
+**1.4 · Multi-view generation** 🔴 **the stated second priority**
+Meshy's `image-to-image` endpoint takes `generate_multi_view: true` and returns three
+additional angles — sides, back, three-quarter — from a single photo. The same endpoint
+offers `remove_background`.
+*Why it belongs here and not in the photo phase: it is not photo editing, it is input
+preparation for the 3D engine, and it directly attacks the weakest input we have. Every
+dish so far has been generated from ONE photo. Meshy accepts four.*
+*The assumption to test, not assume: that generated views beat a single real one. Run the
+same dish three ways — one real photo, one photo plus three generated views, four real
+photos — and compare. That experiment is what variants exist for.*
+*Cost: 3–12 credits per call, unmeasured. Measure it the way the 30 was measured.*
 
-**1.5 · Automatic colour grading**
-Neutralise the illuminant, then match exposure and white balance across the set. Grade for
-**accuracy, not appetite** — a warm Instagram grade bakes a yellow cast into the model
-permanently, and baked shadows fight the renderer's own lighting.
-Manual path gets an opt-out: *"already graded, don't touch it."*
-*Cost: $0, pure arithmetic.*
+**1.5 · Speed**
+Generation is 165 s of Meshy's GPU and cannot be shortened by us. What can: the optimise
+(43 s on the free box, 4 s on a laptop — it is CPU-bound and the free tier is 0.1 CPU),
+and the cold start (~50 s, gone on any paid tier). **Both are hosting, not code.**
 
-**1.6 · Semantic photo checks (optional, later in phase)**
+**1.6 · Master handling**
+Raw masters archived in R2, optimised files shipped, nothing raw shown to a diner. Already
+true — the open question is only whether we ask Meshy for a raw or a lean master, which is
+a hosting decision. See DECISIONS.md.
+
+---
+
+### Phase 2 — The photo system
+
+*Temo's design, kept as he described it. Built after the 3D pipeline is reliable, because
+every one of these steps exists to protect a 30-credit generation.*
+
+The flow on upload, four outcomes:
+
+| The photos are | What happens |
+|---|---|
+| **one, and good** | offer to generate three more views; user reviews them; generate |
+| **four, and good** | generate straight away |
+| **usable but weak** | offer to enhance; enhanced set can then be multi-viewed |
+| **unusable** | say so, say what to reshoot, spend nothing |
+
+**2.1 · Quality checks, free and algorithmic**
+Blur, exposure, glare, colour cast, and consistency across the four frames.
+*Why it pays for itself: rejecting one bad photo saves 30 credits, and on a 33-dish month
+that is 3% of the month's capacity per rejected dish.*
+*Cost: $0, ~50 ms/image.*
+
+**2.2 · Semantic checks**
 *Is this a dish? Is it fully in frame? Are these four the same dish?* Only these need a
-vision model. Runs **after** the free checks, so most rejects never reach it.
-*Cost: ~$0.007/dish on Haiku 4.5 — under a cent against a $0.25 generation.*
+vision model, and only after the free checks have thrown out the obvious failures.
+*Cost: ~$0.007/dish.*
+
+**2.3 · Enhancement** — upscale, colour grade, background removal.
+Grade for **accuracy, not appetite**: a warm Instagram grade bakes a yellow cast into the
+model permanently, and baked shadows fight the renderer's own lighting. Background removal
+is already available on Meshy's image endpoint.
+
+**2.4 · Capture guidance** — blocked on the fault data, not on code.
 
 ---
 
-### Phase 2 — Library and admin panel
+### Phase 3 — Library, admin, and the menu
 
-*2–4 weeks.*
-
-**2.1 · Model library**
-Active / inactive / draft. Filter, search, preview. A model is *active* when a menu item
-points at it — state derived from the graph, not stored separately.
-
-**2.2 · Item ↔ model attachment**
-On a menu item: **Add 3D model** → library → choose → attached. Detach makes it inactive
-again, without deleting it.
-*Why after 2.1: nothing to attach until the library exists.*
-
-**2.3 · Scanner inside the admin app**
-The Studio UI becomes admin pages. Same engine worker behind it, now tenant-scoped and
-using real accounts instead of shared basic auth.
-*Why here: this is where the Studio stops being a side tool and becomes the product.*
-
-*Cost: $0 new.*
-
----
-
-### Phase 3 — Menu creation and the Astro pivot
-
-*4–8 weeks. The largest engineering block.*
-
-**3.1 · Astro per-tenant builds** 🔴
-Today one 619 KB `index.html` carries every tenant's CSS and hardcoded `_isMugsyTenant()`
-branches. **Self-serve is impossible on that** — you cannot hand-write a branch for signup
-#400. Astro builds a static site per tenant at publish time.
-*Why before publishing: there is nothing to publish into until tenant sites are generated,
-not hand-edited.*
-
-**3.2 · Menu builder**
-Categories, items, prices, languages, ordering. Extends what the admin app already does.
-
-**3.3 · Website editing**
-Theme, hero, branding, hours, contact. Mostly exists — needs to survive the Astro move.
-
-**3.4 · Publish pipeline**
-One button: catalogue → tenant site → live menu → QR unchanged.
-*Why last in this phase: it is the seam that needs 3.1–3.3 to exist.*
-
-*Cost: $0 new. Cloudflare Pages builds are free at this scale.*
+**3.1 · Model library** — active / inactive / draft, filter, search, preview.
+**3.2 · Item ↔ model attachment** — *Add 3D model* on a menu item opens the library.
+**3.3 · Studio inside the admin app** — tenant-scoped, real accounts, not shared basic auth.
+**3.4 · Astro per-tenant builds** 🔴 — one 619 KB `index.html` with hardcoded tenant
+branches cannot survive signup #400. Blocks everything self-serve.
+**3.5 · Menu builder, website editing, publish.**
 
 ---
 
 ### Phase 4 — Self-serve
 
-*2–4 months.*
-
-**4.1 · Signup and tenant provisioning** — account → tenant → empty menu, no human involved.
-**4.2 · Capture guidance** ⚠ needs the Phase 0/1 data before it can say anything true.
-**4.3 · Billing** — Stripe. Metered on 3D views, not dishes ([COMPETITORS.md](COMPETITORS.md) §5).
-**4.4 · Onboarding** — first dish live in under 30 minutes.
-**4.5 · Per-dish analytics** — *"142 guests viewed this. 31 placed it on their table."*
-The event data already exists; it needs surfacing per dish. Nobody else in the category
-offers this at any price.
-
-*Cost: Stripe 2.9% + $0.30. Everything else already provisioned.*
+Signup and provisioning · billing · onboarding to first live dish in under 30 minutes.
 
 ---
 
-### Phase 5 — The engine (parallel, night work)
+### Phase 5 — The statistics dashboard
 
-*Runs alongside everything. Never blocks it.*
+*Deliberately last, and dependent on 1.2.*
 
-**5.1 · Self-hosted Hunyuan3D-2.1** 🔴 **the economics**
-$0.25/model → ~$0.01. At 100 tenants that is $750/mo → $30/mo.
-*Trigger: ~50–80 models/month, roughly 4–5 clients. Do not wait for Phase 4.*
+Views, AR opens, per-dish engagement, and "what to do next" recommendations. **This is
+worth nothing until there is data to read**, and the data comes from the verdict log and
+the tenant sites. Built earlier it would be a page of zeroes with opinions attached.
 
-**5.2 · The VGGT hybrid** — 10–30 photos instead of 4. The 4-image cap is architectural, not
-a product decision.
-**5.3 · The dataset** — every scan is a (photos → approved model) pair. No commercially
-usable plated-food 3D dataset exists to buy. This is the moat and it accrues automatically.
-**5.4 · Fine-tune** — only when the eval harness says a fine-tune beats the API.
+---
+
+### What is NOT on this list, and why
+
+**Nothing about hosting.** It is not a phase, it is a slider: 512 MB refuses raw masters
+and takes 43 s per optimise; 2 GB accepts them and takes seconds. Choose it, do not
+build it.
+
+**Nothing about our own generation engine.** Self-hosted Hunyuan is 25–40× cheaper per
+model and remains the right end state, but at 33 dishes a month the credit ALLOWANCE binds
+long before the per-dish price does. Revisit when volume, not cost, demands it.
+
+**Thirty dishes shot four ways.** No code produces this and everything downstream needs
+it: the angle table, capture guidance, the multi-view experiment, and the only research
+result in this category nobody else has published.
 
 ---
 
 ## Part 5 — What I would do first, and why
 
 ```
-0.1  judge the optimised model      every verdict until then is on the wrong artefact
-0.2  real-world scale               every model until then is the wrong size in AR
-1.1  metadata to Postgres           one dish to migrate now; hundreds later
-1.2  job queue                      everything after this enqueues work
+1.1  job queue            two people at once already risks losing work;
+                          the 11th dish account-wide is refused outright
+1.2  postgres             the verdict log answers no questions at all today,
+                          and it is what Phase 5 is eventually built from
+2.1  photo checks         one rejected photo saves 30 credits - 3% of a month
+1.4  multi-view           the stated second priority, and the first real
+                          attack on our weakest input: one photo per dish
 ```
 
-Those four are days of work and they unblock everything. **0.1 and 0.2 in particular are
-work you are otherwise going to redo** — models judged on the wrong artefact and built at
-the wrong scale both have to be made again.
+Everything else is either hosting (a slider, not a project) or downstream of these.
 
-Phase 5.1 should start in parallel the moment a fifth client signs, because generation cost
-is the only line item that scales badly, and it scales by 25×.
+**The unglamorous one that beats all four:** thirty dishes, shot four ways, judged. It
+needs no code. It settles the angle table, the capture guide, whether generated views beat
+real ones, and it is the only result in this category nobody has published. Every week it
+does not happen, the fault tags collect nothing and Phase 2.4 stays blocked.
