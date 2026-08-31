@@ -228,9 +228,7 @@ class Handler(BaseHTTPRequestHandler):
                     "faults": FAULTS, "slots": SLOTS, "slot_role": dataset.SLOT_ROLE,
                     "shapes": dataset.SHAPES, "scale_axes": dataset.SCALE_AXES,
                     "credits": credits_left(),
-                    "engines": [{"name": n, "credits": engines.build(n).cost_per_job,
-                                 "uncertain": getattr(engines.build(n), "cost_uncertain", False)}
-                                for n in engines.REGISTRY],
+                    "engines": [self._engine_meta(n) for n in engines.REGISTRY],
                     "default_engine": self.engine_name,
                     "storage": storage.describe(), "you": who,
                     "optimizer": optimize.describe(),
@@ -742,6 +740,31 @@ class Handler(BaseHTTPRequestHandler):
         out.sort(key=lambda r: (r.get("catalogued_utc") or r.get("judged_utc")
                                 or r.get("created_utc") or ""), reverse=True)
         return out
+
+    def _engine_meta(self, name: str) -> dict:
+        """What the picker needs to know, including whether this host can finish the job.
+
+        Spending 30 credits to discover the optimiser cannot open the result is the worst
+        possible order to learn it in - the master is archived and useless, and the
+        credits are gone. So the warning is computed from what the engine SAYS it will
+        return, and shown next to the button that spends the money.
+        """
+        e = engines.build(name)
+        blocked = limits.check_optimise(e.expect_triangles, e.expect_megapixels)
+        return {
+            "name": name,
+            "credits": e.cost_per_job,
+            "uncertain": getattr(e, "cost_uncertain", False),
+            "expect_triangles": e.expect_triangles,
+            # Empty means this host can finish the job. Anything else is the reason it
+            # cannot, in words meant for the person about to press the button.
+            "cannot_optimise": ("This host has "
+                                f"{limits.budget_mb():.0f} MB and could not optimise the "
+                                f"~{e.expect_triangles:,}-triangle master this returns. "
+                                "The dish would generate and be archived, but produce no "
+                                "shipping files until the worker has more memory."
+                                ) if blocked else "",
+        }
 
     def _detail(self, dish: str, variant: str) -> dict:
         return self._shape(dataset.record(dish, variant))

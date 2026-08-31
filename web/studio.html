@@ -147,6 +147,8 @@
   .stagetabs{display:flex;gap:4px}
   /* Credits are the tightest limit in the system, so they are shown next to the button
      that spends them, and turn amber then red as they run out. */
+  .warnpill{font-size:11.5px;color:var(--amber);max-width:340px;line-height:1.35}
+  .run.risky{border-color:var(--amber)}
   #credits{font-size:11.5px;color:var(--ink-dim);white-space:nowrap}
   #credits.low{color:var(--amber)} #credits.out{color:var(--red)}
   .hintline{font-size:12px;color:var(--ink-faint)}
@@ -250,6 +252,7 @@
   <span id="credits" class="mono" title="Meshy credits left on the account"></span>
   <select id="engine"></select>
   <button id="run" class="run">Run engine</button>
+  <span id="enginewarn" class="warnpill" hidden></span>
   <button id="export">Export</button>
 </header>
 
@@ -385,6 +388,7 @@ const say = t => $('#status').textContent = t;
 async function boot() {
   META = await api('/api/meta');
   paintCredits();
+  paintEngineWarning();
   $('#engine').innerHTML = META.engines.map(e =>
     `<option value="${e.name}"${e.name === META.default_engine ? ' selected' : ''}>${e.name} · ${e.credits}cr</option>`).join('');
   await refresh();
@@ -393,6 +397,20 @@ async function boot() {
 
 /* Credits, in dishes rather than in credits. "1,580" means nothing to someone deciding
    whether to scan another plate; "52 dishes" does. */
+/* The engine picker can now name a choice this host cannot finish. Saying so costs
+   nothing; finding out afterwards costs 30 credits and leaves an archived master with no
+   shipping files. */
+function paintEngineWarning() {
+  const sel = $('#engine'), note = $('#enginewarn');
+  if (!sel || !note) return;
+  const e = (META.engines || []).find(x => x.name === sel.value);
+  const why = e && e.cannot_optimise;
+  note.textContent = why || '';
+  note.hidden = !why;
+  const run = $('#run');
+  if (run) run.classList.toggle('risky', !!why);
+}
+
 function paintCredits() {
   const el = $('#credits');
   if (!el) return;
@@ -785,6 +803,7 @@ $('#newvariant').onclick = () => {
   if (v) open(DISH, v.trim());
 };
 $('#variant').onchange = e => open(DISH, e.target.value);
+$('#engine').onchange = () => paintEngineWarning();
 $('#run').onclick = async () => {
   /* Paint first, await second. Jobs now run inside the request that starts them, so the
      response does not arrive until the work is finished - three minutes for a

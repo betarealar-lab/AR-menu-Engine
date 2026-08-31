@@ -52,6 +52,13 @@ class Engine:
     variant = "default"
     cost_per_job = 0  # credits; drives the spend estimate shown before any call
 
+    # Roughly what this configuration returns, so a host can work out whether it will be
+    # able to optimise the result BEFORE the credits are spent. Both are estimates - the
+    # engine is generative and does not promise a triangle count - so they are used only
+    # to warn, never to refuse.
+    expect_triangles = 0
+    expect_megapixels = 0.0
+
     @property
     def label(self) -> str:
         return f"{self.name}:{self.variant}"

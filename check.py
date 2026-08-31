@@ -123,6 +123,12 @@ def main() -> int:
               meta.get("scale_axes") == ["width", "length", "height"])
         check("meta lists the fault tags", len(meta.get("faults", [])) >= 10)
         check("meta lists engines", any(e["name"] == "meshy-7" for e in meta.get("engines", [])))
+        # Spending 30 credits to discover the optimiser cannot open the result is the
+        # worst order to learn it in, so the picker must carry the warning itself.
+        check("engines declare what they will return",
+              all("expect_triangles" in e for e in meta.get("engines", [])))
+        check("engines say whether this host can finish the job",
+              all("cannot_optimise" in e for e in meta.get("engines", [])))
 
         print("\n== the page ==")
         status, raw = api("/", raw=True)
@@ -137,6 +143,8 @@ def main() -> int:
         check("the viewer reports its own failures", "watchViewer" in page)
         # A 70 MB master must never be handed to a browser just because a tab was clicked.
         check("a heavy master is not auto-previewed", "MASTER_AUTOLOAD_BYTES" in page)
+        check("the picker warns before the credits are spent",
+              "paintEngineWarning" in page)
         check("the shipping files row is named in plain words",
               "Shipping files" in page and ">Catalogue<" not in page)
 

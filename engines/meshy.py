@@ -162,6 +162,12 @@ class MeshyEngine(Engine):
         self.should_remesh = should_remesh
         self.variant = variant or f"{ai_model}-{texture_resolution if should_texture else 'notex'}"
         self.cost_per_job = _cost(ai_model, should_texture)
+        # Measured on real returns: a raw meshy-7 master came back at 1.9M triangles,
+        # and a remesh request is honoured closely (150k asked, 156,397 returned). Three
+        # maps at the requested resolution, so megapixels follow from that.
+        self.expect_triangles = (target_polycount + 20_000) if should_remesh else 1_950_000
+        edge = {"2k": 2048, "4k": 4096, "8k": 8192}.get(texture_resolution, 4096)
+        self.expect_megapixels = round(3 * edge * edge / 1_000_000, 1) if should_texture else 0.0
         self.cost_uncertain = ai_model not in _LISTED
 
     def _headers(self) -> dict:
