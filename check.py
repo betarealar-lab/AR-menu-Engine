@@ -272,6 +272,27 @@ def main() -> int:
         check("a 2 GB box accepts either", not limits.check_optimise(1_902_278, 37.7))
         os.environ.pop("MEMORY_LIMIT_MB", None)
 
+        print("\n== cancelling ==")
+        try:
+            api("/api/cancel", {"dish": dish, "variant": variant})
+            check("cancelling an idle dish is refused", False)
+        except urllib.error.HTTPError as e:
+            check("cancelling an idle dish is refused", e.code == 400,
+                  json.loads(e.read())["error"])
+        rec = dataset.record(dish, variant)
+        was = dict(rec)
+        rec.update(status="running", task_id="pretend-task", stage="generating 50%",
+                   submitted_utc=dataset._now())
+        dataset.write(rec)
+        out = api("/api/cancel", {"dish": dish, "variant": variant})
+        check("a running dish can be cancelled", out["status"] == "cancelled", out["status"])
+        check("it warns that credits may already be spent",
+              "credits" in (out.get("error") or ""), out.get("error", ""))
+        check("progress fields are cleared", not out["stage"] and not out["optimising_since"])
+        dataset.write(was)
+        check("the confirm names the cost before spending",
+              "This spends ${cost} credits" in page or "spends ${cost} credits" in page)
+
         print("\n== downloading the files ==")
         code, zipped = api(f"/download?dish={dish}&variant={variant}", raw=True)
         check("download returns a zip", code == 200 and zipped[:2] == b"PK",

@@ -36,7 +36,7 @@ PHOTOS, MODELS = "photos", "models"
 # The pipeline a record moves through. `catalogued` used to be a state here; it is now
 # derived - a variant is shippable when it HAS catalogue files, which is a fact about the
 # object graph rather than a flag someone has to remember to set.
-STATUSES = ("empty", "ready", "running", "optimising", "review", "failed")
+STATUSES = ("empty", "ready", "running", "optimising", "review", "failed", "cancelled")
 
 # One real-world dimension is enough: the model supplies the aspect ratio for the other
 # two. Which one a person knows varies - the height of a burger, the diameter of a bowl -
@@ -102,6 +102,7 @@ def blank(dish: str, variant: str) -> dict:
         # a callback arrives knowing only the ticket, and because a run whose callback
         # never comes has to be findable and resumable rather than simply stuck.
         "task_id": "", "submitted_utc": "", "engine_expires_utc": "",
+        "cancelled_utc": "", "cancelled_by": "",
         # Size of the stored master. Known the moment it lands, so the review panel can
         # decline to hand a browser a 70 MB file instead of finding out by stalling it.
         "master_bytes": 0, "master_triangles": 0,

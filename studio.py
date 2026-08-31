@@ -334,6 +334,26 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     dataset.write(rec)
                 return self._json(self._shape(dataset.record(dish, variant)))
+            if path == "/api/cancel":
+                # Stops OUR half immediately: nothing will be collected, optimised or
+                # stored for this run. What it cannot do is un-spend credits once Meshy
+                # has started work - their rule is a full refund while a task is still
+                # queued, and nothing once processing begins. So this is worth pressing
+                # quickly and worth pressing anyway, because a cancelled dish that keeps
+                # optimising is a second waste on top of the first.
+                rec = dataset.record(dish, variant)
+                if rec.get("status") not in ("running", "optimising"):
+                    return self._json({"error": "Nothing is running for this dish."}, 400)
+                rec.update(status="cancelled", stage="", optimising_since="",
+                           cancelled_utc=dataset._now(), cancelled_by=who,
+                           error="Cancelled." + (
+                               " Meshy had already been asked to generate, so credits may"
+                               " still have been spent." if rec.get("task_id") else ""))
+                dataset.write(rec)
+                with RUN_LOCK:
+                    RUNNING.discard((dataset.slug(dish), dataset.slug(variant)))
+                    RUNNING.discard((dataset.slug(dish), dataset.slug(variant), "opt"))
+                return self._json(self._shape(dataset.record(dish, variant)))
             if path == "/api/optimize":
                 rec = dataset.record(dish, variant)
                 if not rec.get("model_key"):
@@ -411,7 +431,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _nudge(self, rec: dict) -> None:
         if rec.get("status") != "running" or not rec.get("task_id"):
-            return
+            return                           # includes cancelled - never nudge those
         since = rec.get("submitted_utc") or ""
         try:
             age = (datetime.datetime.now(datetime.timezone.utc)
@@ -441,6 +461,8 @@ class Handler(BaseHTTPRequestHandler):
         tmp = self.out_dir / "_run" / f"{key[0]}--{key[1]}"
         try:
             rec = dataset.record(dish, variant)
+            if rec.get("status") == "cancelled":
+                return                       # abandoned; do not spend work finishing it
             if rec.get("model_key") and rec.get("task_id") == task_id:
                 return                       # already collected; a duplicate delivery
             engine = engines.build(rec.get("engine") or self.engine_name)
@@ -630,6 +652,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             for _ in range(3):
                 rec = dataset.record(dish, variant)
+                if rec.get("status") == "cancelled":
+                    return
                 applied = rec.get("scale") or {}
                 if not self._optimize_once(dish, variant, who, rec, applied, tmp):
                     return

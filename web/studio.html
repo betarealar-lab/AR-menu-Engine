@@ -186,6 +186,7 @@
            border-radius:99px;border:1px solid currentColor}
   .tagpill.shipping{color:var(--chalk)} .tagpill.review{color:var(--amber)}
   .tagpill.failed{color:var(--red)} .tagpill.ready,.tagpill.empty{color:var(--ink-faint)}
+  .tagpill.cancelled{color:var(--ink-dim)}
   .tagpill.running,.tagpill.optimising{color:var(--amber)}
   .v-good{color:var(--chalk)} .v-acceptable{color:var(--amber)} .v-reject{color:var(--red)}
   .empty{display:grid;place-items:center;height:100%;text-align:center;padding:40px}
@@ -253,6 +254,7 @@
   <span id="credits" class="mono" title="Meshy credits left on the account"></span>
   <select id="engine"></select>
   <button id="run" class="run">Run engine</button>
+  <button id="cancel" hidden>Cancel</button>
   <span id="enginewarn" class="warnpill" hidden></span>
   <button id="export" title="The verdict log as a spreadsheet - judgements, faults, sizes and file sizes. No 3D data.">Export data</button>
 </header>
@@ -615,6 +617,12 @@ function paint() {
       if (f.status !== 'optimising') { clearInterval(POLL); POLL = null; refresh(); }
       paint();
     }, 3000);
+  } else if (d.status === 'cancelled') {
+    stage.innerHTML = `<div class="stagemsg"><span class="lbl">Cancelled</span>
+      <p>${d.error || 'Stopped before it finished.'}</p>
+      <p>The photos are still here. Press Run engine to try again.</p></div>`;
+    $('#resultmeta').textContent = '';
+    $('#stagetabs').hidden = true;
   } else if (d.status === 'failed') {
     stage.innerHTML = `<div class="stagemsg"><span class="lbl">Failed</span>
       <p class="err">${d.error || 'no detail returned'}</p></div>`;
@@ -636,6 +644,12 @@ function paintRail(d) {
   $$('.mark').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === d.verdict));
   $('#note').value = d.note || '';
   $('#run').disabled = d.status === 'running' || d.filled < 1;
+  const busyNow = ['running', 'optimising'].includes(d.status);
+  const cancelBtn = $('#cancel');
+  if (cancelBtn) {
+    cancelBtn.hidden = !busyNow;
+    cancelBtn.textContent = d.status === 'running' ? 'Cancel generation' : 'Cancel';
+  }
 
   /* Optimisation now runs itself after generation and after any size change, so this
      button is the retry and the manual re-run, not the thing that makes the catalogue. */
@@ -812,7 +826,33 @@ $('#newvariant').onclick = () => {
 };
 $('#variant').onchange = e => open(DISH, e.target.value);
 $('#engine').onchange = () => paintEngineWarning();
+$('#cancel').onclick = async () => {
+  const generating = CUR && CUR.status === 'running';
+  if (!confirm(generating
+    ? 'Stop this generation?\n\nMeshy refunds only if the task is still queued. If it has '
+      + 'already started, the credits are spent either way — but nothing further will be '
+      + 'downloaded or optimised.'
+    : 'Stop optimising this dish?')) return;
+  const r = await api('/api/cancel', {dish: DISH, variant: VAR});
+  if (r.error) return say(r.error);
+  CUR = r; paint(); refresh();
+  say('Cancelled');
+};
 $('#run').onclick = async () => {
+  /* Ask before spending. Meshy refunds a cancelled task only while it is still queued -
+     nothing once processing starts - so the cheapest cancel is the one that happens
+     before the request is sent. */
+  const eng = (META.engines || []).find(e => e.name === $('#engine').value) || {};
+  const cost = eng.credits || 30;
+  const left = META.credits;
+  const after = (left === null || left === undefined) ? null : left - cost;
+  const lines = [`Generate "${(CUR && CUR.title) || DISH}" / ${VAR}?`, '',
+    `This spends ${cost} credits.`];
+  if (after !== null) lines.push(`${left.toLocaleString()} left now, ${after.toLocaleString()} after — about ${Math.floor(after / cost)} more dishes.`);
+  if (CUR && CUR.filled < 4) lines.push('', `Only ${CUR.filled} of 4 photos. More photos, better model.`);
+  if (eng.cannot_optimise) lines.push('', eng.cannot_optimise);
+  if (!confirm(lines.join('\n'))) return;
+
   /* Paint first, await second. Jobs now run inside the request that starts them, so the
      response does not arrive until the work is finished - three minutes for a
      generation. Awaiting first would leave the panel blank for all of it. The record is
