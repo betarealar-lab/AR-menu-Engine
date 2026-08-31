@@ -291,6 +291,11 @@ def main() -> int:
         shelf = api("/api/library")["items"]
         row = next((r for r in shelf if r["dish"] == dish), None)
         check("the library reports it archived", bool(row and row["archived"]))
+        # The card was a <button> containing two more <button>s - invalid HTML, which
+        # browsers unnest, which is why the actions took a whole row of every card.
+        check("library cards are not nested buttons",
+              '<button class="card' not in page and '<div class="card' in page)
+        check("card actions float over the thumbnail", ".cardacts{position:absolute" in page)
         # Archiving hides; it must never destroy. The files have to survive it.
         code, blob = api(f"/model?dish={dish}&variant={variant}&stage=ship", raw=True)
         check("archiving keeps the files", code == 200 and blob[:4] == b"glTF")

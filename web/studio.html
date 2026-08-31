@@ -148,10 +148,21 @@
   /* Credits are the tightest limit in the system, so they are shown next to the button
      that spends them, and turn amber then red as they run out. */
   button.ghost{background:transparent;color:var(--ink-dim)}
-  .cardacts{display:flex;gap:6px;margin-top:8px}
-  .mini{font-size:10.5px;padding:4px 8px;background:transparent;color:var(--ink-dim)}
-  .mini.danger{color:var(--red);border-color:transparent}
-  .mini.danger:hover{border-color:var(--red)}
+  /* Over the thumbnail, not under the text: these are occasional actions and they were
+     taking a full row of every card for it. Hidden until the card is hovered or
+     keyboard-focused, so a wall of cards stays a wall of dishes. */
+  .cardacts{position:absolute;top:6px;right:6px;display:flex;gap:4px;
+            opacity:0;transition:opacity .12s;z-index:2}
+  .card:hover .cardacts,.card:focus-within .cardacts{opacity:1}
+  /* A word beats a glyph here. Every icon considered for "archive" - a box, an arrow,
+     a crossed eye - needed its own tooltip to be understood, and a 30px word does not. */
+  .iconbtn{height:22px;min-width:22px;padding:0 7px;line-height:1;font-size:10.5px;
+           letter-spacing:.04em;display:grid;place-items:center;border-radius:3px;
+           background:rgba(0,0,0,.7);border:1px solid var(--rule-lit);color:var(--chalk)}
+  .iconbtn:hover{background:rgba(0,0,0,.85)}
+  .iconbtn.danger:hover{border-color:var(--red);color:var(--red)}
+  /* Touch has no hover, so on a phone they are simply always visible. */
+  @media (hover:none){.cardacts{opacity:1}}
   .warnpill{font-size:11.5px;color:var(--amber);max-width:340px;line-height:1.35}
   .run.risky{border-color:var(--amber)}
   #credits{font-size:11.5px;color:var(--ink-dim);white-space:nowrap}
@@ -173,10 +184,13 @@
         background:var(--plate);color:var(--ink-dim);border-radius:99px;cursor:pointer}
   .chip[aria-pressed="true"]{background:var(--chalk);color:#151515;border-color:transparent;font-weight:600}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
-  .card{background:var(--bench);border:1px solid var(--rule);border-radius:3px;
+  .card{position:relative;cursor:pointer;text-align:left;font:inherit;color:inherit;
+        background:var(--bench);border:1px solid var(--rule);border-radius:3px;
         overflow:hidden;cursor:pointer;display:flex;flex-direction:column;text-align:left;
         padding:0;color:inherit}
   .card:hover{border-color:var(--rule-lit)}
+  .card.archived{opacity:.55}
+  .card.archived:hover{opacity:1}
   .card .shot{aspect-ratio:1;background:
       repeating-conic-gradient(#232323 0% 25%,#1c1c1c 0% 50%) 50%/18px 18px;
       display:grid;place-items:center;overflow:hidden}
@@ -895,7 +909,15 @@ const drawer = on => { document.body.classList.toggle('drawer-open', on);
   $('#menu').setAttribute('aria-expanded', String(on)); };
 $('#menu').onclick = () => drawer(!document.body.classList.contains('drawer-open'));
 $('#scrim').onclick = () => drawer(false);
-addEventListener('keydown', e => { if (e.key === 'Escape') drawer(false); });
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') return drawer(false);
+  /* The library card is a div with role=button, so Enter and Space are ours to handle
+     - a real <button> could not contain the archive and delete controls. */
+  if (e.key === 'Enter' || e.key === ' ') {
+    const card = e.target.closest && e.target.closest('.card');
+    if (card) { e.preventDefault(); card.click(); }
+  }
+});
 
 /* Delegated, because the rail is re-rendered from a template on every paint. */
 document.addEventListener('change', e => {
@@ -994,7 +1016,7 @@ function paintLibrary() {
     r.verdict === f);
   $('#libcount').textContent = `${rows.length} of ${LIB.length}`;
   $('#libgrid').innerHTML = rows.length ? rows.map(r => `
-    <button class="card" data-d="${r.dish}" data-v="${r.variant}">
+    <div class="card${r.archived ? ' archived' : ''}" data-d="${r.dish}" data-v="${r.variant}" role="button" tabindex="0">
       <span class="shot">${r.has_thumb
         ? `<img loading="lazy" src="/thumb?dish=${enc(r.dish)}&variant=${enc(r.variant)}" alt="">`
         : '<span>no preview</span>'}</span>
@@ -1011,14 +1033,15 @@ function paintLibrary() {
         ${r.judged_by ? `<span class="sub">judged by ${r.judged_by}</span>` : ''}
       </span>
       <span class="cardacts">
-        <button class="mini" data-arch="${r.archived ? '0' : '1'}"
+        <button class="iconbtn" data-arch="${r.archived ? '0' : '1'}"
           data-d="${r.dish}" data-v="${r.variant}"
-          title="${r.archived ? 'Show this again' : 'Hide it from the library. Nothing is deleted.'}"
-        >${r.archived ? 'Unarchive' : 'Archive'}</button>
-        <button class="mini danger" data-del="1" data-d="${r.dish}" data-v="${r.variant}"
-          title="Delete the photos, the master and the shipping files. Permanent.">Delete</button>
+          aria-label="${r.archived ? 'Unarchive' : 'Archive'}"
+          title="${r.archived ? 'Show this in the library again' : 'Hide from the library. Nothing is deleted.'}"
+        >${r.archived ? 'Show' : 'Hide'}</button>
+        <button class="iconbtn danger" data-del="1" data-d="${r.dish}" data-v="${r.variant}"
+          aria-label="Delete" title="Delete photos, master and shipping files. Permanent.">&#215;</button>
       </span>
-    </button>`).join('')
+    </div>`).join('')
     : '<p class="hintline">Nothing here yet.</p>';
 }
 
