@@ -296,6 +296,13 @@ def main() -> int:
         header = csv.decode().splitlines()[0]
         check("csv carries the size and the payload",
               status == 200 and "scale_cm" in header and "draco_bytes" in header)
+        # The button read a JSON field the endpoint never returned, so Export silently
+        # did nothing for weeks. It is CSV, and it must arrive as a downloadable file.
+        check("export is not JSON", not csv.lstrip().startswith(b"{"))
+        check("export has a row for the dish", dish.encode() in csv or
+              dataset.slug(dish).encode() in csv)
+        check("the button downloads rather than parsing JSON",
+              "a.download" in page and "(await api('/api/export')).csv" not in page)
         row = next((r for r in api("/api/library")["items"] if r["dish"] == dish), None)
         check("library marks it shipping", bool(row and row["shipping"]))
         check("library shows the size", bool(row and row["scale"].get("cm") == 26))

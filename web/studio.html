@@ -253,7 +253,7 @@
   <select id="engine"></select>
   <button id="run" class="run">Run engine</button>
   <span id="enginewarn" class="warnpill" hidden></span>
-  <button id="export">Export</button>
+  <button id="export" title="The verdict log as a spreadsheet - judgements, faults, sizes and file sizes. No 3D data.">Export data</button>
 </header>
 
 <main>
@@ -850,7 +850,32 @@ document.addEventListener('click', async e => {
   }
 });
 
-$('#export').onclick = async () => say('Wrote ' + (await api('/api/export')).csv);
+/* Export sends CSV, and `api()` parses every response as JSON - so this threw on the
+   first character and the button silently did nothing. It also never downloaded
+   anything: it read a `.csv` field that the endpoint has never returned. */
+$('#export').onclick = async () => {
+  const btn = $('#export');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/export');
+    if (!r.ok) return say(`Export failed (${r.status})`);
+    const text = await r.text();
+    const rows = text.trim().split('\n').length - 1;   // minus the header
+    const url = URL.createObjectURL(new Blob([text], {type: 'text/csv;charset=utf-8'}));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `betareal-dishes-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    say(`Exported ${rows} row${rows === 1 ? '' : 's'}`);
+  } catch (e) {
+    say('Export failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 let LIB = [], LIBFILTER = 'all';
 

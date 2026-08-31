@@ -257,7 +257,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._serve(dataset.MODELS, _model_key(rec, q.get("stage", "ship")),
                                    "model/gltf-binary")
             if path == "/api/export":
-                return self._send(200, self._csv().encode(), "text/csv; charset=utf-8")
+                # Named and marked as an attachment, so it downloads as a file rather
+                # than being rendered as text in a tab - and so the file on disk says
+                # what it is without being renamed.
+                body = self._csv().encode()
+                stamp = dataset._now()[:10]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/csv; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Content-Disposition",
+                                 f'attachment; filename="betareal-dishes-{stamp}.csv"')
+                self.end_headers()
+                return self.wfile.write(body)
             self._send(404, b"not found", "text/plain")
         except Exception as e:  # noqa: BLE001
             self._json({"error": f"{type(e).__name__}: {e}"}, 500)
