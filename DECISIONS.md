@@ -151,6 +151,20 @@ one of them works.
 
 ---
 
+### Reversed: lean lost, and raw is the default again
+
+Temo compared the two in Blender on 2026-09-02 and the verdict was short - *"raw always
+looks better and lean is subpar"*. The remesh preset is removed.
+
+It was never a quality decision. It existed because a 512 MB host cannot open a raw
+master, and `worker.py` removed that constraint by optimising on a desktop against the
+same R2. A workaround that costs quality and is no longer needed is just a worse default.
+
+What survives from the exercise: the measurements, the memory model they produced, and
+the knowledge that Meshy honours a remesh request closely if it is ever needed again.
+
+---
+
 ### Ask the engine for what we ship, not for the most it can make
 
 Reversal of "do not pre-decimate at generation, ask for maximum detail and decimate

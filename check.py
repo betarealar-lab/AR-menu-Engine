@@ -272,6 +272,32 @@ def main() -> int:
         check("a 2 GB box accepts either", not limits.check_optimise(1_902_278, 37.7))
         os.environ.pop("MEMORY_LIMIT_MB", None)
 
+        print("\n== not destroying a good model by accident ==")
+        try:
+            api("/api/generate", {"dish": dish, "variant": variant, "engine": "meshy-7"})
+            check("generating over an existing model is refused", False)
+        except urllib.error.HTTPError as e:
+            body = json.loads(e.read())
+            check("generating over an existing model is refused", e.code == 409,
+                  body.get("error", "")[:60])
+            check("and says the current model would be lost",
+                  "REPLACES" in body.get("error", "") and body.get("needs_replace") is True)
+        check("Run engine is disabled once a model exists", "hasModel" in page)
+        check("Regenerate exists as the deliberate path", 'id="regen"' in page)
+
+        print("\n== archiving ==")
+        out = api("/api/archive", {"dish": dish, "variant": variant, "archived": True})
+        check("a dish can be archived", out.get("archived") is True)
+        shelf = api("/api/library")["items"]
+        row = next((r for r in shelf if r["dish"] == dish), None)
+        check("the library reports it archived", bool(row and row["archived"]))
+        # Archiving hides; it must never destroy. The files have to survive it.
+        code, blob = api(f"/model?dish={dish}&variant={variant}&stage=ship", raw=True)
+        check("archiving keeps the files", code == 200 and blob[:4] == b"glTF")
+        api("/api/archive", {"dish": dish, "variant": variant, "archived": False})
+        check("and it can be brought back",
+              api(f"/api/dish?dish={dish}&variant={variant}").get("archived") is False)
+
         print("\n== cancelling ==")
         try:
             api("/api/cancel", {"dish": dish, "variant": variant})

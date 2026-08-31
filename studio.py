@@ -334,6 +334,11 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     dataset.write(rec)
                 return self._json(self._shape(dataset.record(dish, variant)))
+            if path == "/api/archive":
+                rec = dataset.record(dish, variant)
+                rec["archived"] = bool(body.get("archived", True))
+                dataset.write(rec)
+                return self._json(self._shape(rec))
             if path == "/api/cancel":
                 # Stops OUR half immediately: nothing will be collected, optimised or
                 # stored for this run. What it cannot do is un-spend credits once Meshy
@@ -373,6 +378,17 @@ class Handler(BaseHTTPRequestHandler):
                 # refusing three because it is not four just wastes a dish someone shot.
                 if not rec["frames"]:
                     return self._json({"error": "Upload at least one frame first."}, 400)
+                # A re-run overwrites the master in place. Judge one "good", re-run
+                # hoping for better, get worse, and the good one is gone along with the
+                # 30 credits that made it - which is exactly what happened on
+                # 2026-09-02. Until ROADMAP 1.3 keys masters by run, the protection is
+                # to refuse unless the caller says explicitly that it meant it.
+                if rec.get("model_key") and not body.get("replace"):
+                    return self._json({
+                        "error": "This dish already has a model, and generating again "
+                                 "REPLACES it - the current one cannot be recovered. "
+                                 "Use Regenerate if that is what you want.",
+                        "needs_replace": True}, 409)
                 with RUN_LOCK:
                     if key in RUNNING:
                         return self._json({"status": "running"})
@@ -770,6 +786,7 @@ class Handler(BaseHTTPRequestHandler):
                 "has_model": bool(rec.get("model_key")),
                 # Shippable is a fact about what exists, not a flag anyone sets.
                 "shipping": bool(rec.get("catalog_keys")),
+                "archived": bool(rec.get("archived")),
                 "scale": rec.get("scale") or {},
                 "draco_mb": round(st.get("draco_bytes", 0) / 1048576, 2) or None,
                 "shrink": st.get("shrink"),

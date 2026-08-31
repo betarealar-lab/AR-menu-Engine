@@ -103,6 +103,10 @@ def blank(dish: str, variant: str) -> dict:
         # never comes has to be findable and resumable rather than simply stuck.
         "task_id": "", "submitted_utc": "", "engine_expires_utc": "",
         "cancelled_utc": "", "cancelled_by": "",
+        # Hidden from the library without being destroyed. A failed generation is still
+        # evidence - which dish, which photos, which fault - and deleting it throws away
+        # the only record of what does not work.
+        "archived": False,
         # Size of the stored master. Known the moment it lands, so the review panel can
         # decline to hand a browser a 70 MB file instead of finding out by stalling it.
         "master_bytes": 0, "master_triangles": 0,

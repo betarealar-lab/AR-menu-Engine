@@ -148,6 +148,10 @@
   /* Credits are the tightest limit in the system, so they are shown next to the button
      that spends them, and turn amber then red as they run out. */
   button.ghost{background:transparent;color:var(--ink-dim)}
+  .cardacts{display:flex;gap:6px;margin-top:8px}
+  .mini{font-size:10.5px;padding:4px 8px;background:transparent;color:var(--ink-dim)}
+  .mini.danger{color:var(--red);border-color:transparent}
+  .mini.danger:hover{border-color:var(--red)}
   .warnpill{font-size:11.5px;color:var(--amber);max-width:340px;line-height:1.35}
   .run.risky{border-color:var(--amber)}
   #credits{font-size:11.5px;color:var(--ink-dim);white-space:nowrap}
@@ -254,6 +258,7 @@
   <span id="credits" class="mono" title="Meshy credits left on the account"></span>
   <select id="engine"></select>
   <button id="run" class="run">Run engine</button>
+  <button id="regen" class="ghost" hidden title="Replace the existing model. The current one cannot be recovered.">Regenerate</button>
   <button id="cancel" hidden>Cancel</button>
   <span id="enginewarn" class="warnpill" hidden></span>
   <button id="export" title="The verdict log as a spreadsheet - judgements, faults, sizes and file sizes. No 3D data.">Export data</button>
@@ -276,6 +281,7 @@
     <span class="sp"></span>
     <div class="filters" id="libfilters" role="group" aria-label="Filter">
       <button class="chip" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" data-f="archived" aria-pressed="false">Archived</button>
       <button class="chip" data-f="shipping" aria-pressed="false">Shipping</button>
       <button class="chip" data-f="review" aria-pressed="false">Awaiting judgement</button>
       <button class="chip" data-f="good" aria-pressed="false">Good</button>
@@ -643,7 +649,17 @@ function paintRail(d) {
     `<button class="fault" data-f="${f}" aria-pressed="${(d.faults || []).includes(f)}">${f}</button>`).join('');
   $$('.mark').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === d.verdict));
   $('#note').value = d.note || '';
-  $('#run').disabled = d.status === 'running' || d.filled < 1;
+  /* Run engine is off once a model exists. Generating again overwrites it, and that
+     has already cost one good model and 30 credits. Regenerate is the deliberate way. */
+  const hasModel = !!d.model_key;
+  $('#run').disabled = d.status === 'running' || d.filled < 1 || hasModel;
+  $('#run').title = hasModel
+    ? 'This dish already has a model. Use Regenerate to replace it.' : '';
+  const regen = $('#regen');
+  if (regen) {
+    regen.hidden = !hasModel;
+    regen.disabled = d.status === 'running' || d.filled < 1;
+  }
   const busyNow = ['running', 'optimising'].includes(d.status);
   const cancelBtn = $('#cancel');
   if (cancelBtn) {
@@ -826,6 +842,18 @@ $('#newvariant').onclick = () => {
 };
 $('#variant').onchange = e => open(DISH, e.target.value);
 $('#engine').onchange = () => paintEngineWarning();
+$('#regen').onclick = async () => {
+  if (!confirm(`Replace the model for "${(CUR && CUR.title) || DISH}" / ${VAR}?\n\n`
+    + 'The current model is overwritten and cannot be recovered. This spends credits '
+    + 'again, and the new one may be worse.')) return;
+  CUR.status = 'running'; paint();
+  const r = await api('/api/generate',
+    {dish: DISH, variant: VAR, engine: $('#engine').value, replace: true});
+  if (r && r.error) say(r.error);
+  CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
+  paint(); refresh();
+};
+
 $('#cancel').onclick = async () => {
   const generating = CUR && CUR.status === 'running';
   if (!confirm(generating
@@ -883,6 +911,22 @@ document.addEventListener('change', e => {
 });
 
 document.addEventListener('click', async e => {
+  const arch = e.target.closest('[data-arch]');
+  if (arch) {
+    e.stopPropagation();
+    await api('/api/archive', {dish: arch.dataset.d, variant: arch.dataset.v,
+                               archived: arch.dataset.arch === '1'});
+    return loadLibrary();
+  }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    e.stopPropagation();
+    if (!confirm(`Delete "${del.dataset.d}" / ${del.dataset.v} permanently?\n\n`
+      + 'The photos, the master and the shipping files all go. This cannot be undone.\n'
+      + 'Archive hides it instead, and keeps the evidence.')) return;
+    await api('/api/delete', {dish: del.dataset.d, only_variant: del.dataset.v});
+    return loadLibrary();
+  }
   const tab = e.target.closest('#stagetabs .minitab');
   if (tab) { STAGE = tab.dataset.stage; FORCE_MASTER = false; return paint(); }
   if (e.target.id === 'forcemaster') { FORCE_MASTER = true; return paint(); }
@@ -943,7 +987,8 @@ async function loadLibrary() {
 function paintLibrary() {
   const f = LIBFILTER;
   const rows = LIB.filter(r =>
-    f === 'all' ? true :
+    f === 'all' ? !r.archived :
+    f === 'archived' ? r.archived :
     f === 'shipping' ? r.shipping :
     f === 'review' ? (r.has_model && !r.verdict) :
     r.verdict === f);
@@ -964,6 +1009,14 @@ function paintLibrary() {
             : '<span class="sub" style="color:var(--amber)">no size</span>'}
         </span>
         ${r.judged_by ? `<span class="sub">judged by ${r.judged_by}</span>` : ''}
+      </span>
+      <span class="cardacts">
+        <button class="mini" data-arch="${r.archived ? '0' : '1'}"
+          data-d="${r.dish}" data-v="${r.variant}"
+          title="${r.archived ? 'Show this again' : 'Hide it from the library. Nothing is deleted.'}"
+        >${r.archived ? 'Unarchive' : 'Archive'}</button>
+        <button class="mini danger" data-del="1" data-d="${r.dish}" data-v="${r.variant}"
+          title="Delete the photos, the master and the shipping files. Permanent.">Delete</button>
       </span>
     </button>`).join('')
     : '<p class="hintline">Nothing here yet.</p>';
