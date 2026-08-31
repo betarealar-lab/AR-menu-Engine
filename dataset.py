@@ -102,6 +102,9 @@ def blank(dish: str, variant: str) -> dict:
         # a callback arrives knowing only the ticket, and because a run whose callback
         # never comes has to be findable and resumable rather than simply stuck.
         "task_id": "", "submitted_utc": "", "engine_expires_utc": "",
+        # Size of the stored master. Known the moment it lands, so the review panel can
+        # decline to hand a browser a 70 MB file instead of finding out by stalling it.
+        "master_bytes": 0, "master_triangles": 0,
         "created_utc": _now(), "judged_by": "", "judged_utc": "",
     }
 

@@ -30,6 +30,7 @@ from pathlib import Path
 
 import dataset
 import engines
+import glb
 import limits
 import optimize
 import storage
@@ -464,6 +465,13 @@ class Handler(BaseHTTPRequestHandler):
                                                kind, Path(path).read_bytes())
         rec["master_keys"] = masters
         rec["model_key"] = masters.get("glb", "")
+        glb_path = result.files.get("glb")
+        if glb_path:
+            try:
+                rec["master_bytes"] = Path(glb_path).stat().st_size
+                rec["master_triangles"] = glb.count_triangles(Path(glb_path))
+            except Exception:      # noqa: BLE001 - a stat failing must not lose the model
+                pass
         rec.update(status="optimising", stage="queued",
                    optimising_since=dataset._now())
         dataset.write(rec)

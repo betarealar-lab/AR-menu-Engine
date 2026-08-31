@@ -135,6 +135,10 @@ def main() -> int:
               "[hidden]{display:none !important}" in page)
         check("model-viewer is loaded", "model-viewer.min.js" in page)
         check("the viewer reports its own failures", "watchViewer" in page)
+        # A 70 MB master must never be handed to a browser just because a tab was clicked.
+        check("a heavy master is not auto-previewed", "MASTER_AUTOLOAD_BYTES" in page)
+        check("the shipping files row is named in plain words",
+              "Shipping files" in page and ">Catalogue<" not in page)
 
         if not master:
             print("\n(no --master given; skipping every geometry test)")

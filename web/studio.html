@@ -328,7 +328,7 @@
       <span class="unit mono">cm</span>
       <span id="scalenote" class="hintline"></span>
     </div>
-    <span class="lbl">Catalogue</span>
+    <span class="lbl">Shipping files</span>
     <div class="exportrow">
       <button id="export-model">Re-optimise</button>
       <span id="exportnote" class="hintline"></span>
@@ -347,6 +347,11 @@ let META = {}, LIST = [], CUR = null, DISH = null, VAR = 'default', PICK_SLOT = 
 /* 'ship' or 'master'. Sticky across dishes on purpose: someone auditing whether the
    optimiser is eating garnish wants to stay on one side of the comparison. */
 let STAGE = 'ship';
+/* Anything past this is not previewed without being asked for. 25 MB is well above a
+   shipping file (3-6 MB) and well below a raw master (70 MB), so it never gets in the
+   way of the thing people actually look at. */
+const MASTER_AUTOLOAD_BYTES = 25 * 1024 * 1024;
+let FORCE_MASTER = false;
 
 const api = (u, body) => fetch(u, body ? {
   method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
@@ -529,6 +534,32 @@ function paint() {
        generation - the catalogue, if any, is from the previous pass. */
     const stg = (shippable && !busy) ? STAGE : 'master';
     const src = `/model?dish=${enc(DISH)}&variant=${enc(VAR)}&stage=${stg}&v=${d.catalogued_utc || d.seconds}`;
+    /* A raw Meshy master is ~70 MB and 1.9M triangles - roughly 216 MB of VRAM before
+       anything is drawn. Handing that to a browser does not fail, it stalls, and the
+       panel looks broken while the tab slowly dies. So the Master tab states what the
+       file is and offers it deliberately, rather than loading it because someone
+       clicked a tab. The shipping file has no such problem and always loads. */
+    /* Records made before master_bytes existed still carry the numbers in the
+       optimiser's stats, so fall back rather than treating an old dish as small. */
+    const st0 = d.export_stats || {};
+    const mbytes = d.master_bytes || st0.master_bytes || 0;
+    const mtris = d.master_triangles || st0.source_triangles || 0;
+    const heavy = stg === 'master' && mbytes > MASTER_AUTOLOAD_BYTES;
+    if (heavy && !FORCE_MASTER) {
+      const mb = (mbytes / 1048576).toFixed(1);
+      const tris = mtris.toLocaleString();
+      stage.innerHTML = `<div class="stagemsg"><span class="lbl">Master preview disabled</span>
+        <p>${mb} MB, ${tris} triangles. Loading it here would use roughly
+        ${Math.round(mtris / 9000)} MB of video memory and stall this tab.
+        It is stored safely in R2 and is what every optimised file is built from.</p>
+        <p><button id="forcemaster">Load it anyway</button></p></div>`;
+      $('#stagetabs').hidden = false;
+      $$('#stagetabs .minitab').forEach(b =>
+        b.setAttribute('aria-pressed', String(b.dataset.stage === stg)));
+      $('#resultmeta').textContent = `master · ${d.engine} · ${d.seconds}s`;
+      paintScale(d);
+      return paintRail(d);
+    }
     stage.innerHTML = `<model-viewer src="${src}"
       camera-controls auto-rotate rotation-per-second="18deg" shadow-intensity="1"
       exposure="1.1" interaction-prompt="none" alt="Generated model of ${DISH}"></model-viewer>
@@ -575,7 +606,10 @@ function paint() {
     $('#stagetabs').hidden = true;
   }
   paintScale(d);
+  paintRail(d);
+}
 
+function paintRail(d) {
   $('#faults').innerHTML = META.faults.map(f =>
     `<button class="fault" data-f="${f}" aria-pressed="${(d.faults || []).includes(f)}">${f}</button>`).join('');
   $$('.mark').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === d.verdict));
@@ -783,7 +817,8 @@ document.addEventListener('change', e => {
 
 document.addEventListener('click', async e => {
   const tab = e.target.closest('#stagetabs .minitab');
-  if (tab) { STAGE = tab.dataset.stage; return paint(); }
+  if (tab) { STAGE = tab.dataset.stage; FORCE_MASTER = false; return paint(); }
+  if (e.target.id === 'forcemaster') { FORCE_MASTER = true; return paint(); }
   /* Delegated for a second reason: #export-model lives inside <template id="tpl-bench">,
      so binding it directly at parse time set .onclick on null, threw, and took every
      line after it - boot() included - down with it. The page loaded and did nothing. */
