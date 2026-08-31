@@ -352,11 +352,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self._shape(rec))
             if path == "/api/settings":
                 rec = dataset.record(dish, variant)
-                tri = int(body.get("triangles") or 0)
+                # -1 is the wire form of AUTO. 0 cannot be, because 0 already means
+                # "not set, use the default" everywhere else in this record.
+                raw_tri = body.get("triangles")
+                tri = int(raw_tri) if raw_tri not in (None, "") else 0
                 tex = int(body.get("texture") or 0)
-                if tri and not 2_000 <= tri <= 500_000:
+                if tri > 0 and not 2_000 <= tri <= 500_000:
                     return self._json({"error": "Triangles must be between 2,000 and "
-                                                "500,000."}, 400)
+                                                "500,000, or Auto."}, 400)
                 if tex and tex not in dataset.TEXTURE_TARGETS:
                     return self._json({"error": f"Texture must be one of "
                                                 f"{dataset.TEXTURE_TARGETS}."}, 400)
@@ -797,7 +800,9 @@ class Handler(BaseHTTPRequestHandler):
 
         settings = rec.get("optimise") or {}
         res = optimize.run(master, tmp / "out", scale=scale or None, on_stage=stage,
-                           triangles=settings.get("triangles") or optimize.TARGET_TRIANGLES,
+                           triangles=(0 if settings.get("triangles") == -1
+                                      else settings.get("triangles")
+                                      or optimize.TARGET_TRIANGLES),
                            texture=settings.get("texture") or optimize.TARGET_TEXTURE)
         stage("storing")
         rec = dataset.record(dish, variant)
@@ -833,14 +838,30 @@ class Handler(BaseHTTPRequestHandler):
         return rec
 
     def _dishes(self) -> list[dict]:
+        """The rail: dishes worth switching between.
+
+        A dish whose every variant is archived does not appear. Archiving is how a
+        library of half-broken attempts is made readable, and a rail that ignored it
+        would undo that in the place it matters most.
+        """
         out = []
         for d in dataset.dishes():
             vs = dataset.variants_of(d)
             recs = [dataset.record(d, v) for v in vs]
-            out.append({"dish": d, "title": dataset.title_of(d),
-                        "variants": vs or ["default"],
-                        "judged": sum(1 for r in recs if r.get("verdict")),
-                        "shipping": sum(1 for r in recs if r.get("catalog_keys"))})
+            if recs and all(r.get("archived") for r in recs):
+                continue
+            live = [r for r in recs if not r.get("archived")]
+            out.append({
+                "dish": d,
+                "title": dataset.title_of(d),
+                "variants": [r["variant"] for r in live] or vs or ["default"],
+                "judged": sum(1 for r in live if r.get("verdict")),
+                "shipping": sum(1 for r in live if r.get("catalog_keys")),
+                "models": sum(1 for r in live if r.get("model_key")),
+                # An empty dish is a name somebody typed and nothing else. Saying so
+                # beats it looking identical to one with work in it.
+                "empty": not any(r.get("frames") or r.get("model_key") for r in live),
+            })
         return out
 
     def _photos(self) -> list[dict]:

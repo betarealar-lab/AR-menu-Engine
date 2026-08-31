@@ -421,6 +421,12 @@ let META = {}, LIST = [], CUR = null, DISH = null, VAR = 'default', PICK_SLOT = 
 /* 'ship' or 'master'. Sticky across dishes on purpose: someone auditing whether the
    optimiser is eating garnish wants to stay on one side of the comparison. */
 let STAGE = 'ship';
+/* Storage keys every dish by a slug; the rail is a list of slugs; DISH held whatever a
+   person typed. So `d.dish === DISH` was false for every renamed or newly created dish
+   and NOTHING ever showed as selected - which is what made the rail feel deceptive.
+   This mirrors dataset.slug so the two sides can be compared. */
+const slug = t => (t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '') || 'untitled';
 /* Anything past this is not previewed without being asked for. 25 MB is well above a
    shipping file (3-6 MB) and well below a raw master (70 MB), so it never gets in the
    way of the thing people actually look at. */
@@ -500,9 +506,12 @@ function paintCredits() {
 async function refresh() {
   LIST = (await api('/api/dishes')).dishes;
   $('#specimens').innerHTML = LIST.map(d => `
-    <button class="spec" data-dish="${d.dish}" aria-current="${d.dish === DISH}">
+    <button class="spec" data-dish="${d.dish}" aria-current="${slug(d.dish) === slug(DISH)}">
       <b>${d.title || d.dish}</b>
-      <small>${d.title ? d.dish + ' · ' : ''}${d.variants.length} variant${d.variants.length === 1 ? '' : 's'}${d.judged ? ` · ${d.judged} judged` : ''}${d.shipping ? ` · ${d.shipping} shipping` : ''}</small>
+      <small>${d.empty ? 'empty — add a photo'
+        : `${d.variants.length} variant${d.variants.length === 1 ? '' : 's'}`
+          + `${d.judged ? ` · ${d.judged} judged` : ''}`
+          + `${d.shipping ? ` · ${d.shipping} shipping` : ''}`}</small>
     </button>`).join('');
 }
 
@@ -803,29 +812,35 @@ function paintOptimiser(d) {
   const o = d.optimise || {};
   const st = d.export_stats || {};
   if (!tri.options.length) {
-    tri.innerHTML = (META.triangle_targets || [20000, 40000, 80000])
-      .map(n => `<option value="${n}">${(n / 1000)}k triangles</option>`).join('')
+    tri.innerHTML = (META.triangle_targets || [0, 20000, 40000, 80000])
+      .map(n => n === 0
+        ? '<option value="-1">Auto — as few as it can</option>'
+        : `<option value="${n}">${(n / 1000)}k triangles</option>`).join('')
       + '<option value="0">custom…</option>';
     tex.innerHTML = (META.texture_targets || [1024, 2048])
-      .map(n => `<option value="${n}">${n}px textures</option>`).join('');
+      .map(n => `<option value="${n}">${n}px textures${n > 2048 ? ' — testing only' : ''}</option>`).join('');
   }
-  const currentTri = o.triangles || st.target_triangles || 40000;
-  const known = [...tri.options].some(x => +x.value === currentTri);
-  tri.value = known ? String(currentTri) : '0';
+  const isAuto = o.triangles === -1 || (!o.triangles && st.auto_triangles);
+  const currentTri = isAuto ? -1 : (o.triangles || st.target_triangles || 40000);
+  const known = isAuto || [...tri.options].some(x => +x.value === currentTri);
+  tri.value = String(isAuto ? -1 : (known ? currentTri : 0));
   custom.hidden = known;
   custom.value = known ? '' : currentTri;
   tex.value = String(o.texture || st.target_texture || 2048);
 
   note.className = 'hintline';
-  if (st.result_triangles) {
+  const got = st.result_triangles;
+  if (!got) { note.textContent = ''; return; }
+  if (st.auto_triangles) {
+    note.textContent = `${got.toLocaleString()} triangles — chosen by the simplifier`;
+  } else {
     const asked = st.target_triangles || currentTri;
-    const got = st.result_triangles;
     // meshopt stops early rather than break the surface, so asked and got often differ.
-    note.textContent = got > asked * 1.15
-      ? `asked ${asked.toLocaleString()}, got ${got.toLocaleString()} — it could not cut further`
-      : `${got.toLocaleString()} triangles`;
-    if (got > asked * 1.15) note.classList.add('warn');
-  } else note.textContent = '';
+    if (got > asked * 1.15) {
+      note.textContent = `asked ${asked.toLocaleString()}, got ${got.toLocaleString()} — it could not cut further`;
+      note.classList.add('warn');
+    } else note.textContent = `${got.toLocaleString()} triangles`;
+  }
 }
 
 function paintScale(d) {
@@ -958,7 +973,11 @@ $('#newdish').onclick = async () => {
   const next = name.trim();
   const r = await api('/api/new-dish', {dish: next, variant: 'default'});
   if (r.error) return say(r.error);
-  DISH = next; VAR = 'default'; CUR = r;
+  /* Store the slug, show the title. Keeping the typed name in DISH is what broke
+     selection in the rail. */
+  await api('/api/rename', {dish: next, title: next});
+  DISH = slug(next); VAR = 'default';
+  CUR = await api(`/api/dish?dish=${enc(DISH)}&variant=${enc(VAR)}`);
   await refresh();
   paint();
   say(`Created "${next}" — add a photo`);
@@ -1053,10 +1072,10 @@ document.addEventListener('change', e => {
     return saveScale({shape: s.id, axis: s.axis, cm: s.cm});
   }
   if (e.target.id === 'opttri' || e.target.id === 'opttex' || e.target.id === 'opttricustom') {
-    const picked = +$('#opttri').value;
-    const triangles = picked || (+$('#opttricustom').value || 0);
-    $('#opttricustom').hidden = !!picked;
-    if (!picked && !triangles) return;          // waiting for a custom number
+    const picked = +$('#opttri').value;          // -1 auto, 0 custom, else a target
+    const triangles = picked === 0 ? (+$('#opttricustom').value || 0) : picked;
+    $('#opttricustom').hidden = picked !== 0;
+    if (picked === 0 && !triangles) return;     // waiting for a custom number
     return saveSettings(triangles, +$('#opttex').value);
   }
   if (e.target.id === 'scaleaxis' || e.target.id === 'scalecm') {

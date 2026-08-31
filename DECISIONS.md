@@ -151,6 +151,29 @@ one of them works.
 
 ---
 
+### Multi-view generates plausible photographs, not useful ones
+
+Tested on sushi, 2026-09-02: the predicted angles were poor, and the model built from
+them came out practically the same as the model from one photograph. Temo ran the same
+experiment through other image models and got the same answer. His verdict: *"1 image
+looks better"*.
+
+That matches the mechanism rather than contradicting it. Generated views add
+**consistency, not information** - with one photo the 3D engine already invents the back
+of the dish, and multi-view only invents it earlier, as pictures. Nothing new about the
+real dish enters the system either way. Sushi is close to the worst case: asymmetric,
+per-piece detail, and a back that is genuinely unknowable from the front.
+
+**Kept as a tool, not a default.** It costs credits, it is offered only when a dish has
+exactly one photo, and the button says what it is. Worth retrying on a round symmetric
+dish - a soup, a bowl - before ruling it out entirely, because the failure mode above is
+specific to arrangement, not to the technique.
+
+The real answer remains four photographs. They carry information; predictions carry
+plausibility, and the pipeline cannot tell the difference.
+
+---
+
 ### Reversed: lean lost, and raw is the default again
 
 Temo compared the two in Blender on 2026-09-02 and the verdict was short - *"raw always

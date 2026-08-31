@@ -51,8 +51,15 @@ SCALE_AXES = ("width", "length", "height")
 # is capped at 2048 on purpose: an 8192px map is ~256 MB of video memory on the diner's
 # phone before anything is drawn, and 4k and 8k belong in GENERATION, where they give
 # the downscaler a better source, never in the file that ships.
-TRIANGLE_TARGETS = [20_000, 40_000, 80_000]
-TEXTURE_TARGETS = [1024, 2048]
+# 0 means AUTO - let the simplifier cut until the surface suffers. It is usually the
+# better answer, because a typed number is a guess about a mesh nobody has looked at.
+TRIANGLE_TARGETS = [0, 20_000, 40_000, 80_000]
+
+# 4096 is here on purpose and is NOT a production setting. An 8192px map costs ~256 MB
+# of video memory on a phone and a 4096px one ~64 MB, against 16 MB at 2048 - which is
+# why Shopify's automated pipeline caps at 2048 and recommends 1024 for mobile. It is
+# available so the difference can be seen on real dishes before it is ruled out.
+TEXTURE_TARGETS = [1024, 2048, 4096]
 
 SHAPES = [
     {"id": "flat-plated", "label": "Flat plated", "axis": "width", "cm": 28},

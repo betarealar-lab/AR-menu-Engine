@@ -309,9 +309,15 @@ def main() -> int:
             check("it refuses to overwrite an existing dish", e.code == 409)
 
         check("meta offers triangle targets", len(meta.get("triangle_targets", [])) >= 3)
-        check("texture targets stop at 2048 - an 8k map is 256 MB of phone VRAM",
-              max(meta.get("texture_targets", [0])) == 2048,
+        # 4096 is temporarily available for comparison on real dishes. 8192 is not, and
+        # must not become available by accident: a 8192px map is ~256 MB of video memory
+        # on a phone, against 64 MB at 4096 and 16 MB at 2048.
+        check("8k is never a shipped texture size",
+              8192 not in meta.get("texture_targets", []),
               str(meta.get("texture_targets")))
+        check("Auto is offered as a triangle target",
+              0 in meta.get("triangle_targets", []),
+              str(meta.get("triangle_targets")))
         out = api("/api/settings", {"dish": dish, "variant": variant,
                                     "triangles": 20000, "texture": 1024})
         check("settings are stored", out["optimise"] == {"triangles": 20000, "texture": 1024},
@@ -329,6 +335,18 @@ def main() -> int:
         except urllib.error.HTTPError as e:
             check("an 8k shipped texture is refused", e.code == 400,
                   json.loads(e.read())["error"])
+        # Auto lets meshoptimizer cut until the surface suffers rather than hitting a
+        # number somebody guessed. On the real master it lands near 15,600 triangles -
+        # far fewer than the 40,000 default, for a marginally SMALLER file, because
+        # textures dominate the payload and geometry barely moves it.
+        api("/api/settings", {"dish": dish, "variant": variant,
+                              "triangles": -1, "texture": 2048})
+        d3 = wait_for(dish, variant)
+        st3 = d3["export_stats"]
+        check("auto is recorded as auto", st3.get("auto_triangles") is True)
+        check("auto cuts further than the 40k default",
+              0 < st3.get("result_triangles", 0) < 40_000,
+              f"{st3.get('result_triangles'):,} triangles")
         api("/api/settings", {"dish": dish, "variant": variant,
                               "triangles": 40000, "texture": 2048})
         wait_for(dish, variant)

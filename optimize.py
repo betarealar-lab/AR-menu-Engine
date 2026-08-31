@@ -43,6 +43,22 @@ import usdz
 TARGET_TRIANGLES = 40_000
 TARGET_TEXTURE = 2048
 
+# `triangles=0` means AUTO: stop guessing a number and let meshoptimizer cut until the
+# surface starts to suffer, then stop. A typed target is a guess about a mesh nobody has
+# looked at - 40,000 is right for a plated salad and wrong for a single dumpling - and
+# meshopt already knows how far it can go, because it measures the error it is
+# introducing. AUTO_ERROR is the only real control: how much deviation is acceptable,
+# as a fraction of the model's size.
+#
+# 0.004 is deliberately tighter than the 0.01 used with an explicit target. With a
+# number to hit, the error budget is the thing that gives way; with no number, the error
+# budget IS the instruction, so it has to be strict enough to protect thin detail -
+# sauce edges, garnish tips - which is exactly what decimation destroys first on food.
+AUTO_ERROR = 0.004
+# A floor, not a target: meshopt will not be asked to go below this ratio of the source,
+# so a 1.9M-triangle master cannot be cut to nothing by a bad error estimate.
+AUTO_FLOOR_RATIO = 0.005
+
 # Which measured extent each dimension name refers to - see glb.bounds. "width" is the
 # widest horizontal span, matching both what a person means by the width of a plate and
 # the `-30cm` convention the hand-optimised MondayGreens models already use.
@@ -120,7 +136,7 @@ def _run(cmd: list[str], cwd: Path) -> tuple[bool, str]:
         return False, f"timed out after {SUBPROCESS_TIMEOUT}s"
 
 
-def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
+def run(master: Path, out_dir: Path, *, triangles: int | None = TARGET_TRIANGLES,
         texture: int = TARGET_TEXTURE, scale: dict | None = None,
         on_stage=None) -> Optimized:
     """Decimate, resize, place and compress. Returns what it managed to produce.
@@ -178,13 +194,18 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         too_big = limits.check_optimise(src_tris, src_mpx)
         if too_big:
             return Optimized(ok=False, toolchain=tc, error=too_big)
-        ratio = min(1.0, triangles / src_tris) if src_tris else 1.0
+        auto = not triangles or triangles <= 0
+        if auto:
+            ratio, error = AUTO_FLOOR_RATIO, AUTO_ERROR
+        else:
+            ratio = min(1.0, triangles / src_tris) if src_tris else 1.0
+            error = 0.01
         ok, log = _run(base + [
             "optimize", str(staged), str(geom),
             "--compress", "false",
             "--texture-compress", "false",
             "--simplify-ratio", f"{ratio:.6f}",
-            "--simplify-error", "0.01",
+            "--simplify-error", f"{error}",
         ], work)
         if not ok:
             return Optimized(ok=False, toolchain=tc, error=f"geometry pass failed: {log}")
@@ -250,7 +271,9 @@ def run(master: Path, out_dir: Path, *, triangles: int = TARGET_TRIANGLES,
         "opt_bytes": opt.stat().st_size,
         "draco_bytes": draco.stat().st_size,
         "shrink": round(master.stat().st_size / max(draco.stat().st_size, 1), 1),
-        "target_triangles": triangles,
+        "target_triangles": 0 if auto else triangles,
+        "auto_triangles": auto,
+        "simplify_error": error,
         "source_triangles": src_tris,
         "result_triangles": glb.count_triangles(draco),
         "target_texture": texture,
