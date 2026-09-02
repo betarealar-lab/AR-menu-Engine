@@ -162,6 +162,13 @@ def main() -> int:
         check("the viewport meta is present and covers the notch",
               'name="viewport"' in page and "viewport-fit=cover" in page)
         check("touch gets 44px targets", "min-height:44px" in page)
+        # The desktop layout is an app shell: body clipped, each pane scrolling inside
+        # its own box. On a phone that leaves nowhere to scroll and the content below
+        # the fold is unreachable, which is exactly what happened.
+        check("the page itself scrolls on phones",
+              "html,body{height:auto;overflow:visible}" in page)
+        check("and the header stays put while it does",
+              "header{position:sticky;top:0" in page)
         check("the shipping files row is named in plain words",
               "Shipping files" in page and ">Catalogue<" not in page)
 

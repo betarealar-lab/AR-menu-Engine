@@ -266,6 +266,20 @@
      hidden outright. */
   .tabbar{display:none}
   @media (max-width:760px){
+    /* THE PAGE SCROLLS. On a desktop this is an app shell - body clipped, each pane
+       scrolling inside its own box - and on a phone that leaves nowhere to scroll at
+       all: the bench clips, the body cannot move, and the content below the fold is
+       simply unreachable. Every one of those boxes is unlocked here and the document
+       becomes the scroller, which is what a phone expects anyway. */
+    html,body{height:auto;overflow:visible}
+    main{height:auto;min-height:0;display:block}
+    .bench{overflow:visible;display:block}
+    .compare{overflow:visible;display:block}
+    .panel{min-height:0}
+    #library,#photos{height:auto;overflow:visible}
+    /* The header holds Run engine, so it stays put rather than scrolling away. */
+    header{position:sticky;top:0;z-index:20}
+
     header{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
            -webkit-overflow-scrolling:touch;scrollbar-width:none;
            padding-right:12px;gap:6px}
