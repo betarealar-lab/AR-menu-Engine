@@ -26,29 +26,36 @@ different repo — `github.com/Nikoloz-Chachua/Restaurant-AR`, working copy at
 | | |
 |---|---|
 | **Repo** | `github.com/betarealar-lab/AR-menu-Engine`, branch `main`, auto-deploys on push |
-| **Scan Studio** | **Cloud Run**, 2 GiB, scales to zero. Deploy: `bash deploy/cloudrun.sh` |
-| ~~Render~~ | `https://ar-menu-engine.onrender.com` — 512 MB, OOM-killed by the first real dish. Kept only until Cloud Run is verified |
-| **Storage** | Cloudflare R2, buckets `betareal-photos` and `betareal-models`. **Meshy deletes its copy after 3 days — R2 is the only copy** |
-| **Engine** | Meshy API, Pro plan (**10 concurrent tasks**), ~1,200 credits shared |
-| **Default preset** | `meshy-7-lean` — remesh to 150k, 2k textures. Same shipped file, 1/3 the memory. `meshy-7` keeps the raw master for comparison |
+| **Scan Studio** | **https://ar-menu-engine.onrender.com** — Render free, 512 MB. Not Cloud Run: it was prepared (`deploy/cloudrun.sh`) and never deployed, because `worker.py` removed the reason to |
+| **Optimiser** | **`worker.py` on Temo's PC**, installed via `deploy/install-worker.ps1`. The 512 MB host cannot open a raw master; a desktop can |
+| **Storage** | Cloudflare R2, `betareal-photos` and `betareal-models`. **Meshy deletes its copy after 3 days — R2 is the only copy** |
+| **Engine** | Meshy API, Pro plan. **10 concurrent tasks. 30 credits a generation** (measured, not published) |
+| **Default preset** | `meshy-7` — raw master, 4k textures. `meshy-7-lean` was removed: judged in Blender and lost |
 | **Users** | temo, niko, gio, davit, ilia — HTTP basic auth via `STUDIO_USERS` |
 
 **Free tier sleeps after ~15 min idle**; first hit then takes ~50s. Normal, not broken.
 
-Health check needs no credentials:
-
 ```bash
 curl https://ar-menu-engine.onrender.com/healthz
-# ok storage=r2 optimizer=gltf-transform
+# ok storage=r2 optimizer=gltf-transform memory=512MB max_triangles~509,230
 ```
 
-If that says `storage=local` the R2 env vars did not load and **anything uploaded dies on
-the next deploy**. If it says `optimizer=none` the Dockerfile was not used.
+`storage=local` means the R2 vars did not load and **anything uploaded dies on the next
+deploy**. `optimizer=none` means the Dockerfile was not used.
 
-**Real data exists:** one dish, `chicken balls in shqmeruli sauce`, one frame, uploaded by
-temo. Not test data — do not delete it.
+### How a dish gets finished, which is not obvious
 
----
+Generation happens on Render. **Optimising does not** — a raw master needs ~830 MB and
+the host has 512. So `worker.py` watches the same R2 from Temo's machine and finishes
+every dish that has a master and no shipping files.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\install-worker.ps1 -Status
+```
+
+**If that says `running: no`, dishes will pile up un-optimised and look broken.** That
+has already happened twice. While the machine is off, generating and judging still work
+and masters are still archived; only the shipping files wait.
 
 ## 3. Environment
 
@@ -208,82 +215,95 @@ These are places where confident advice was wrong. They are the most useful thin
 
 ## 9. Open questions
 
-- ~~Does `should_remesh: false` return the true ~2M master?~~ **Answered 2026-08-29:**
-  the default already does — no `should_remesh` at all returns 1,902,278 triangles.
-  The open question is now the reverse: is Meshy's remesh to 300k *better* on food
-  than our decimation from 1.9M? One generation on `meshy-7-web` against the same
-  dish would show it.
-- What does meshy-7 multi-image actually cost? Read Daily Usage after one call.
-- **Which angle wins?** ⚠ The shape/angle table in `ROADMAP.md` is entirely a guess,
-  including a 40° that revises an earlier 25° guess. The fault tags exist to replace it.
-- What is the first-try approval rate, and what predicts failure? Nothing has been judged yet.
+**Answered, so nobody re-derives them:**
+
+- ~~Does `should_remesh: false` return the true ~2M master?~~ The default already does —
+  no `should_remesh` at all returns 1,902,278 triangles. `target_polycount` is inert
+  without it, and was being sent and ignored on every request.
+- ~~What does a meshy-7 generation cost?~~ **30 credits**, measured against the live
+  balance. ~33 dishes a month on the 1,000-credit Pro plan.
+- ~~Is Meshy's remesh better on food than our decimation?~~ No. Judged in Blender:
+  *"raw always looks better and lean is subpar."*
+- ~~Does multi-view beat one photo?~~ Not on sushi, and not with other image models
+  either. It adds consistency, not information. Kept as a tool, not a default.
+
+**Still open:**
+
+- **Which angle wins?** ⚠ The shape/angle table in `ROADMAP.md` is entirely a guess.
+  The fault tags exist to replace it and nothing has been tagged yet.
+- **What is the first-try approval rate, and what predicts failure?** No dish has been
+  judged yet, so the whole verdict log is empty.
+- **Does multi-view help on a round, symmetric dish** — a soup, a bowl? The sushi result
+  is specific to arrangement, not necessarily to the technique.
+- **What does the multi-view call cost?** Meshy publishes 3–12 credits for that endpoint.
+  Measure it against the balance the way the 30 was measured.
 - **Why did QReal leave food after ~15 restaurants** with Denny's as a client? Either the
   production economics (our thesis) or demand (fatal). Worth an hour.
+- **Does the USDZ actually render on an iPhone?** Built, structurally verified, size
+  matched to the GLB — never opened on the device. Nobody owns one yet.
 
 ---
 
 ## 10. Start here
 
-**Phase 0.1 and 0.2 are done** (2026-08-29). Generation optimises automatically, review
-loads the shipping file with a `Master` toggle beside it, and one real-world dimension is
-baked into that file.
+**Working end to end today:** upload, generate (webhook-driven), optimise, USDZ built
+from the optimised GLB, real-world scale, judge with fault tags, rename, archive, the
+photo shelf, downloads, per-dish optimiser settings, and a phone layout. `check.py`
+covers 107 of those paths and `check_webhook.py` another 17. **Run both before pushing.**
 
-**The host moved to Cloud Run the same night**, because Render's 512 MB could not run the
-optimiser on a real master and failed silently when it tried. `DECISIONS.md` §5 carries
-the measurements and the three rules that came out of it. To deploy:
+**Next, in order:**
 
-```bash
-gcloud auth login                    # interactive, do this yourself
-gcloud config set project <id>
-python deploy/make_env_yaml.py       # .env -> deploy/env.yaml, gitignored
-bash deploy/cloudrun.sh
-```
+**1 · Photo quality checks.** Blur, exposure, glare, colour cast, and consistency across
+frames. Free, algorithmic, ~50 ms an image.
+*Why first: a generation costs **30 credits** and the Pro plan gives ~33 a month.
+Rejecting one bad photo before it is spent is worth more than anything else on this
+list, and it is the foundation of the photo system in ROADMAP Phase 2.*
 
-Next, from `ROADMAP.md`:
+**2 · Job queue** (ROADMAP 1.1). The 11th simultaneous dish account-wide is refused by
+Meshy and currently lost. Work also dies with a closed tab, and `worker.py`'s polling
+loop is the queue in embryo.
 
-**1.1 — Metadata to Postgres.** `models`, `verdicts`, `faults`, `frames` as real tables.
-The verdict log is the research asset and today it cannot be queried at all. One dish to
-migrate.
+**3 · Postgres** — only when the verdict log has enough in it to be worth querying.
+Deliberately deferred; the queue can use R2 conditional writes until then.
 
-**1.2 — The job queue.** Now load-bearing rather than tidy: work runs inside its request,
-which is correct but cannot survive a closed tab, and `--max-instances 1` is holding the
-system together. The queue lifts both.
+**Not a phase:** hosting. It is a slider — 512 MB refuses raw masters, 2 GiB accepts
+them. Choose it, do not build it.
 
-Both cost $0. Still open and cheap: **the Meshy API ignores `target_polycount`** — we
-send 300,000 and the master came back with 1,902,278 triangles. `should_remesh: true`
-probably explains it, and one generation would settle it along with what meshy-7 really
-costs (Settings → API → Daily Usage).
+**Needs no code and blocks the most:** dishes shot four ways, with the fault tags
+actually ticked. Every dish so far came from ONE photograph. Meshy takes four, and
+nobody has compared them.
 
 ## 11. Repo map
 
 ```
-studio.py          the web app: upload, generate, judge, optimise, library
-web/studio.html    its UI. Responsive; drawer under 900px
-engines/           Engine interface + Meshy. Registry is the swap point
-optimize.py        master -> opt + draco. Shells to glTF-Transform (Node)
-glb.py             GLB surgery in pure Python: texture resize, triangle count
-dataset.py         dishes, variants, frames, verdicts. Keys and records
+studio.py          the web app: upload, generate, judge, optimise, library, photos
+web/studio.html    its UI. One file. Desktop shell + phone layout below 760px
+worker.py          optimises on THIS machine what a 512 MB host cannot. The thing
+                   that has to be running for anything to ship
+engines/base.py    Engine interface. start/collect is the async pair; generate waits
+engines/meshy.py   generation. 30 credits, 10 concurrent, output expires in 3 days
+engines/images.py  multi-view: three predicted angles from one photo
+optimize.py        master -> opt + draco + usdz. Shells to glTF-Transform (Node)
+glb.py             GLB surgery in pure Python: textures, triangles, bounds, placement
+usdz.py            optimised GLB -> USDZ with usd-core. NEVER converts the master
+limits.py          what this container may use, and refusing jobs that will not fit
+dataset.py         dishes, variants, frames, verdicts, tickets. Keys and records
 storage.py         R2 or local disk behind one interface
 config.py          .env loading
-worker.py          optimises on THIS machine what a small host cannot. `--once`,
-                   `--dry-run`, or leave it watching. Same R2, no credits
+check.py           107 checks over a real server on a temp store. Never touches R2
 check_webhook.py   17 checks of the submit/callback path with a stub engine, no credits
-check.py           40 checks over a real server on a temp store. Run before pushing:
-                   `python check.py --master <a-meshy-master.glb>`. Never touches R2
-limits.py          what this container may use, and refusing jobs that will not fit
-usdz.py            optimised GLB -> USDZ for iOS. Never converts the master
+pull.py            pull a dish's files to a folder and compare them, for Blender
 preflight.py       verify key + R2 round-trip before spending anything
 runner.py          batch re-run the dataset against another engine
+deploy/            install-worker.ps1 (the one that matters), cloudrun.sh, env yaml
 Dockerfile         Python + Node, for the optimise stage
-category-map.html  source of the published competitive matrix artifact
 ```
 
 Elsewhere on the machine:
 
 ```
 C:\Users\temot\BetaReal scaleable\           the menu platform (Niko's repo)
-  scripts\optimize-model.mjs                 the hand-built optimiser this one automates
-C:\Users\temot\Desktop\Meshy models\         the 99.3 MB burrata salad master
-C:\Users\temot\MondayGreens\models\          5 finished client dishes, Draco + USDZ
+C:\Users\temot\Desktop\BetaReal-inspect\    models pulled for Blender
+C:\Users\temot\MondayGreens\models\         5 finished client dishes, the quality bar
 C:\Users\temot\BetaReal-Prospecting\         sales pipeline, registry DB, docs
 ```
