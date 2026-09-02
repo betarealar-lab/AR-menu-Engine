@@ -154,6 +154,14 @@ def main() -> int:
         check("a heavy master is not auto-previewed", "MASTER_AUTOLOAD_BYTES" in page)
         check("the picker warns before the credits are spent",
               "paintEngineWarning" in page)
+        # Measured at 390x780 before this existed: the header wrapped to five rows and
+        # took 29% of the screen. These are the three pieces that stop it recurring.
+        check("phones get a bottom tab bar", 'id="tabbar"' in page)
+        check("the header is one scrolling row on phones",
+              "header{flex-wrap:nowrap;overflow-x:auto" in page)
+        check("the viewport meta is present and covers the notch",
+              'name="viewport"' in page and "viewport-fit=cover" in page)
+        check("touch gets 44px targets", "min-height:44px" in page)
         check("the shipping files row is named in plain words",
               "Shipping files" in page and ">Catalogue<" not in page)
 

@@ -1,6 +1,8 @@
 <!doctype html>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- viewport-fit=cover so the bottom tab bar can sit under the iOS home indicator
+     rather than above a white strip. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Scan Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -254,12 +256,70 @@
     #status{max-width:150px}
   }
 
+  /* ── phones ──────────────────────────────────────────────────────
+     Measured at 390x780 before this existed: the header wrapped to five rows and took
+     228px - 29% of the screen - and four controls were under the 44px that a finger
+     can reliably hit. The fix is not smaller text, it is fewer things in the header.
+
+     One row that scrolls sideways, the three views moved to a bottom bar, and the two
+     controls that only duplicate something else (Rail, which the drawer already does)
+     hidden outright. */
+  .tabbar{display:none}
+  @media (max-width:760px){
+    header{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+           -webkit-overflow-scrolling:touch;scrollbar-width:none;
+           padding-right:12px;gap:6px}
+    header::-webkit-scrollbar{display:none}
+    /* Nothing in a scrolling toolbar may shrink, or everything becomes unreadable
+       rather than one thing becoming reachable. */
+    header > *{flex:0 0 auto}
+    header .sp{display:none}       /* a stretching spacer has no job in a scrolling row */
+    /* In a row that scrolls, ORDER decides what is reachable without swiping. The
+       working controls come first; the ones used once a day scroll off to the right. */
+    #menu{order:-6} .wordmark{order:-5} #variant{order:-4}
+    #run{order:-3} #regen{order:-3} #cancel{order:-3} #enginewarn{order:-2}
+    #engine{order:-1}
+    #newvariant{order:5} #rename{order:6} #export{order:7} #credits{order:8}
+    header button,header select{min-height:44px}
+    #railtoggle,#view-bench,#view-lib,#view-photos{display:none}
+    .wordmark{font-size:12px;letter-spacing:.14em}
+    #status{display:none}          /* the same words are already under the plate */
+
+    .tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;
+            background:var(--bench);border-top:1px solid var(--rule)}
+    .tabbar button{flex:1;height:56px;border:0;border-radius:0;background:transparent;
+                   color:var(--ink-dim);font:500 11px/1 'Archivo',sans-serif;
+                   letter-spacing:.09em;text-transform:uppercase}
+    .tabbar button[aria-pressed="true"]{color:var(--chalk);
+                                        box-shadow:inset 0 2px 0 var(--chalk)}
+    /* Room for the bar, plus the iOS home indicator. */
+    main,#library,#photos{padding-bottom:calc(56px + env(safe-area-inset-bottom,0px))}
+    aside{inset:54px auto calc(56px + env(safe-area-inset-bottom,0px)) 0}
+
+    /* Touch has no hover, so a control that appears on hover is invisible on a phone. */
+    .cardacts{opacity:1}
+    .iconbtn{height:30px;min-width:30px;font-size:11px}
+    .fault,.mark{min-height:40px}
+    .libgrid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+    /* Two per row, explicitly. Left to flex-wrap the cards landed one per row and
+       wasted half the width of a screen that has none to spare. */
+    .phshots{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .shotcard{width:auto}
+    .shotcard img{width:100%;height:auto;aspect-ratio:1}
+  }
+
+  /* Under ~480px the brand is costing 104px of a row that has real work in it, and the
+     app is already identified by the drawer and the tab bar. */
+  @media (max-width:480px){ .wordmark{display:none} }
+
   @media (max-width:620px){
     :root{--pad:14px}
-    header{height:auto;min-height:54px;flex-wrap:wrap;padding:9px var(--pad);gap:8px}
+    /* NOT flex-wrap here. This block is narrower than the 760px one but comes after it,
+       so anything it re-declares wins - which is exactly how the header went on wrapping
+       to five rows after being told not to. Header layout lives in the 760px block. */
     main{height:auto;min-height:calc(100% - 54px)}
-    aside{inset:0 auto 0 0;padding-top:66px}
-    .scrim{inset:0}
+    aside{inset:54px auto calc(56px + env(safe-area-inset-bottom,0px)) 0;padding-top:12px}
+    .scrim{inset:54px 0 0 0}
     .bench{grid-template-rows:auto auto}
     .compare{padding:var(--pad);gap:16px}
     .rail{grid-template-columns:1fr;gap:6px 0;padding:14px var(--pad) 22px}
@@ -268,13 +328,12 @@
     .verdicts button{flex:1 1 30%;min-height:44px}
     .fault{padding:9px 12px}          /* touch targets */
     button,select,input{min-height:40px}
-    #variant,#engine{max-width:132px}
+    #variant,#engine{max-width:150px}
     #newvar{width:100%;order:10}
     .slot .lb{font-size:10px;padding:4px 6px}
-  .cell.predicted::after{content:'PREDICTED';position:absolute;left:6px;bottom:6px;
-    font:500 9px/1 'Archivo',sans-serif;letter-spacing:.08em;color:var(--amber);
-    background:rgba(0,0,0,.65);padding:3px 5px;border-radius:2px;pointer-events:none}
-    #status{width:100%;max-width:none;order:11}
+    .cell.predicted::after{content:'PREDICTED';position:absolute;left:6px;bottom:6px;
+      font:500 9px/1 'Archivo',sans-serif;letter-spacing:.08em;color:var(--amber);
+      background:rgba(0,0,0,.65);padding:3px 5px;border-radius:2px;pointer-events:none}
   }
 
   /* the plate is square by design; keep it that way but never let it overflow */
@@ -313,6 +372,15 @@
   <div class="bench" id="bench"></div>
 </main>
 <div class="scrim" id="scrim"></div>
+
+<!-- Phones only. The three views are the most-used control in the app and they were
+     buried in a header that wrapped to five rows; at the bottom they are one thumb away
+     and cost no vertical space that content was using. -->
+<nav class="tabbar" id="tabbar">
+  <button data-view="bench" aria-pressed="true">Bench</button>
+  <button data-view="library" aria-pressed="false">Models</button>
+  <button data-view="photos" aria-pressed="false">Photos</button>
+</nav>
 
 <section id="photos" hidden>
   <header>
@@ -1262,12 +1330,15 @@ function showView(which) {
   $('#view-lib').setAttribute('aria-pressed', String(lib));
   $('#view-photos').setAttribute('aria-pressed', String(pho));
   $('#view-bench').setAttribute('aria-pressed', String(!lib && !pho));
+  $$('#tabbar button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.view === which)));
   if (lib) loadLibrary();
   if (pho) loadPhotos();
 }
 
 $('#view-lib').onclick = () => showView('library');
 $('#view-photos').onclick = () => showView('photos');
+$$('#tabbar button').forEach(b => { b.onclick = () => showView(b.dataset.view); });
 
 /* The rail duplicates the Models view, which is a fair complaint - but it is the only
    way to move between variants of a dish without leaving the bench, which is exactly

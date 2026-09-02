@@ -26,6 +26,7 @@ Nothing here spends credits. Optimising is pure CPU on a master that is already 
 from __future__ import annotations
 
 import argparse
+import datetime
 import shutil
 import sys
 import time
@@ -38,7 +39,9 @@ import storage
 from config import load_env
 
 ROOT = Path(__file__).resolve().parent
-POLL_SECONDS = 20
+# A generation takes ~3 minutes, so checking every minute is already faster than work
+# can arrive, and it keeps the R2 request count down when this runs all day.
+POLL_SECONDS = 60
 
 
 def needs_work(rec: dict) -> str:
@@ -162,7 +165,18 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="report only, change nothing")
     ap.add_argument("--out", type=Path, default=ROOT / "out" / "_worker")
     ap.add_argument("--every", type=int, default=POLL_SECONDS)
+    ap.add_argument("--log", type=Path, default=None,
+                    help="append output here as well - used when started at logon, "
+                         "where there is no console to print to")
     a = ap.parse_args()
+
+    if a.log:
+        # Started hidden at logon there is nowhere for print() to go, and a worker that
+        # fails silently is the thing this whole file exists to stop happening.
+        a.log.parent.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = open(a.log, "a", encoding="utf-8", buffering=1)
+        stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"\n=== started {stamp} ===")
 
     load_env()
     print("BetaReal optimise worker")
