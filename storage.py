@@ -86,6 +86,16 @@ class Backend:
         import io as _io
         return _io.BytesIO(data), len(data)
 
+    def put_if_absent(self, bucket: str, key: str, data: bytes,
+                      content_type: str = "application/octet-stream") -> bool:
+        """Write only if nothing is there. True if this caller created it.
+
+        The one primitive a queue actually needs: of two workers racing for the same
+        job, exactly one must win. Everything in jobs.py rests on this being atomic
+        rather than a read followed by a write, which is a race with extra steps.
+        """
+        raise NotImplementedError
+
     def download(self, bucket: str, key: str, dest: Path) -> bool:
         """Object straight to a file, never through a bytes object.
 
@@ -140,6 +150,18 @@ class LocalBackend(Backend):
             return None, 0
         return open(p, "rb"), p.stat().st_size
 
+    def put_if_absent(self, bucket, key, data, content_type="application/octet-stream"):
+        # "x" is the filesystem's own atomic create: it fails if the path exists, and
+        # the check and the create are one operation rather than two.
+        p = self._p(bucket, key)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(p, "xb") as fh:
+                fh.write(data)
+            return True
+        except FileExistsError:
+            return False
+
     def download(self, bucket, key, dest):
         p = self._p(bucket, key)
         if not p.is_file():
@@ -191,6 +213,24 @@ class R2Backend(Backend):
             return r["Body"], int(r.get("ContentLength") or 0)
         except Exception:
             return None, 0
+
+    def put_if_absent(self, bucket, key, data, content_type="application/octet-stream"):
+        """R2 honours S3 conditional writes. Verified against the real bucket:
+
+            IfNoneMatch="*"   first write  -> OK
+                              second write -> PreconditionFailed
+
+        which is what makes a database unnecessary for the job queue.
+        """
+        try:
+            _r2().put_object(Bucket=self._b(bucket), Key=key, Body=data,
+                             ContentType=content_type, IfNoneMatch="*")
+            return True
+        except Exception as e:                                   # noqa: BLE001
+            code = getattr(e, "response", {}).get("Error", {}).get("Code", "")
+            if code in ("PreconditionFailed", "ConditionalRequestConflict"):
+                return False
+            raise
 
     def download(self, bucket, key, dest):
         """Streamed in chunks by boto3 - peak memory is the chunk, not the object."""
