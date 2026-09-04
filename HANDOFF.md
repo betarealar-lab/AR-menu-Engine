@@ -13,7 +13,7 @@ or pricing comes up).
 ## 1. What this is
 
 BetaReal turns real restaurant dishes into 3D models a diner sees in AR on their own table,
-from a QR code, with no app. Tbilisi, five founders, one paying client.
+from a QR code, with no app. Tbilisi, five founders, **two paying clients** — Monday Greens, and Corner at Tabidze (scanned 2026-09-05). Food and Market is scheduled for 2026-09-07.
 
 **This repo is the engine and the scanning tool.** The customer-facing menu platform is a
 different repo — `github.com/Nikoloz-Chachua/Restaurant-AR`, working copy at
