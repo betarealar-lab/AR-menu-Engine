@@ -1,6 +1,6 @@
 # Handoff — read this first
 
-Written 2026-08-29, at the end of a long session. Everything a fresh session needs that is
+Written 2026-08-29, last revised 2026-09-05 (the job queue went in). Everything a fresh session needs that is
 **not** already in the other docs. The other docs carry the reasoning; this one carries the
 state, the environment, and the mistakes already made so they are not made again.
 
@@ -15,9 +15,25 @@ or pricing comes up).
 BetaReal turns real restaurant dishes into 3D models a diner sees in AR on their own table,
 from a QR code, with no app. Tbilisi, five founders, **two paying clients** — Monday Greens, and Corner at Tabidze (scanned 2026-09-05). Food and Market is scheduled for 2026-09-07.
 
-**This repo is the engine and the scanning tool.** The customer-facing menu platform is a
-different repo — `github.com/Nikoloz-Chachua/Restaurant-AR`, working copy at
-`C:\Users\temot\BetaReal scaleable`. The two are not yet connected; joining them is Phase 3.
+**This repo is the engine and the scanning tool.**
+
+**BetaReal splits into two products** (settled 2026-09-05, DECISIONS §9):
+
+- **Premium** — we scan. Pro camera, many photos, hand-graded, judged by a founder. This
+  is Monday Greens, Corner at Tabidze, Food and Market. It is the path that exists today.
+- **Self-serve** — the restaurant does it. Their photos, their menu, their template,
+  their approval. **This is what is being built**, and it is the global-launch product.
+
+The self-serve menu — the Astro half, where the models live — does **NOT** go next to
+Niko's repo. He created `github.com/Nikoloz-Chachua/Restaurant-AR` as a temporary home on
+a personal account, with the live Supabase project on a personal account too; the BetaReal
+GitHub and Cloudflare accounts exist to end that dependence. New self-serve tenants only,
+in parallel; replacing the existing renderer happens later, after testing. **Read
+DECISIONS §9 before touching any of it, and §9.7 before touching anything of Niko's:
+nothing in his repos or their production is to be modified, ever, without being asked.**
+
+Niko's working copy at `C:\Users\temot\BetaReal scaleable` may be **read** to understand
+the data model and the templates. That is all it is for.
 
 ---
 
@@ -45,9 +61,21 @@ deploy**. `optimizer=none` means the Dockerfile was not used.
 
 ### How a dish gets finished, which is not obvious
 
-Generation happens on Render. **Optimising does not** — a raw master needs ~830 MB and
-the host has 512. So `worker.py` watches the same R2 from Temo's machine and finishes
-every dish that has a master and no shipping files.
+**Everything goes through the job queue now** (`jobs.py`, wired in 2026-09-05). Pressing
+Generate or Optimise writes a job to R2 and returns; it does not do the work. Both hosts
+watch the same queue and each claims only what it can finish:
+
+```
+Render (512 MB)   claims  generate     -> submits to Meshy, webhook collects
+Temo's PC         claims  optimise     -> a raw master needs ~830 MB
+```
+
+A claim is an atomic conditional write, so two people pressing Generate at the same
+instant cannot both take the same dish, and work no longer dies with a closed tab or a
+deploy. `worker.py` also **reconciles** every five minutes: work that ought to have a job
+and has none gets one, which covers everything finished before the queue existed.
+
+`worker.py` still has to be running for anything to ship — that has not changed.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File deploy\install-worker.ps1 -Status
@@ -166,6 +194,8 @@ attributable.
 | `triangles` parameter was accepted, written to stats, and never applied | Converted to `--simplify-ratio` against a real triangle count |
 | A 24 MB camera JPEG base64s to ~32 MB; four of those is a ~130 MB request body | Browser downscales before upload; engine skips re-encode when already sized |
 | Background server started with `&` inside a Bash call dies when the call returns | Use `run_in_background` |
+| **`studio.py --engine` defaulted to `meshy-7-lean`, which is not in the registry.** Lean was removed on 2026-08-31 and the default that named it was not; `python studio.py` with no flag built a Studio whose fallback engine could not be constructed. It never bit because the page always sends an engine explicitly — a dead default that looked alive, exactly like `target_polycount` | Default is `meshy-7`. Found 2026-09-05 |
+| **`jobs.claim` re-listed the leases once per candidate job.** On a queue of twenty that was twenty-one R2 listings to take one job, on a loop running every few seconds on two machines. Listing is a Class A operation with 1,000,000 free a month | One listing per claim, and `stats()` down from four to three. Measured and asserted in `check_jobs.py` — the count is now a test, not a hope |
 
 ---
 
@@ -246,10 +276,16 @@ These are places where confident advice was wrong. They are the most useful thin
 
 ## 10. Start here
 
-**Working end to end today:** upload, generate (webhook-driven), optimise, USDZ built
-from the optimised GLB, real-world scale, judge with fault tags, rename, archive, the
-photo shelf, downloads, per-dish optimiser settings, and a phone layout. `check.py`
-covers 107 of those paths and `check_webhook.py` another 17. **Run both before pushing.**
+**Working end to end today:** upload, generate (queued, webhook-driven), optimise
+(queued, claimed by whichever host can finish it), USDZ built from the optimised GLB,
+real-world scale, judge with fault tags, rename, archive, the photo shelf, downloads,
+per-dish optimiser settings, queue depth and dead letters in the header, and a phone
+layout.
+
+**Run all three before pushing.** `check.py` covers 122 paths, `check_webhook.py` 23 and
+`check_jobs.py` 46 — 191 in total, all passing as of 2026-09-05. `check_webhook.py` and
+`check_jobs.py` use stubs and cost nothing; `check.py` needs a real master GLB, and there
+is one at `C:\Users\temot\Desktop\BetaReal-inspect\chicken-balls-in-shqmeruli-sauce--raw-full\model.glb`.
 
 **Next, in order:**
 
@@ -259,27 +295,38 @@ frames. Free, algorithmic, ~50 ms an image.
 Rejecting one bad photo before it is spent is worth more than anything else on this
 list, and it is the foundation of the photo system in ROADMAP Phase 2.*
 
-**2 · Job queue** (ROADMAP 1.1). The 11th simultaneous dish account-wide is refused by
-Meshy and currently lost. Work also dies with a closed tab, and `worker.py`'s polling
-loop is the queue in embryo.
+**~~2 · Job queue~~ (ROADMAP 1.1) — DONE 2026-09-05.** Both hosts claim from one queue on
+R2, leases replace the in-memory `RUNNING` set, Meshy's concurrent ceiling is actually
+held, failures dead-letter and are visible in the header. The three non-obvious parts —
+why a submitted generation keeps its lease, why a failed generation is never retried, and
+why the reconciler counts dead jobs — are in DECISIONS §5.1.
 
 **3 · Postgres** — only when the verdict log has enough in it to be worth querying.
-Deliberately deferred; the queue can use R2 conditional writes until then.
+Deliberately deferred; the queue uses R2 conditional writes and that is enough.
+
+**4 · The self-serve menu (the Astro half).** The delivery half of the product, and the
+next real piece. **Do not start it without reading DECISIONS §9.**
 
 **Not a phase:** hosting. It is a slider — 512 MB refuses raw masters, 2 GiB accepts
 them. Choose it, do not build it.
 
-**Needs no code and blocks the most:** dishes shot four ways, with the fault tags
-actually ticked. Every dish so far came from ONE photograph. Meshy takes four, and
-nobody has compared them.
+**About "thirty dishes shot four ways":** ROADMAP Part 5 calls this the highest-value
+action. Temo has corrected that (2026-09-05) — real dishes come from real venues on real
+scanning days, he shoots and judges them, and he will say when he wants help. It is not
+this codebase's call and not a reason to stall. **The system gets built first.**
 
 ## 11. Repo map
 
 ```
-studio.py          the web app: upload, generate, judge, optimise, library, photos
+studio.py          the web app: upload, judge, library, photos. It ENQUEUES work
+                   and claims back whatever this host can finish
 web/studio.html    its UI. One file. Desktop shell + phone layout below 760px
-worker.py          optimises on THIS machine what a 512 MB host cannot. The thing
-                   that has to be running for anything to ship
+jobs.py            the queue. One object per job on R2; a conditional write IS the
+                   lock. Leases, retries, dead letters, Meshy's ceiling
+pipeline.py        what a job DOES - generate, collect, optimise. No web server and
+                   no worker loop around it, so both hosts run the same code
+worker.py          claims what a 512 MB host cannot, and reconciles work that has
+                   no job. The thing that has to be running for anything to ship
 engines/base.py    Engine interface. start/collect is the async pair; generate waits
 engines/meshy.py   generation. 30 credits, 10 concurrent, output expires in 3 days
 engines/images.py  multi-view: three predicted angles from one photo
@@ -290,8 +337,10 @@ limits.py          what this container may use, and refusing jobs that will not 
 dataset.py         dishes, variants, frames, verdicts, tickets. Keys and records
 storage.py         R2 or local disk behind one interface
 config.py          .env loading
-check.py           107 checks over a real server on a temp store. Never touches R2
-check_webhook.py   17 checks of the submit/callback path with a stub engine, no credits
+check.py           122 checks over a real server on a temp store. Never touches R2
+check_webhook.py   23 checks of the submit/callback path with a stub engine, no credits
+check_jobs.py      46 checks of the queue, including eight threads racing one claim
+                   and what an idle poll costs in R2 listings. Free, no server
 pull.py            pull a dish's files to a folder and compare them, for Blender
 preflight.py       verify key + R2 round-trip before spending anything
 runner.py          batch re-run the dataset against another engine

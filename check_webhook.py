@@ -95,6 +95,19 @@ def hook(secret, task_id):
         return e.code
 
 
+def wait_field(dish, variant, field, limit=30):
+    """Poll until a field is set. Submitting is asynchronous now - the request queues a
+    job and returns, and a claimer picks it up a moment later - so a check that read the
+    record straight after the POST would be testing the race, not the behaviour."""
+    end = time.time() + limit
+    while time.time() < end:
+        d = api(f"/api/dish?dish={dish}&variant={variant}")
+        if d.get(field):
+            return d
+        time.sleep(0.25)
+    return api(f"/api/dish?dish={dish}&variant={variant}")
+
+
 def wait_status(dish, variant, want, limit=180):
     end = time.time() + limit
     while time.time() < end:
@@ -112,7 +125,7 @@ def main():
     app = Path(tempfile.mkdtemp(prefix="hooktest-"))
     (app / "web").mkdir(parents=True, exist_ok=True)
     for f in ("studio.py", "glb.py", "optimize.py", "dataset.py", "storage.py",
-              "config.py", "limits.py", "usdz.py"):
+              "config.py", "limits.py", "usdz.py", "jobs.py", "pipeline.py"):
         shutil.copy(REPO / f, app / f)
     shutil.copy(REPO / "web" / "studio.html", app / "web" / "studio.html")
     shutil.copytree(REPO / "engines", app / "engines", dirs_exist_ok=True)
@@ -121,7 +134,12 @@ def main():
                     + STUB.replace("MASTER_PATH", str(MASTER).replace("\\", "\\\\")),
                     encoding="utf-8")
 
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", MESHY_WEBHOOK_SECRET=SECRET)
+    # A submitted generation holds its lease for JOBS_PENDING_SECONDS and is re-claimed
+    # when that expires - which is how a callback that never arrives is recovered. Three
+    # seconds here so the test exercises the real mechanism rather than waiting out the
+    # 240 s production clock.
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", MESHY_WEBHOOK_SECRET=SECRET,
+               JOBS_PENDING_SECONDS="3", JOBS_POLL="1")
     for k in list(env):
         if k.startswith("R2_") or k == "STUDIO_USERS":
             env.pop(k)
@@ -150,8 +168,11 @@ def main():
         t = time.time()
         api("/api/generate", {"dish": dish, "variant": variant, "engine": "stub"})
         elapsed = time.time() - t
-        d = api(f"/api/dish?dish={dish}&variant={variant}")
         check("generate returns immediately", elapsed < 5, f"{elapsed:.2f}s")
+        check("the request itself does no work",
+              not api(f"/api/dish?dish={dish}&variant={variant}")["task_id"]
+              or elapsed < 1, f"{elapsed:.2f}s")
+        d = wait_field(dish, variant, "task_id")
         check("status is running", d["status"] == "running", d["status"])
         check("the ticket is recorded", d["task_id"] == "stub-task-0001", d["task_id"])
         check("submitted time recorded", bool(d["submitted_utc"]))
@@ -188,21 +209,26 @@ def main():
                                     base64.b64encode(buf.getvalue()).decode(),
                             "name": "f.jpg"})
         api("/api/generate", {"dish": dish2, "variant": variant, "engine": "stub"})
-        d = api(f"/api/dish?dish={dish2}&variant={variant}")
+        d = wait_field(dish2, variant, "task_id")
         check("submitted and waiting", d["status"] == "running")
-        # Age the submission past the nudge threshold without waiting for real time.
-        sys.path.insert(0, str(app))
-        os.chdir(app)
-        import dataset, datetime
-        rec = dataset.record(dish2, variant)
-        rec["submitted_utc"] = (datetime.datetime.now(datetime.timezone.utc)
-                                - datetime.timedelta(minutes=5)).isoformat(timespec="seconds")
-        dataset.write(rec)
-        api(f"/api/dish?dish={dish2}&variant={variant}")        # this poll is the nudge
+        ticket = d["task_id"]
+        # Nobody calls back. The lease on the submitted job expires after
+        # JOBS_PENDING_SECONDS, the job is claimed again, and the claimer sees a task id
+        # on the record and COLLECTS instead of resubmitting. No page has to be open and
+        # no credits are spent twice.
         d = wait_status(dish2, variant, ("review", "failed"))
         check("recovered without any callback", d["status"] == "review",
               d.get("error") or d.get("export_error"))
         check("and produced the files", sorted(d["catalog_keys"]) == ["draco", "opt", "usdz"])
+        check("without asking the engine for a second generation",
+              d["task_id"] == ticket, f"{ticket} -> {d['task_id']}")
+
+        print("\n== the queue empties itself ==")
+        st = api("/api/meta")["jobs"]
+        check("meta reports the queue", isinstance(st, dict) and "queued" in st, str(st))
+        check("nothing is left waiting", st["queued"] == 0, str(st))
+        check("nothing is left running", st["running"] == 0, str(st))
+        check("and nothing died", st["dead"] == 0, str(st.get("dead_jobs")))
     finally:
         proc.terminate()
         os.chdir(REPO)

@@ -167,6 +167,118 @@ def main() -> int:
         st = jobs.stats()
         check("stats report the queue", st["queued"] == 1 and st["dead"] == 0, str(st))
         check("stats name the ceiling", st["meshy_ceiling"] == jobs.MESHY_CONCURRENT)
+
+        print("\n== one dish, one job ==")
+        for j in jobs.queued():
+            jobs.complete(j)
+        for j in jobs.dead():
+            jobs.revive(j.id)
+        for j in jobs.queued():
+            jobs.complete(j)
+        check("the queue starts empty", not jobs.queued() and not jobs.dead())
+        jobs.enqueue("optimise", "Chicken Shqmeruli", "ring-25")
+        # Names are slugged on the way in. Everything else in the system treats
+        # "Chicken Shqmeruli" and "chicken-shqmeruli" as one dish; a queue that did not
+        # would happily generate it twice, at 30 credits a time.
+        check("a differently-spelt name is the same job",
+              jobs.exists("optimise", "chicken-shqmeruli", "ring-25"))
+        check("a different KIND of work is not",
+              not jobs.exists("generate", "Chicken Shqmeruli", "ring-25"))
+        check("nor is a different variant",
+              not jobs.exists("optimise", "Chicken Shqmeruli", "ring-45"))
+
+        print("\n== a dead job stays dead ==")
+        # The reconciler in worker.py asks `exists` before putting work back. If dead
+        # jobs did not count, a permanently failing dish would be re-queued every five
+        # minutes forever - free for an optimise, 30 credits a lap for a generation.
+        doomed = jobs.enqueue("optimise", "cursed dish", "default")
+        for _ in range(jobs.MAX_ATTEMPTS):
+            jobs.claim(anything, "w")
+            jobs.fail(doomed, "no")
+        check("it reached the dead letters", len(jobs.dead()) == 1)
+        check("and still counts as existing, so nothing re-queues it",
+              jobs.exists("optimise", "cursed dish", "default"))
+        check("the dead letters are listed, not just counted",
+              jobs.stats()["dead_jobs"][0]["dish"] == "cursed-dish",
+              str(jobs.stats()["dead_jobs"]))
+
+        print("\n== cancelling ==")
+        jobs.enqueue("generate", "doomed dish", "default")
+        jobs.enqueue("optimise", "doomed dish", "default")
+        jobs.enqueue("optimise", "innocent dish", "default")
+        check("cancel takes both jobs for the dish",
+              jobs.cancel("doomed dish", "default") == 2)
+        check("and leaves everyone else alone",
+              jobs.exists("optimise", "innocent dish", "default"))
+        jobs.enqueue("generate", "half dish", "default")
+        jobs.enqueue("optimise", "half dish", "default")
+        check("cancel can be narrowed to one kind",
+              jobs.cancel("half dish", "default", kind="generate") == 1)
+        check("the other kind survives",
+              jobs.exists("optimise", "half dish", "default")
+              and not jobs.exists("generate", "half dish", "default"))
+
+        print("\n== a submitted generation keeps its slot ==")
+        # This is the one that makes the Meshy ceiling real. Generation SUBMITS and
+        # returns in about a second; if the job completed there, `active` would drop to
+        # zero and nine machines could submit ninety tasks while the eleventh was still
+        # refused - the exact bug the queue exists to stop. So a submitted job keeps its
+        # lease, on a shorter clock, and the webhook closes it.
+        for j in jobs.queued():
+            jobs.complete(j)
+        sent = jobs.enqueue("generate", "in flight", "default")
+        claimed = jobs.claim(anything, "render-1")
+        jobs.heartbeat(claimed, "render-1", seconds=jobs.PENDING_SECONDS)
+        check("it still counts against the ceiling after submitting",
+              jobs.active("generate") == 1)
+        check("and nobody else can take it", jobs.claim(anything, "render-2") is None)
+        lease = jobs._leases()[0]
+        held = ((datetime.fromisoformat(lease["expires_utc"])
+                 - datetime.now(timezone.utc)).total_seconds())
+        check("on the short clock, not the full lease",
+              held <= jobs.PENDING_SECONDS + 1 < jobs.LEASE_SECONDS, f"{held:.0f}s")
+
+        print("\n== a webhook that never comes ==")
+        # Expire the lease by hand rather than waiting it out.
+        import json as _json
+        lease["expires_utc"] = (datetime.now(timezone.utc)
+                                - timedelta(seconds=1)).isoformat(timespec="seconds")
+        storage.backend().put("photos", lease["_key"],
+                              _json.dumps(lease).encode(), "application/json")
+        check("the slot is released", jobs.active("generate") == 0)
+        again = jobs.claim(anything, "render-2")
+        check("and the job is claimable again, still the same job",
+              again is not None and again.id == sent.id)
+        check("it was never counted as a failure", again.attempts == 0)
+
+        print("\n== what an idle poll costs ==")
+        # Listing an R2 prefix is a Class A operation - the metered kind, 1,000,000 free
+        # a month. Two hosts poll this queue all day, so the number of listings per poll
+        # is a real bill, not a style question. `claim` used to re-list the leases once
+        # per candidate job; on a queue of twenty that was twenty-one listings to take
+        # one job.
+        for j in jobs.queued():
+            jobs.complete(j)
+        calls = []
+        inner = storage.LocalBackend.list_keys
+        storage.LocalBackend.list_keys = (
+            lambda self, bucket, prefix="": calls.append(prefix) or inner(self, bucket, prefix))
+        try:
+            jobs.claim(anything, "meter")
+            idle = len(calls)
+            calls.clear()
+            for i in range(20):
+                jobs.enqueue("optimise", f"dish {i}", "default")
+            jobs.claim(lambda job: "cannot", "meter")     # walks all twenty, takes none
+            twenty = len(calls)
+            calls.clear()
+            jobs.stats()
+            st = len(calls)
+        finally:
+            storage.LocalBackend.list_keys = inner
+        check("an empty poll lists twice: leases, then jobs", idle == 2, f"{idle}")
+        check("a queue of twenty still lists twice", twenty == 2, f"{twenty} listings")
+        check("stats lists three times: leases, queued, dead", st == 3, f"{st}")
     finally:
         storage.backend = real_backend
         shutil.rmtree(store, ignore_errors=True)

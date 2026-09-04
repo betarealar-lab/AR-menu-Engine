@@ -22,7 +22,6 @@ import hmac
 import io
 import json
 import os
-import shutil
 import threading
 import urllib.parse
 import zipfile
@@ -33,11 +32,12 @@ import dataset
 import engines
 import glb
 from engines import images
+import jobs
 import limits
 import optimize
+import pipeline
 import storage
 from config import load_env
-from engines import Job
 
 ROOT = Path(__file__).resolve().parent
 SLOTS = dataset.SLOTS
@@ -50,32 +50,33 @@ FAULTS = [
     "tall or stacked", "uniform texture", "reflective tableware", "inconsistent grade",
 ]
 
-RUNNING: set[tuple[str, ...]] = set()
-RUN_LOCK = threading.Lock()
-
-# A run this process has no thread for is a GHOST: the record says `optimising` but the
-# worker that wrote it is gone - the container restarted, was redeployed, or was killed.
-# RUNNING lives in memory, so it empties on restart while the record does not, and the
-# old guards then refused to start a new run forever. That wedged the first real dish on
-# 2026-08-29 with no error and no way back. Until there is a real job queue (ROADMAP 1.2)
-# this is the recovery: if nothing is running here, the record is not to be believed.
-STALE_AFTER_SECONDS = 300
-
-# Jobs run INSIDE the request that asked for them, not on a detached thread.
+# Requests ENQUEUE; they do not do the work.
 #
-# A thread that outlives its request is only safe on a host that keeps the process alive
-# and scheduled for as long as the thread needs. Render did not - the container was
-# OOM-killed and the work vanished. Cloud Run does not either: CPU is allocated for the
-# duration of a request, and an instance with no request in flight can be throttled to
-# nothing or shut down entirely. Both hosts break the same assumption, so the assumption
-# goes rather than the host.
+# What used to be here was an in-memory `RUNNING` set plus a rule for spotting "ghosts" -
+# records that said `optimising` with no thread behind them. It could not work, and the
+# reason is worth keeping: the set lived in one process, so it emptied on every restart
+# while the record in R2 did not, and the guards then refused to start a new run forever.
+# That wedged the first real dish on 2026-08-29 with no error and no way back.
 #
-# Generation is ~3 minutes and optimisation ~10 seconds; both fit inside a request with
-# room to spare, and the page already polls the record for progress. What this does not
-# survive is the tab being closed mid-generation. The real answer to that is the job
-# queue in ROADMAP 1.2 - a `jobs` table and a worker - and this is the honest interim:
-# work that is either done or visibly not done, never silently lost.
-INLINE_JOBS = os.environ.get("JOBS", "inline").strip().lower() != "thread"
+# A lease in R2 is the same idea done properly. It is visible to every process, it
+# expires on its own when the holder dies, and a job whose lease has expired is simply
+# claimable again - which is what a ghost always should have been. See jobs.py.
+#
+# The claim loop below runs in a thread, and that IS safe in a way the old detached
+# per-job threads were not: if the container is killed mid-job the lease expires and
+# somebody else picks the work up, rather than the work disappearing with the thread.
+#
+# Thirty seconds, and it costs nothing in responsiveness: WAKE below is set the instant
+# work is enqueued here, so this only ever waits out the full interval when the work
+# came from somewhere else. What it does buy is a bill. Listing an R2 prefix is a Class
+# A operation - 1,000,000 free a month - and a claim is two listings (measured, see
+# check_jobs.py). At 30 s that is ~173,000 a month; at the 5 s this started as it would
+# have been over a million on its own, before the worker and the UI were counted.
+CLAIM_POLL_SECONDS = float(os.environ.get("JOBS_POLL", "30"))
+
+# Set when work is enqueued, so a press of Generate starts in milliseconds instead of
+# waiting out a poll.
+WAKE = threading.Event()
 
 
 # The balance is an external call, and /api/meta runs on every page load. Cached, so
@@ -97,29 +98,34 @@ def credits_left() -> int | None:
     return _BALANCE["credits"]
 
 
-def webhook_secret() -> str:
-    """The secret path segment Meshy calls us on, or empty when nobody can call us.
+def enqueue(kind: str, dish: str, variant: str, **payload) -> None:
+    """Put work on the queue and wake the claim loop.
 
-    Empty is the honest default: a laptop has no address the internet can reach, so the
-    Studio waits through generation there instead of submitting into silence.
+    Nothing runs in the request. The page already polls the record, so the only thing
+    the caller loses is the illusion that pressing a button and the work happening are
+    the same event - which is exactly the illusion that lost a generation every time a
+    tab was closed.
     """
-    return os.environ.get("MESHY_WEBHOOK_SECRET", "").strip()
+    jobs.enqueue(kind, dish, variant, **payload)
+    WAKE.set()
 
 
-def _dispatch(fn, *args) -> None:
-    if INLINE_JOBS:
-        fn(*args)
-    else:
-        threading.Thread(target=fn, args=args, daemon=True).start()
+def claim_loop(out_dir: Path, default_engine: str) -> None:
+    """Take jobs this host can finish, forever.
 
-
-def _is_ghost(rec: dict, key: tuple[str, ...]) -> bool:
-    if rec.get("status") != "optimising":
-        return False
-    with RUN_LOCK:
-        if key in RUNNING:
-            return False
-    return True
+    On the free tier the container sleeps when idle, so this loop sleeps with it. That
+    is not a regression - nothing ran while it was asleep before either - and the queue
+    is durable, so the work is still there when a request, or a Meshy callback, wakes
+    the container up.
+    """
+    while True:
+        try:
+            while pipeline.work_once(out_dir, default_engine, log=lambda *_: None):
+                pass
+        except Exception:      # noqa: BLE001 - a bad poll must never kill the loop
+            pass
+        WAKE.wait(CLAIM_POLL_SECONDS)
+        WAKE.clear()
 
 
 def _model_key(rec: dict, stage: str) -> str:
@@ -236,6 +242,10 @@ class Handler(BaseHTTPRequestHandler):
                     "default_engine": self.engine_name,
                     "storage": storage.describe(), "you": who,
                     "optimizer": optimize.describe(),
+                    # Queue depth and the dead-letter list. A dead `generate` is 30
+                    # credits already spent with nothing to show, so it belongs
+                    # somewhere a person actually looks - not only in a log.
+                    "jobs": jobs.stats(),
                 })
             if path == "/api/dishes":
                 return self._json({"dishes": self._dishes()})
@@ -250,8 +260,6 @@ class Handler(BaseHTTPRequestHandler):
                                    rec.get("master_keys", {}).get("png", ""), "image/png")
             if path == "/api/dish":
                 q = self._q()
-                # Reading a dish is also when we notice one that has gone quiet.
-                self._nudge(dataset.record(q["dish"], q.get("variant", "default")))
                 return self._json(self._detail(q["dish"], q.get("variant", "default")))
             if path == "/frame":
                 q = self._q()
@@ -329,14 +337,15 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json({"error": "A dish is between 1 and 200 cm."}, 400)
                 rec["scale"] = {"axis": axis, "cm": cm, "shape": body.get("shape", ""),
                                 "set_by": who, "set_utc": dataset._now()} if cm else {}
-                key = (dataset.slug(dish), dataset.slug(variant), "opt")
-                live = rec["status"] in ("running", "optimising") and not _is_ghost(rec, key)
-                if rec.get("model_key") and not live:
+                if rec.get("model_key") and not jobs.exists("optimise", dish, variant):
                     rec.update(status="optimising", stage="queued",
                                optimising_since=dataset._now())
                     dataset.write(rec)
-                    _dispatch(self._optimize, dish, variant, who)
+                    self._queue_optimise(dish, variant, who)
                 else:
+                    # Already queued or in flight: the size is on the record, and the
+                    # optimiser re-reads it after each pass, so the run in progress
+                    # picks it up rather than shipping the number it started with.
                     dataset.write(rec)
                 return self._json(self._shape(dataset.record(dish, variant)))
             if path == "/api/new-dish":
@@ -368,11 +377,11 @@ class Handler(BaseHTTPRequestHandler):
                 dataset.write(rec)
                 # Settings only mean anything once they are applied, so applying them is
                 # the same action - five seconds, no credits.
-                if rec.get("model_key") and rec["status"] not in ("running", "optimising"):
+                if rec.get("model_key") and not jobs.exists("optimise", dish, variant):
                     rec.update(status="optimising", stage="queued",
                                optimising_since=dataset._now())
                     dataset.write(rec)
-                    _dispatch(self._optimize, dish, variant, who)
+                    self._queue_optimise(dish, variant, who)
                 return self._json(self._shape(dataset.record(dish, variant)))
             if path == "/api/multiview":
                 # Predicts three further angles from the one photograph that exists and
@@ -431,24 +440,26 @@ class Handler(BaseHTTPRequestHandler):
                                " Meshy had already been asked to generate, so credits may"
                                " still have been spent." if rec.get("task_id") else ""))
                 dataset.write(rec)
-                with RUN_LOCK:
-                    RUNNING.discard((dataset.slug(dish), dataset.slug(variant)))
-                    RUNNING.discard((dataset.slug(dish), dataset.slug(variant), "opt"))
+                # Off the queue as well, or the next claim would start the very run
+                # this call exists to stop. A worker already inside one reads the
+                # record, sees `cancelled`, and stops by itself.
+                jobs.cancel(dish, variant)
                 return self._json(self._shape(dataset.record(dish, variant)))
             if path == "/api/optimize":
                 rec = dataset.record(dish, variant)
                 if not rec.get("model_key"):
                     return self._json({"error": "Nothing generated yet."}, 400)
-                key = (dataset.slug(dish), dataset.slug(variant), "opt")
-                if rec["status"] in ("running", "optimising") and not _is_ghost(rec, key):
+                # No ghost rule any more. A record saying `optimising` with no job
+                # behind it is simply a record with no job behind it, and this puts one
+                # there; a record that DOES have one is left alone.
+                if jobs.exists("optimise", dish, variant):
                     return self._json({"status": rec["status"]})
                 rec.update(status="optimising", stage="queued", export_error="",
                            optimising_since=dataset._now())
                 dataset.write(rec)
-                _dispatch(self._optimize, dish, variant, who)
+                self._queue_optimise(dish, variant, who)
                 return self._json({"ok": True})
             if path == "/api/generate":
-                key = (dataset.slug(dish), dataset.slug(variant))
                 rec = dataset.record(dish, variant)
                 # Meshy takes 1-4 images. Four is better, one is a real generation, and
                 # refusing three because it is not four just wastes a dish someone shot.
@@ -465,13 +476,16 @@ class Handler(BaseHTTPRequestHandler):
                                  "REPLACES it - the current one cannot be recovered. "
                                  "Use Regenerate if that is what you want.",
                         "needs_replace": True}, 409)
-                with RUN_LOCK:
-                    if key in RUNNING:
-                        return self._json({"status": "running"})
-                    RUNNING.add(key)
-                rec.update(status="running", error="", model_key="")
+                if jobs.exists("generate", dish, variant):
+                    return self._json({"status": "running"})
+                # Cleared BEFORE the job is queued: a claimer that sees a task id on the
+                # record collects instead of submitting, which is what stops a webhook
+                # that never arrived from costing 30 credits twice. A stale id left here
+                # would make a deliberate Regenerate collect the OLD model instead.
+                rec.update(status="running", error="", model_key="", task_id="",
+                           stage="queued", submitted_utc="")
                 dataset.write(rec)
-                _dispatch(self._generate, dish, variant, body.get("engine"), who)
+                enqueue("generate", dish, variant, who=who, engine=body.get("engine"))
                 return self._json({"ok": True})
             self._send(404, b"not found", "text/plain")
         except Exception as e:  # noqa: BLE001
@@ -512,167 +526,14 @@ class Handler(BaseHTTPRequestHandler):
         # is our problem, not a reason for them to stop calling.
         self._send(200, b"ok", "text/plain")
         if task_id:
-            threading.Thread(target=self._resume, args=(task_id,), daemon=True).start()
+            threading.Thread(target=pipeline.resume_task, daemon=True,
+                             args=(task_id, self.out_dir, self.engine_name)).start()
 
-    # A webhook that never arrives must not strand a dish. Meshy can disable a webhook
-    # after repeated delivery failures, a deploy can land in the wrong second, and a
-    # network can simply eat one. So the page's own polling doubles as a safety net:
-    # if a submitted dish has been quiet for longer than a generation usually takes,
-    # ask Meshy directly. Cheap, because it only fires for records actually in flight.
-    NUDGE_AFTER_SECONDS = 45
-
-    def _nudge(self, rec: dict) -> None:
-        if rec.get("status") != "running" or not rec.get("task_id"):
-            return                           # includes cancelled - never nudge those
-        since = rec.get("submitted_utc") or ""
-        try:
-            age = (datetime.datetime.now(datetime.timezone.utc)
-                   - datetime.datetime.fromisoformat(since)).total_seconds()
-        except ValueError:
-            age = self.NUDGE_AFTER_SECONDS + 1
-        if age < self.NUDGE_AFTER_SECONDS:
-            return
-        key = (dataset.slug(rec["dish"]), dataset.slug(rec["variant"]))
-        with RUN_LOCK:
-            if key in RUNNING:
-                return
-        threading.Thread(target=self._resume, args=(rec["task_id"],),
-                         daemon=True).start()
-
-    def _resume(self, task_id: str) -> None:
-        """Turn a ticket into files. Safe to call twice for the same task."""
-        owner = dataset.owner_of_task(task_id)
-        if not owner:
-            return
-        dish, variant = owner
-        key = (dataset.slug(dish), dataset.slug(variant))
-        with RUN_LOCK:
-            if key in RUNNING:
-                return
-            RUNNING.add(key)
-        tmp = self.out_dir / "_run" / f"{key[0]}--{key[1]}"
-        try:
-            rec = dataset.record(dish, variant)
-            if rec.get("status") == "cancelled":
-                return                       # abandoned; do not spend work finishing it
-            if rec.get("model_key") and rec.get("task_id") == task_id:
-                return                       # already collected; a duplicate delivery
-            engine = engines.build(rec.get("engine") or self.engine_name)
-            tmp.mkdir(parents=True, exist_ok=True)
-            res = engine.collect(task_id, key[0], tmp)
-            if res.pending:
-                rec = dataset.record(dish, variant)
-                if res.expires_utc:
-                    rec["engine_expires_utc"] = res.expires_utc
-                if rec.get("status") == "running":
-                    rec["stage"] = f"generating {res.progress}%" if res.progress else "generating"
-                    dataset.write(rec)
-                return                       # not finished; another call will come
-            self._store_result(dish, variant, res, rec.get("generated_by", ""))
-        except Exception as e:  # noqa: BLE001
-            rec = dataset.record(dish, variant)
-            rec.update(status="failed", error=f"{type(e).__name__}: {e}")
-            dataset.write(rec)
-        finally:
-            with RUN_LOCK:
-                RUNNING.discard(key)
-            shutil.rmtree(tmp, ignore_errors=True)
-
-    def _store_result(self, dish: str, variant: str, result, who: str) -> None:
-        """Engine output -> masters in R2 -> optimise. Shared by both paths."""
-        rec = dataset.record(dish, variant)
-        rec["seconds"] = result.seconds or rec.get("seconds", 0)
-        if not result.ok:
-            rec.update(status="failed", error=result.error)
-            dataset.write(rec)
-            return
-        masters = {}
-        for ext, path in result.files.items():
-            kind = "png" if ext == "thumb" else ext
-            masters[kind] = dataset.save_model(dish, variant, rec.get("engine") or "",
-                                               kind, Path(path).read_bytes())
-        rec["master_keys"] = masters
-        rec["model_key"] = masters.get("glb", "")
-        glb_path = result.files.get("glb")
-        if glb_path:
-            try:
-                rec["master_bytes"] = Path(glb_path).stat().st_size
-                rec["master_triangles"] = glb.count_triangles(Path(glb_path))
-            except Exception:      # noqa: BLE001 - a stat failing must not lose the model
-                pass
-        rec.update(status="optimising", stage="queued",
-                   optimising_since=dataset._now())
-        dataset.write(rec)
-        self._optimize(dish, variant, who)
-
-    def _generate(self, dish: str, variant: str, engine_name: str | None, who: str) -> None:
-        """Hand the dish to the engine.
-
-        Where a callback can reach us (MESHY_WEBHOOK_SECRET set), this SUBMITS and
-        returns. Generation is ~175 seconds of Meshy's GPU and none of ours; waiting
-        through it held a whole container - two gigabytes, doing nothing - and made
-        every dish cost thirteen times the compute it needs. It also meant a closed
-        tab, a deploy or a reclaimed instance destroyed work that was already paid for.
-
-        Where no callback can reach us - a laptop, `runner.py` - it falls back to
-        waiting, because that is better than never finishing.
-        """
-        name = engine_name or self.engine_name
-        key = (dataset.slug(dish), dataset.slug(variant))
-        # Per variant: the finally clause empties this directory, and two dishes
-        # generating at once would delete each other's staged frames mid-call.
-        tmp = self.out_dir / "_run" / f"{key[0]}--{key[1]}"
-        release = True
-        try:
-            engine = engines.build(name)
-            # Engines take file paths, so stage the frames locally for the call only.
-            tmp.mkdir(parents=True, exist_ok=True)
-            paths = []
-            for i, blob in enumerate(dataset.frames(dish, variant)):
-                path = tmp / f"{key[0]}-{key[1]}-{i}.jpg"
-                path.write_bytes(blob)
-                paths.append(path)
-
-            job = Job(dish=key[0], images=paths)
-            rec = dataset.record(dish, variant)
-            rec["engine"] = name
-            rec["generated_by"] = who
-            dataset.write(rec)
-
-            if webhook_secret() and hasattr(engine, "start"):
-                started = engine.start(job)
-                rec = dataset.record(dish, variant)
-                if started.error or not started.task_id:
-                    rec.update(status="failed", error=started.error or "no task id")
-                    dataset.write(rec)
-                    return
-                # The ticket is recorded BEFORE anything else can happen, and indexed
-                # so a callback can find its way home. If this process dies in the next
-                # second, the dish is still recoverable and the credits are not lost.
-                rec.update(task_id=started.task_id, submitted_utc=dataset._now(),
-                           status="running", error="")
-                dataset.write(rec)
-                dataset.claim_task(started.task_id, dish, variant)
-                return
-
-            result = engine.generate(job, tmp)
-            rec = dataset.record(dish, variant)
-            rec["task_id"] = result.task_id
-            dataset.write(rec)
-            self._store_result(dish, variant, result, who)
-        except Exception as e:  # noqa: BLE001
-            rec = dataset.record(dish, variant)
-            rec.update(status="failed", error=f"{type(e).__name__}: {e}")
-            dataset.write(rec)
-        finally:
-            if release:
-                with RUN_LOCK:
-                    RUNNING.discard(key)
-            for f in tmp.glob("*"):
-                try:
-                    f.unlink()
-                except OSError:
-                    pass
+    # There is no `_nudge` any more. A webhook that never arrives used to be caught by
+    # the page's own polling, which meant recovery needed somebody to have the tab open.
+    # The queue does it without an audience: a submitted generation keeps its lease on a
+    # short clock (jobs.PENDING_SECONDS), and when that expires the job is claimed again
+    # and COLLECTS - it never resubmits, so the recovery costs nothing.
 
     # 8 MB of GLB at a time. Big enough that a 70 MB master is ~9 writes, small enough
     # that the process never holds a whole model in memory to hand it to a browser.
@@ -721,112 +582,12 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:         # noqa: BLE001 - closing a stream must never raise
                 pass
 
-    def _optimize(self, dish: str, variant: str, who: str) -> None:
-        """Master -> the files a menu ships, at real-world size.
-
-        Runs automatically after generation, again whenever the scale changes, and by
-        hand from the rail. Always lands on `review`: if it fails, the master is still
-        there and still judgeable, it just is not shippable yet.
-
-        Only one run per variant at a time, and a size typed WHILE one is running is not
-        lost - the loop re-reads the record afterwards and runs again if the number moved.
-        Without that, changing 28 to 35 mid-run would save the 35, ship the 28, and show
-        no sign of the disagreement.
-        """
-        key = (dataset.slug(dish), dataset.slug(variant), "opt")
-        with RUN_LOCK:
-            if key in RUNNING:
-                return
-            RUNNING.add(key)
-        # Per variant, not shared: two dishes optimising at once would otherwise write
-        # into one directory and rmtree it from under each other.
-        tmp = self.out_dir / "_opt" / f"{key[0]}--{key[1]}"
-        try:
-            for _ in range(3):
-                rec = dataset.record(dish, variant)
-                if rec.get("status") == "cancelled":
-                    return
-                applied = rec.get("scale") or {}
-                if not self._optimize_once(dish, variant, who, rec, applied, tmp):
-                    return
-                after = dataset.record(dish, variant)
-                if (after.get("scale") or {}) == applied:
-                    return
-                # The size moved while that pass ran. Go back to `optimising` before
-                # running again, so the page keeps polling instead of showing a file
-                # it is about to replace.
-                after.update(status="optimising", stage="queued",
-                             optimising_since=dataset._now())
-                dataset.write(after)
-            # Three passes and the size is still moving under us. Stop chasing it, but
-            # never leave the record saying `optimising` with nothing running - that is
-            # a spinner the page polls forever.
-            rec = dataset.record(dish, variant)
-            rec.update(status="review", stage="", optimising_since="")
-            dataset.write(rec)
-        except Exception as e:  # noqa: BLE001
-            rec = dataset.record(dish, variant)
-            rec.update(status="review", stage="", optimising_since="",
-                       export_error=f"{type(e).__name__}: {e}")
-            dataset.write(rec)
-        finally:
-            with RUN_LOCK:
-                RUNNING.discard(key)
-            shutil.rmtree(tmp, ignore_errors=True)
-
-    def _optimize_once(self, dish: str, variant: str, who: str, rec: dict,
-                       scale: dict, tmp: Path) -> bool:
-        """One pass. False means stop - it failed and the record already says so."""
-        def stage(name: str) -> None:
-            """One small write per stage. The page shows it, and a run that dies leaves
-            the name of the step it died in - the only reason we would ever know."""
-            r = dataset.record(dish, variant)
-            if r.get("status") == "optimising":
-                r["stage"] = name
-                dataset.write(r)
-
-        shutil.rmtree(tmp, ignore_errors=True)
-        tmp.mkdir(parents=True, exist_ok=True)
-        stage("fetching master")
-        master = tmp / "master.glb"
-        # Streamed to disk, never held as bytes: a 70 MB master plus the copy every
-        # reader makes of it is most of a 512 MB container on its own.
-        if not dataset.fetch_model(rec["model_key"], master):
-            r = dataset.record(dish, variant)
-            r.update(status="review", stage="", optimising_since="",
-                     export_error=f"master not found in storage: {rec['model_key']}")
-            dataset.write(r)
-            return False
-
-        settings = rec.get("optimise") or {}
-        res = optimize.run(master, tmp / "out", scale=scale or None, on_stage=stage,
-                           triangles=(0 if settings.get("triangles") == -1
-                                      else settings.get("triangles")
-                                      or optimize.TARGET_TRIANGLES),
-                           texture=settings.get("texture") or optimize.TARGET_TEXTURE)
-        stage("storing")
+    def _queue_optimise(self, dish: str, variant: str, who: str) -> None:
+        """Queue the optimise and wake the loop. Whether THIS host runs it is not
+        decided here - `pipeline.can_run` decides that, per host, at claim time."""
         rec = dataset.record(dish, variant)
-        if not res.ok:
-            rec.update(status="review", stage="", optimising_since="",
-                       export_error=res.error)
-            dataset.write(rec)
-            return False
-
-        catalog = {}
-        for kind, path in res.files.items():
-            name = {"draco": "model_draco.glb", "opt": "model_opt.glb",
-                    "usdz": "model.usdz"}.get(kind, path.name)
-            catalog[kind] = dataset.save_catalog(dish, variant, name, path.read_bytes())
-        # The USDZ is now BUILT from the optimised GLB (optimize.py step 5), not carried
-        # over from the master. Carrying it meant iOS got a 74.5 MB, 1.9M-triangle,
-        # 190 cm file while everyone else got 3 MB at 22 cm. The master's own USDZ stays
-        # in master_keys, untouched, like every other master artefact.
-
-        rec.update(status="review", stage="", optimising_since="",
-                   catalog_keys=catalog, export_stats=res.stats,
-                   catalogued_utc=dataset._now(), catalogued_by=who, export_error="")
-        dataset.write(rec)
-        return True
+        enqueue("optimise", dish, variant, who=who,
+                triangles=int(rec.get("master_triangles") or 0))
 
     # ---------- shaping ----------
 
@@ -1054,7 +815,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, default=ROOT / "out")
-    ap.add_argument("--engine", default="meshy-7-lean")
+    # meshy-7, not meshy-7-lean: lean was removed on 2026-08-31 after losing a
+    # Blender comparison, and nothing noticed that the default still named it. The
+    # registry has no such engine, so `python studio.py` with no flag built a Studio
+    # whose fallback engine could not be constructed. It never bit only because the
+    # page always sends an engine explicitly.
+    ap.add_argument("--engine", default="meshy-7")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8765)))
     ap.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     a = ap.parse_args()
@@ -1069,12 +835,21 @@ def main() -> int:
     print(f"  engine  : {a.engine}")
     print(f"  optimizer: {optimize.describe()}")
     print(f"  memory  : {limits.describe()}")
-    print(f"  jobs    : {'inline (in-request)' if INLINE_JOBS else 'background threads'}")
+    print(f"  jobs    : queue on {storage.backend().kind}, claiming every {CLAIM_POLL_SECONDS:g}s")
+    blocked = limits.check_optimise(1_902_278, 37.7)
+    print("  optimise: " + ("generation only here - a raw master does not fit, so\n"
+                            "            worker.py finishes those"
+                            if blocked else
+                            "raw masters fit; this host can finish a dish alone"))
     print(f"  users   : {', '.join(accounts) if accounts else 'OPEN - no auth (set STUDIO_USERS)'}")
     print(f"  listen  : http://{a.host}:{a.port}")
     if a.host != "127.0.0.1" and not accounts:
         print("\n  !! Reachable beyond this machine with no password. Set STUDIO_USERS.")
     print("\n  Ctrl+C to stop.")
+    # Claiming starts before the server does, so a job left queued by the last
+    # deploy is picked up on boot rather than waiting for somebody to press
+    # something.
+    threading.Thread(target=claim_loop, args=(a.out, a.engine), daemon=True).start()
     try:
         ThreadingHTTPServer((a.host, a.port), Handler).serve_forever()
     except KeyboardInterrupt:

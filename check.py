@@ -90,7 +90,7 @@ def main() -> int:
     app = Path(tempfile.mkdtemp(prefix="studio-check-"))
     (app / "web").mkdir(parents=True, exist_ok=True)
     for f in ("studio.py", "glb.py", "optimize.py", "dataset.py", "storage.py",
-              "config.py", "limits.py", "usdz.py"):
+              "config.py", "limits.py", "usdz.py", "jobs.py", "pipeline.py"):
         shutil.copy(REPO / f, app / f)
     shutil.copy(REPO / "web" / "studio.html", app / "web" / "studio.html")
     shutil.copytree(REPO / "engines", app / "engines", dirs_exist_ok=True)
@@ -413,6 +413,64 @@ def main() -> int:
         api("/api/archive", {"dish": dish, "variant": variant, "archived": False})
         check("and it can be brought back",
               api(f"/api/dish?dish={dish}&variant={variant}").get("archived") is False)
+
+        print("\n== work is queued, not done in the request ==")
+        import jobs as jobs_mod
+        meta_now = api("/api/meta")
+        check("meta carries the queue", isinstance(meta_now.get("jobs"), dict),
+              str(meta_now.get("jobs"))[:80])
+        for field in ("queued", "running", "dead", "meshy_ceiling"):
+            check(f"meta names {field}", field in meta_now["jobs"])
+        # An optimise used to run inside the POST. On a 512 MB host it could not run at
+        # all, and the request either blocked for 43 seconds or the container was killed
+        # holding the only record of the work. Now the POST writes a job and returns.
+        t0 = time.time()
+        api("/api/optimize", {"dish": dish, "variant": variant})
+        check("the request returns without doing the work", time.time() - t0 < 2,
+              f"{time.time() - t0:.2f}s")
+        def mine(kind="optimise"):
+            return [j for j in jobs_mod.queued()
+                    if j.kind == kind and j.dish == dataset.slug(dish)
+                    and j.variant == dataset.slug(variant)]
+        # Pressed again straight away, before the first has finished. The old guard was
+        # an in-memory set that only the process holding it could see; this one is the
+        # queue itself, so a second host pressing at the same instant is covered too.
+        api("/api/optimize", {"dish": dish, "variant": variant})
+        check("pressing it twice does not queue it twice", len(mine()) <= 1,
+              f"{len(mine())} jobs")
+        d = wait_for(dish, variant)
+        check("and the work still lands", d["status"] == "review" and bool(d["catalog_keys"]),
+              d.get("export_error", ""))
+        # The record reaches `review` inside the run; the job object is deleted a beat
+        # later, when the claimer completes it. So drain rather than assume.
+        for _ in range(40):
+            st = api("/api/meta")["jobs"]
+            if not st["queued"] and not st["running"]:
+                break
+            time.sleep(0.5)
+        check("the queue drains to empty", st["queued"] == 0 and st["running"] == 0,
+              str(st))
+        check("with nothing dead-lettered", st["dead"] == 0, str(st.get("dead_jobs")))
+        # A dead letter nobody can see is money spent quietly, which is the failure this
+        # queue was built to end. The pill lives in the header, not inside tpl-bench.
+        check("the page has a queue indicator", 'id="queue"' in page)
+        check("it is outside the bench template",
+              page.index('id="queue"') < page.index('id="tpl-bench"'))
+        check("and it names dead jobs, not just counts them", "dead_jobs" in page)
+
+        print("\n== a cancelled dish is taken off the queue ==")
+        # Cancelling used to clear an in-memory set, which the next process did not
+        # have. If the job stayed queued, the very run being cancelled would start again
+        # a few seconds later on whichever host claimed it.
+        rec = dataset.record(dish, variant)
+        was_before_cancel = dict(rec)
+        rec.update(status="optimising", stage="queued")
+        dataset.write(rec)
+        jobs_mod.enqueue("optimise", dish, variant, who="check")
+        check("a job is waiting", jobs_mod.exists("optimise", dish, variant))
+        api("/api/cancel", {"dish": dish, "variant": variant})
+        check("cancel removes it", not jobs_mod.exists("optimise", dish, variant))
+        dataset.write(was_before_cancel)
 
         print("\n== cancelling ==")
         try:

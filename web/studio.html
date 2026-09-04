@@ -189,6 +189,8 @@
   .run.risky{border-color:var(--amber)}
   #credits{font-size:11.5px;color:var(--ink-dim);white-space:nowrap}
   #credits.low{color:var(--amber)} #credits.out{color:var(--red)}
+  #queue{font-size:11.5px;color:var(--ink-dim);white-space:nowrap}
+  #queue.busy{color:var(--ink)} #queue.dead{color:var(--red)}
   .hintline{font-size:12px;color:var(--ink-faint)}
   .hintline.warn{color:var(--amber)}
   .hintline.ok{color:var(--chalk)}
@@ -294,6 +296,7 @@
     #run{order:-3} #regen{order:-3} #cancel{order:-3} #enginewarn{order:-2}
     #engine{order:-1}
     #newvariant{order:5} #rename{order:6} #export{order:7} #credits{order:8}
+    #queue{order:9}
     header button,header select{min-height:44px}
     #railtoggle,#view-bench,#view-lib,#view-photos{display:none}
     .wordmark{font-size:12px;letter-spacing:.14em}
@@ -368,6 +371,7 @@
   <span class="sp"></span>
   <span id="status"></span>
   <span id="credits" class="mono" title="Meshy credits left on the account"></span>
+  <span id="queue" class="mono" hidden></span>
   <select id="engine"></select>
   <button id="run" class="run">Run engine</button>
   <button id="regen" class="ghost" hidden title="Replace the existing model. The current one cannot be recovered.">Regenerate</button>
@@ -547,6 +551,9 @@ const say = t => $('#status').textContent = t;
 async function boot() {
   META = await api('/api/meta');
   paintCredits();
+  paintQueue();
+  setInterval(pollQueue, 60000);
+  document.addEventListener('visibilitychange', pollQueue);
   paintEngineWarning();
   /* "meshy-7 · 30cr" said nothing about what distinguishes the entries. The only real
      difference between them is texture resolution, so that is what the label shows. */
@@ -570,6 +577,34 @@ function paintEngineWarning() {
   note.hidden = !why;
   const run = $('#run');
   if (run) run.classList.toggle('risky', !!why);
+}
+
+/* Queue depth, and dead letters loudly. A generation that died is 30 credits already
+   spent with nothing to show for it - the one thing in this system that must never be
+   quiet - and before the queue existed it was invisible: the work simply stopped and the
+   record went on saying it was running. */
+function paintQueue() {
+  const el = $('#queue'), j = META.jobs;
+  if (!el || !j) return;
+  const busy = (j.queued || 0) + (j.running || 0);
+  el.hidden = !busy && !j.dead;
+  el.className = 'mono' + (j.dead ? ' dead' : busy ? ' busy' : '');
+  el.textContent = (busy ? `${busy} in queue` : '')
+    + (j.dead ? `${busy ? ' · ' : ''}${j.dead} failed` : '');
+  el.title = j.dead
+    ? (j.dead_jobs || []).map(d => `${d.dish} / ${d.variant} (${d.kind}): ${d.error}`)
+        .join('\n') || 'Jobs that gave up. Nothing will retry them.'
+    : `${j.queued} waiting, ${j.running} running `
+      + `(${j.generating} generating, ${j.optimising} optimising). `
+      + `Meshy allows ${j.meshy_ceiling} at once.`;
+}
+
+/* Every refresh is three R2 listings - a metered operation - so this runs on a slow
+   clock and only while somebody is looking at the tab. */
+async function pollQueue() {
+  if (document.visibilityState !== 'visible') return;
+  try { META.jobs = (await api('/api/meta')).jobs; paintQueue(); }
+  catch (e) { /* a failed poll is not worth an error in the header */ }
 }
 
 function paintCredits() {

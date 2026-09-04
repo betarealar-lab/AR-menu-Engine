@@ -429,6 +429,53 @@ Every measurement above is recorded per run in `export_stats` — `estimated_mb`
 Everything else — sharding, multi-region, read replicas — **do not build until traffic
 exists.**
 
+### 5.1 · The job queue, and the three parts of it that are not obvious
+
+Wired in 2026-09-05. The design argument is in `jobs.py`'s docstring — R2 does atomic
+conditional writes, so a create that fails when the key exists *is* a lock, and no
+database had to be bought for it. What follows is only the parts that are easy to get
+wrong on a second reading.
+
+**1 · A submitted generation keeps its lease.** Generation submits to Meshy and returns
+in about a second; the model arrives ~175 s later by webhook. If the job completed at
+submit-time, the lease would vanish with it — and the lease is the only thing counting
+against Meshy's 10-concurrent-per-account ceiling. Nine machines could then submit ninety
+tasks while the eleventh was still refused, which is the exact bug the queue was built to
+stop. So the job stays claimed on a short clock (`PENDING_SECONDS`, 240 s), and the
+webhook closes it.
+
+That short clock is also the recovery. **`_nudge` is gone.** A webhook that never arrived
+used to be caught by the page's own polling, which meant recovery needed somebody to have
+a tab open. Now the lease simply expires, the job is claimed again, and a claimer that
+finds a task id already on the record **collects instead of resubmitting** — so recovery
+costs nothing and a webhook failure can never be billed twice.
+
+**2 · A failed generation is not retried. A failed optimise is.** Optimising is pure CPU
+on a master already paid for, and most failures there are transient. A generation is 30
+credits, and three automatic attempts at a dish whose photograph is simply bad is 90
+credits — most of three days of a month's allowance — spent proving the same thing three
+times. It dead-letters on the first failure and a human presses Regenerate.
+
+**3 · The reconciler counts dead jobs as existing.** `worker.py` still scans the
+catalogue, but only to *queue* work that ought to have a job and has none — dishes
+finished before the queue existed, or anything an outage dropped. If dead-lettered work
+did not count as existing, a permanently failing dish would be re-queued every five
+minutes forever: free for an optimise, 30 credits a lap for a generation, with nobody
+watching. Reviving a dead job is a human decision.
+
+**What this replaced.** `RUNNING`, an in-memory set of what was being worked on, plus a
+rule for spotting records that claimed to be running with no thread behind them. It could
+not work: the set lived in one process and emptied on every restart while the record in
+R2 did not, so the guards refused to start a new run *forever*. A lease is the same idea
+done properly — visible to every process, expiring on its own when its holder dies.
+
+**Listing is metered.** R2 `ListObjects` is a Class A operation, 1,000,000 free a month,
+and two hosts poll this queue all day. A claim is **2 listings** and `stats()` is **3**,
+measured and asserted in `check_jobs.py` — `claim` originally re-listed the leases once
+per candidate job. The Studio's loop is woken on enqueue so it can idle at 30 s; the
+worker backs off from 10 s to 60 s when nothing is arriving. Together with the UI's
+60-second poll that is roughly 400,000 a month, against the million that is free.
+
 ---
 
 ## 6. Priorities
@@ -488,3 +535,124 @@ built into delivery at zero cost.
 menu is close to the worst case for AR. The ~13% open-3D / ~5% AR funnel is a floor measured
 in the weakest segment, not a ceiling — but that is a hypothesis, and testing it needs 3–5
 clients spread across segments rather than 10 in one.
+
+---
+
+## 9. The self-serve product, and where it lives
+
+Settled by Temo on 2026-09-05, in answer to a direct set of questions. These are his calls,
+not proposals. Do not re-open them.
+
+### 9.1 · What we are building
+
+**BetaReal splits into two products.** Not two companies and not two codebases yet, but two
+offers with different delivery:
+
+| | Who does the work | Where it is built |
+|---|---|---|
+| **BetaReal Premium** | We do. Manual scanning, pro camera, many photos, hand-graded, judged by a founder | The path that exists today. Corner at Tabidze and Food and Market are this |
+| **BetaReal Self-Serve** | The restaurant does. Their photos, their menu, their template, their approval | **The thing being built now** |
+
+Self-serve is the global-launch product. Premium is what pays for it and what proves the
+quality bar.
+
+**What self-serve has to be, in Temo's words:** a menu for restaurants that is *easy* and
+*very fast*, where they choose a template and customise it, where a new template can be added
+to the catalogue without a developer, and where updates are fast and dynamic.
+
+**Speed and lightness are the priority, explicitly.** 3D models are heavy, so everything
+around them must not be. Some compromise is acceptable; the models are the payload that has
+earned the right to be heavy. Astro was chosen for exactly this reason — static output where
+static is right, dynamic where it must be.
+
+### 9.2 · Menu creation: typed first, imported later
+
+**Start with (a): the owner types their items in**, and the template makes it look right.
+
+**Menu import — photograph or upload the existing menu, extract items and prices with a
+vision model — is a later addition, and only if it turns out to be easy.** Temo's reason,
+and it is the right one: *real menus have a lot of nuance*. Sections that are not categories,
+prices that are ranges, sizes, modifiers, two languages in one column, items that are really
+descriptions. An extractor that is 85% right produces a draft the owner has to audit line by
+line, which is slower than typing.
+
+So: build the typed path properly, and keep the item model clean enough that an importer can
+later write into it. **Do not build the importer first, and do not design the typed path
+around it.**
+
+### 9.3 · No paywall yet
+
+**Pricing plans do not exist.** They may end up as per-feature gates grouped into tiers;
+that is undecided and payment is a question for later, before launch, not now.
+
+**What to build instead: access is by authorised account only, during testing.** No plans,
+no quotas, no billing, no per-feature gating. When the pricing structure is decided it gets
+added; building a paywall against a price list nobody has written is building the wrong thing
+twice.
+
+### 9.4 · Approval is the owner's
+
+**The restaurant owner approves or rejects a model. It is their menu and their call** whether
+it goes in.
+
+The fault tags, the verdict log and the internal judging tools are **internal**. They exist
+for research — which food is scannable, which angles win — and some of them will be purged
+before launch rather than shown to a customer.
+
+### 9.5 · Build order: skeleton, muscles, organs, hair, lipstick
+
+Temo's framing, kept verbatim because it decides a hundred small arguments:
+
+> *skeleton first then muscles then organs and hair and lipstick last*
+
+Build the ecosystem end to end first. Small wrong things get purged in the polish pass. **Do
+not stop to perfect a part while the whole is still missing** — and equally, do not ship
+polish as if it were progress.
+
+### 9.6 · Where it lives, and the decentralisation rule
+
+**The self-serve menu does NOT live next to Niko's repo.**
+
+This is not a code-organisation preference, it is a structural decision about the company.
+Niko's `github.com/Nikoloz-Chachua/Restaurant-AR` was **temporary**, and it sits on one
+member's personal account, with the live Supabase project (`lwdpegloznhpcecivhfy`) on one
+member's personal account too. Temo created the **BetaReal GitHub account** and the
+**BetaReal Cloudflare account** precisely to end that: *the company must not depend on one
+member.* If a new Supabase, or a new anything, is needed to keep the self-serve stack under
+BetaReal's own control, create it.
+
+So it lives in **BetaReal-owned infrastructure** — the `betarealar-lab` org, alongside the
+engine, which is also where the handoff placed it: *"it is not a separate standalone repo; it
+is the delivery half of this product."*
+
+**Parallel, not a replacement — for now.** New self-serve tenants only. The existing
+tenants, Monday Greens and the hand-built templates, stay on the current renderer. Replacement
+happens later, after the new system has actually been tested. Temo's reason, verbatim:
+*pushing to prod right now with an incomplete product would be a huge mistake.* Niko approves
+the direction.
+
+### 9.7 · Hands off production — absolute
+
+**Nothing in Niko's repos or their production is to be modified. Ever, without being asked.**
+No commits, no branches, no PRs, no edits to `C:\Users\temot\BetaReal scaleable` or
+`C:\Users\temot\Restaurant-AR`. They may be **read** to understand the data model and the
+templates. That is all.
+
+Two paying clients are served by that code. An agent "helpfully" fixing something there is
+the single most expensive mistake available in this project.
+
+### 9.8 · ROADMAP.md is a proposal, and parts of it are wrong
+
+Temo, 2026-09-05: *"roadmap was made by AI and it assumes stuff wrong and did not update
+stuff."* It says so itself at the top, and it should be read that way — as an argument to be
+corrected, never as an instruction.
+
+**Specifically corrected:** ROADMAP Part 5 claims the highest-value action is thirty dishes
+shot four ways with the fault tags ticked. **It is not the priority, and it is not this
+codebase's call.** Real dishes come from real venues on real scanning days, Temo shoots and
+judges them, and he will say when he wants help. Corner at Tabidze (2026-09-05) and Food and
+Market (2026-09-07) are **manual pro-camera scans with many photos** — the Premium path — not
+tests of the automatic four-photo pipeline, which is a different workflow and must not be
+collapsed into them (see §4a/4b).
+
+**The system gets built first.** Models need real dishes, and the dishes are Temo's to bring.
