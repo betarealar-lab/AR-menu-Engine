@@ -285,8 +285,9 @@ real-world scale, judge with fault tags, rename, archive, the photo shelf, downl
 per-dish optimiser settings, queue depth and dead letters in the header, and a phone
 layout.
 
-**Run all four before pushing.** `check.py` covers 122 paths, `check_webhook.py` 26,
-`check_jobs.py` 46 and `check_schema.py` 52 — 246 in total, all passing as of 2026-09-05. `check_webhook.py` and
+**Run all six before pushing.** `check.py` 122, `check_webhook.py` 26,
+`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 29 —
+300 in total, all passing as of 2026-09-05. `check_webhook.py` and
 `check_jobs.py` use stubs and cost nothing; `check.py` needs a real master GLB, and there
 is one at `C:\Users\temot\Desktop\BetaReal-inspect\chicken-balls-in-shqmeruli-sauce--raw-full\model.glb`.
 
@@ -330,8 +331,36 @@ Done so far — skeleton step 1 of MENU-PLATFORM §6:
   Postgres raises the same SQLSTATE for a missing grant, so catching the exception alone
   would pass on a schema where tenancy did nothing.
 
-Next: **step 3, the publish path** — edit an item, publish, a snapshot lands on R2, a
-Worker renders it. Even with an ugly template that proves the whole architecture.
+- **Step 3 is done and the architecture is proven.** `menu/publish.py` compiles a
+  tenant's draft into an immutable JSON object on R2 (`t/<tenant>/<version>.json`, never
+  overwritten); `menu/render/render.mjs` turns that into a complete HTML page with the
+  theme inlined in `<head>`; `menu/preview.py` is the Worker standing in on a laptop.
+  Verified end to end against the real buckets: **7 items, 4 with real 3D, 3.2 KB of
+  snapshot, 6.7 KB of HTML, and a genuine 5.9 MB Draco model served over the asset
+  route** with the right content type and CORS.
+
+**Try it:**
+
+```bash
+python menu/seed.py --demo
+python menu/publish.py --tenant demo-kitchen
+python menu/preview.py            # http://127.0.0.1:8790/demo-kitchen
+```
+
+**Two things found by looking at real output, not by testing:**
+
+- `data-cm` was emitted without its axis. The live records use `height` as often as
+  `width`, so a bare "4" is a 4 cm plate or a 4 cm tall stack depending on which — and
+  guessing wrong puts a dish on a table at the wrong size in a way that reads as a bad
+  model. Fixed, and `check_render.py` now asserts the axis travels with the number.
+- **A dish is mislabelled in the live Studio data, and it is Temo's to fix, not ours.**
+  `chicken-balls-in-shqmeruli-sauce / lean` carries `title = "SUSHI WITH STONE PLATE"`.
+  Since `title_of` is dish-level, the chicken dish displays under the sushi name. Almost
+  certainly a rename applied while the wrong dish was selected.
+
+Next: **step 4** — photo upload in the admin app enqueueing a `generate` job into the
+same queue the Scan Studio uses, and the owner's approve/reject landing in
+`models.tenant_state`. That closes the loop from a phone photo to a diner's table.
 
 **Not a phase:** hosting. It is a slider — 512 MB refuses raw masters, 2 GiB accepts
 them. Choose it, do not build it.
@@ -370,9 +399,18 @@ check_jobs.py      46 checks of the queue, including eight threads racing one cl
 check_schema.py    52 checks of the menu platform's tenancy against the REAL
                    Supabase project. Makes two restaurants and tries to read one
                    as the other. Free; cleans up after itself
+check_publish.py   25 checks of the publish path on a throwaway tenant: hidden
+                   items absent, unapproved models unattached, snapshots immutable
+check_render.py    29 checks of the rendered HTML, incl. XSS and CSS injection
+                   from a restaurant's own typing. Needs node; touches nothing
 menu/              the self-serve half. See MENU-PLATFORM.md before touching it
 menu/migrations/   numbered SQL, applied once each, checksummed
 menu/migrate.py    applies them. --status, --dry-run
+menu/publish.py    draft in Postgres -> immutable snapshot on R2. --list, --dry-run
+menu/seed.py       a demo tenant built from the REAL dishes in R2
+menu/render/       render.mjs: snapshot -> a complete page. Pure, no imports. The
+                   admin preview and the live page both call THIS, never a copy
+menu/preview.py    the Worker, on a laptop. Serves /<slug> and /a/<key> from R2
 pull.py            pull a dish's files to a folder and compare them, for Blender
 preflight.py       verify key + R2 round-trip before spending anything
 runner.py          batch re-run the dataset against another engine

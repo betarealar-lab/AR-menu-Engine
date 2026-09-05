@@ -193,6 +193,12 @@ class R2Backend(Backend):
         self.buckets = {
             "photos": os.environ.get("R2_BUCKET_PHOTOS", "betareal-photos"),
             "models": os.environ.get("R2_BUCKET_MODELS", "betareal-models"),
+            # The menu half. Four buckets with four lifecycles, all private:
+            #   catalog  what diners load - draco + usdz, served by the Worker
+            #   menus    published snapshots, one immutable object per publish
+            # See MENU-PLATFORM.md 2.6 for why none of them is public.
+            "catalog": os.environ.get("R2_BUCKET_CATALOG", "betareal-catalog"),
+            "menus": os.environ.get("R2_BUCKET_MENUS", "betareal-menus"),
         }
 
     def _b(self, bucket: str) -> str:
