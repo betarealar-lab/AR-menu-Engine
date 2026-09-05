@@ -115,35 +115,10 @@ def check_supabase() -> bool:
         print("  !! the anon and service keys are IDENTICAL - one of them is pasted twice")
         ok = False
 
-    if url and anon:
-        # An unauthenticated PostgREST root with the anon key. 200 means the key is real
-        # and the Data API is on; 401 means the key is wrong for this project.
-        try:
-            r = requests.get(f"{url}/rest/v1/",
-                             headers={"apikey": anon, "Authorization": f"Bearer {anon}"},
-                             timeout=20)
-            if r.status_code in (401, 403):
-                print(f"  anon key REJECTED by the project ({r.status_code})")
-                ok = False
-            else:
-                print(f"  anon key accepted (HTTP {r.status_code})")
-        except Exception as e:                                # noqa: BLE001
-            print(f"  could not reach the project: {type(e).__name__}: {e}")
-            ok = False
-
-    if url and svc:
-        try:
-            r = requests.get(f"{url}/rest/v1/",
-                             headers={"apikey": svc, "Authorization": f"Bearer {svc}"},
-                             timeout=20)
-            if r.status_code in (401, 403):
-                print(f"  service key REJECTED by the project ({r.status_code})")
-                ok = False
-            else:
-                print(f"  service key accepted (HTTP {r.status_code})")
-        except Exception as e:                                # noqa: BLE001
-            print(f"  could not reach the project: {type(e).__name__}: {e}")
-            ok = False
+    if url and anon and not _key_works(url, anon, "publishable"):
+        ok = False
+    if url and svc and not _key_works(url, svc, "secret"):
+        ok = False
 
     if not db:
         print("  SUPABASE_DB_URL       not set - fine, it is only needed to run "
@@ -155,14 +130,109 @@ def check_supabase() -> bool:
         print("  SUPABASE_DB_URL       still has the placeholder password in it - "
               "replace it with the one you generated")
         ok = False
+    elif "@" not in db:
+        # Seen for real: the connection string is in a one-line field and only the
+        # visible part gets selected, so everything from the @ onwards is lost. It
+        # looks like a valid URI right up until nothing can connect.
+        print(f"  SUPABASE_DB_URL       INCOMPLETE ({len(db)} chars, no '@'). A whole "
+              "one is ~85.")
+        print("                        The tail was cut off in the copy. Use the copy "
+              "button next to the")
+        print("                        field rather than selecting the text by hand.")
+        ok = False
     else:
-        host = db.split("@")[-1].split("/")[0] if "@" in db else "?"
-        print(f"  SUPABASE_DB_URL       set, host {host}")
+        host = db.split("@")[-1].split("/")[0].split(":")[0]
+        port = 5432
+        tail = db.split("@")[-1].split("/")[0]
+        if ":" in tail:
+            try:
+                port = int(tail.split(":")[1])
+            except ValueError:
+                pass
+        print(f"  SUPABASE_DB_URL       set, host {host}:{port}")
+        ok = _reachable(host, port) and ok
 
     print("\n  " + ("All four look right." if ok else "Something above needs fixing."))
     print("  Nothing was printed that anyone could use. Keys are masked.")
     return ok
 
+
+def _key_works(url: str, key: str, kind: str) -> bool:
+    """Ask the project whether it accepts this key.
+
+    The probe is `/auth/v1/settings`, which any valid project key may read. It is NOT
+    `/rest/v1/`: that endpoint answers a publishable key with
+
+        401 {"message":"Secret API key required"}
+
+    which looks exactly like a rejected key and is not one - it is the Data API telling
+    you that reading its schema is a privileged operation. Probing there cost a round of
+    debugging on 2026-09-05 before the response body was actually read.
+
+    The secret key is additionally probed against `/rest/v1/`, because that DOES prove
+    the Data API is switched on, which nothing else here would notice.
+    """
+    try:
+        r = requests.get(f"{url}/auth/v1/settings", headers={"apikey": key}, timeout=20)
+    except Exception as e:                                    # noqa: BLE001
+        print(f"  could not reach the project: {type(e).__name__}: {e}")
+        return False
+    if r.status_code in (401, 403):
+        print(f"  {kind} key REJECTED ({r.status_code}) - wrong project, or the copy "
+              f"was truncated")
+        return False
+    print(f"  {kind} key accepted (HTTP {r.status_code})")
+
+    if kind == "secret":
+        try:
+            d = requests.get(f"{url}/rest/v1/", headers={"apikey": key}, timeout=20)
+            if d.status_code in (401, 403):
+                print("  !! the Data API looks switched off - the admin app needs it")
+                return False
+            print(f"  Data API is on (HTTP {d.status_code})")
+        except Exception as e:                                # noqa: BLE001
+            print(f"  could not check the Data API: {type(e).__name__}: {e}")
+    return True
+
+
+def _reachable(host: str, port: int) -> bool:
+    """Can this machine actually open a socket to the database?
+
+    Worth doing separately from the password, because the usual failure here is neither
+    a wrong password nor a typo. **Supabase gives free projects an IPv6-ONLY direct
+    connection** - the host has an AAAA record and no A record - so on an IPv4 network
+    it does not resolve at all, and every client reports it differently and unhelpfully.
+    The fix is not to debug the URI, it is to use the Session pooler string from the
+    same dropdown, which is IPv4.
+    """
+    import socket
+    families = []
+    for fam, label in ((socket.AF_INET, "IPv4"), (socket.AF_INET6, "IPv6")):
+        try:
+            socket.getaddrinfo(host, port, fam, socket.SOCK_STREAM)
+            families.append((fam, label))
+        except socket.gaierror:
+            pass
+    if not families:
+        print(f"  !! {host} does not resolve at all")
+        return False
+    if all(label == "IPv6" for _, label in families):
+        print("  !! this host is IPv6-ONLY (AAAA record, no A record)")
+    for fam, label in families:
+        try:
+            info = socket.getaddrinfo(host, port, fam, socket.SOCK_STREAM)
+            sock = socket.socket(fam, socket.SOCK_STREAM)
+            sock.settimeout(6)
+            sock.connect(info[0][4])
+            sock.close()
+            print(f"  database reachable over {label}")
+            return True
+        except Exception:                                     # noqa: BLE001
+            print(f"  !! cannot reach {host}:{port} over {label}")
+    print("     Supabase free projects have an IPv6-only DIRECT connection. On an IPv4")
+    print("     network, go back to Connect -> Direct connection and switch the radio")
+    print("     to SESSION POOLER, then copy that URI instead. Same database.")
+    return False
 
 def check_storage() -> bool:
     """Write, read back and delete a scratch object. Proves the whole R2 path works -
