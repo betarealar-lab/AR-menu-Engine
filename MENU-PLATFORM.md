@@ -586,3 +586,83 @@ cases no single number can express, and nothing ever totals it. On the live data
   serving its own. The import exists so the rebuild is compared against a real 170-item
   bilingual menu instead of a screenshot — which is exactly how the first attempt ended up
   looking wrong.
+
+---
+
+## 10. The double load, and how it is actually fixed
+
+Temo, after three sessions of me solving the wrong problem:
+
+> *"someone goes to monday greens, the website in the back loads original index html then
+> it loads monday greens, in front of the customer only a loading circle is visible but in
+> reality the website is loaded and then reloaded. i hate that... in nikos repo everything
+> works and is acceptable except this fucking loading problem."*
+
+### 10.1 · The diagnosis I got wrong twice
+
+I recommended an Astro rebuild, failed to reproduce the page, then swung to "just reuse
+`index.html`" — which hands the problem straight back. Both answers were wrong for the
+same reason: **I thought the double load was caused by the app being one HTML file.**
+
+It is not. It is caused by `await fetch(...)`. The app asks Supabase for its tenant, theme
+and menu *after* the HTML has arrived. A network await lets the browser paint what it has —
+an unthemed shell with an empty menu — and the finished page lands afterwards. Two paints.
+The spinner is the gap between them.
+
+Those two things are separable, and separating them is the whole fix.
+
+### 10.2 · The fix, which is five lines
+
+The app **already** loads tenants from somewhere other than Supabase: baoma, mugsy, pipes
+and food-market all run off JSON fixtures, and every data site is written as
+
+```js
+const data = fixture ? fixture.theme_config : await _supaSelect(...)
+```
+
+So `patch_bootstrap.py` adds a fifth source that happens to be **inline**: one loader
+function and three one-line edits in our fork. With no network on the critical path the
+awaits resolve as **microtasks**, microtasks run *before* paint, and the browser parses,
+builds the entire menu and paints once — finished.
+
+Belt and braces on top: the palette is also written as real CSS custom properties in the
+head, so the colours are right on the first paint rather than applied by script afterwards.
+`applyRemoteTheme` then sets identical values and nothing visibly changes.
+
+### 10.3 · Measured, in a browser, against our own database
+
+```
+Supabase requests            0
+requests before first paint  0
+cards rendered               72     (their code, our data)
+category pills               28
+3D badges / AR buttons       10 / 10
+data-theme                   night
+body background              rgb(5, 37, 41)   ← identical to the live page
+```
+
+The app is unmodified apart from those five lines, so every template, the category bar,
+the food/drinks toggle, the 3D block, AR routing and the phone layouts behave exactly as
+they do in production — because they are the same code.
+
+### 10.4 · What this settles about the architecture
+
+- **The menu is not an Astro rebuild.** It is the platform's app with its data delivered
+  differently. Rebuilding it was three sessions of producing a worse version of something
+  that already worked.
+- **Astro is still right — for the admin.** Sign-in, tenants, items, uploads, the theme
+  editor, publishing. That is where a framework earns its keep and where nothing exists yet.
+- **The publish/snapshot work was not wasted.** It is exactly what produces the inlined
+  payload; `bootstrap.py` is that compiler pointed at the app's own shape.
+- **The fork is ours.** `menu/app/index.html` is a copy. Their repo is never written to,
+  and the fork's inherited `SUPA_URL`/`SUPA_KEY` are blanked at serve time so it can never
+  read Niko's project.
+
+### 10.5 · Still open
+
+- The language toggle offers **RU**, which Monday Greens does not have — the app cycles
+  en/ka/ru and does not yet know the tenant publishes only two (§9.1).
+- 72 of 170 items render, which is **correct**: `drink_categories` splits the menu and the
+  food/drinks toggle shows one side at a time. Worth confirming against the live page.
+- The analytics POST and a second `theme_config` read still fire *after* paint. They now
+  go nowhere. Pointing them at our own project needs an `events` table first.
