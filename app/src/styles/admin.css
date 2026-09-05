@@ -1,0 +1,181 @@
+/* admin.css — the panel, built for a phone first.
+ *
+ * The platform's admin is a desktop layout: wide tables, columns of inputs, controls that
+ * assume a mouse. Temo asked for one that is familiar but works everywhere, and the
+ * honest reason that matters is where the work happens - a restaurant owner edits a price
+ * standing in their kitchen, not sitting at a desk. So: one column, real tap targets,
+ * lists rather than tables, and a bottom bar the thumb can reach.
+ *
+ * Deliberately its own stylesheet and not the menu's. The menu's job is to look like 22
+ * different restaurants; this one's job is to get out of the way and be the same every
+ * time. Sharing them would mean a theme change could break the tool used to fix it.
+ */
+
+:root {
+  --ink: #10161c;
+  --dim: #64748b;
+  --line: #e2e8f0;
+  --paper: #ffffff;
+  --sunk: #f6f8fa;
+  --brand: #0f766e;
+  --brand-ink: #ffffff;
+  --danger: #b42318;
+  --ok: #067647;
+  --radius: 12px;
+  --tap: 44px;               /* nothing interactive is smaller than this */
+  --pad: 16px;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--sunk);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Room for the bottom bar plus the home indicator on a phone. */
+body { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+
+a { color: var(--brand); }
+
+/* ── shell ─────────────────────────────────────────────────────────── */
+
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px var(--pad); min-height: 56px;
+  background: var(--paper); border-bottom: 1px solid var(--line);
+}
+.topbar h1 { font-size: 1rem; font-weight: 650; margin: 0; flex: 1;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar .back { display: inline-flex; align-items: center; justify-content: center;
+                width: var(--tap); height: var(--tap); margin-left: -10px;
+                border-radius: 999px; text-decoration: none; font-size: 1.2rem;
+                color: var(--ink); }
+
+main { max-width: 720px; margin: 0 auto; padding: var(--pad); }
+
+/* The bottom bar is the primary navigation on a phone and simply becomes a centred
+   toolbar on a desktop - one component, not two. */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; justify-content: space-around;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: var(--paper); border-top: 1px solid var(--line);
+}
+.tabbar a {
+  flex: 1; max-width: 140px; min-height: var(--tap);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; text-decoration: none; color: var(--dim);
+  font-size: .72rem; font-weight: 600; border-radius: 10px;
+}
+.tabbar a[aria-current="page"] { color: var(--brand); background: var(--sunk); }
+.tabbar svg { width: 20px; height: 20px; }
+
+/* ── surfaces ──────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: var(--pad); margin-bottom: 12px;
+}
+.card h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em;
+           color: var(--dim); margin: 0 0 12px; }
+
+/* A list, not a table. A table on a 390px screen is a horizontal scrollbar with extra
+   steps, and every row here is a tap target that opens a full-screen editor. */
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows li { border-bottom: 1px solid var(--line); }
+.rows li:last-child { border-bottom: 0; }
+.row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  min-height: 60px; padding: 10px 0; background: none; border: 0;
+  text-align: left; font: inherit; color: inherit; cursor: pointer;
+  text-decoration: none;
+}
+.row img, .row .thumb {
+  width: 48px; height: 48px; flex: 0 0 48px; border-radius: 8px;
+  object-fit: cover; background: var(--sunk);
+}
+.row .body { flex: 1; min-width: 0; }
+.row .body b { display: block; font-weight: 600; overflow: hidden;
+               text-overflow: ellipsis; white-space: nowrap; }
+.row .body small { color: var(--dim); }
+.row .price { font-variant-numeric: tabular-nums; font-weight: 600; }
+.row .chev { color: var(--dim); }
+
+/* ── forms ─────────────────────────────────────────────────────────── */
+
+label { display: block; margin: 0 0 14px; font-size: .82rem; font-weight: 600;
+        color: var(--dim); }
+label span { display: block; margin-bottom: 5px; }
+
+input[type=text], input[type=email], input[type=password], input[type=number],
+textarea, select {
+  width: 100%; min-height: var(--tap); padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--paper);
+  /* 16px exactly: iOS zooms the whole page when a focused field is smaller. */
+  font: 16px/1.4 inherit; color: var(--ink);
+}
+input:focus, textarea:focus, select:focus {
+  outline: 2px solid var(--brand); outline-offset: 1px; border-color: var(--brand);
+}
+textarea { min-height: 88px; resize: vertical; }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 420px) { .two { grid-template-columns: 1fr; } }
+
+/* A switch that is a real checkbox underneath, so it is keyboard reachable and a screen
+   reader reads it as a checkbox rather than as a div somebody styled. */
+.switch { display: flex; align-items: center; justify-content: space-between;
+          gap: 12px; min-height: var(--tap); margin: 0 0 4px; }
+.switch input { appearance: none; width: 46px; height: 28px; flex: 0 0 46px;
+                border-radius: 999px; background: var(--line); position: relative;
+                cursor: pointer; transition: background .15s; margin: 0; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px;
+                       width: 22px; height: 22px; border-radius: 50%;
+                       background: #fff; transition: transform .15s; }
+.switch input:checked { background: var(--brand); }
+.switch input:checked::after { transform: translateX(18px); }
+.switch span { font-weight: 600; color: var(--ink); font-size: .9rem; }
+.switch small { display: block; font-weight: 400; color: var(--dim); }
+
+button, .btn {
+  min-height: var(--tap); padding: 11px 18px; border: 0; border-radius: 10px;
+  background: var(--brand); color: var(--brand-ink); font: inherit; font-weight: 650;
+  cursor: pointer; text-decoration: none; display: inline-flex;
+  align-items: center; justify-content: center; gap: 8px;
+}
+button.ghost, .btn.ghost { background: var(--paper); color: var(--ink);
+                           border: 1px solid var(--line); }
+button.danger { background: var(--paper); color: var(--danger);
+                border: 1px solid var(--line); }
+button[disabled] { opacity: .55; cursor: default; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.actions .grow { flex: 1; }
+
+/* ── feedback ──────────────────────────────────────────────────────── */
+
+/* Save state lives here. Nothing in this panel has a Publish button - a save rebuilds
+   the menu behind the owner - so this line is the only thing that tells them it happened.
+   It has to be honest about failure, not just cheerful about success. */
+.saved { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+         transform: translateX(-50%); z-index: 30;
+         padding: 9px 16px; border-radius: 999px; font-size: .85rem; font-weight: 600;
+         background: var(--ink); color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.18);
+         opacity: 0; pointer-events: none; transition: opacity .18s; }
+.saved.show { opacity: 1; }
+.saved.bad { background: var(--danger); }
+
+.empty { text-align: center; color: var(--dim); padding: 40px 20px; }
+.error { background: #fef3f2; border: 1px solid #fecdca; color: var(--danger);
+         padding: 12px; border-radius: 10px; margin-bottom: 12px; font-size: .9rem; }
+.hint { color: var(--dim); font-size: .82rem; margin: -8px 0 14px; }
+
+.pill { display: inline-block; padding: 3px 9px; border-radius: 999px;
+        background: var(--sunk); color: var(--dim); font-size: .72rem; font-weight: 600; }
+.pill.on { background: #ecfdf3; color: var(--ok); }
+.pill.off { background: #fef3f2; color: var(--danger); }

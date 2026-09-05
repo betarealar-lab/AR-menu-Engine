@@ -1,0 +1,104 @@
+---
+// The admin shell. One column, a title bar with a real back button, and a bottom bar the
+// thumb reaches - because the person editing a price is standing in a kitchen, not
+// sitting at a desk.
+//
+// `save` is the only status surface in the panel. There is no Publish button: a save
+// rebuilds that restaurant's menu behind the owner (DECISIONS §10), so this line is the
+// only thing that tells them it happened - and it has to be honest about failure, not
+// just cheerful about success.
+import "../styles/admin.css";
+
+const { title = "BetaReal", back = null, slug = null, tab = null } = Astro.props;
+
+const tabs = slug
+  ? [
+      { href: `/admin/${slug}/menu`, key: "menu", label: "Menu",
+        d: "M4 6h16M4 12h16M4 18h10" },
+      { href: `/admin/${slug}/models`, key: "models", label: "3D",
+        d: "M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zm0 0v18m8-13.5L4 16.5" },
+      { href: `/admin/${slug}/look`, key: "look", label: "Look",
+        d: "M12 3a9 9 0 100 18h1.5a2 2 0 001.6-3.2 2 2 0 011.6-3.2H19a3 3 0 003-3A9 9 0 0012 3z" },
+      { href: `/admin/${slug}/settings`, key: "settings", label: "Details",
+        d: "M12 15a3 3 0 100-6 3 3 0 000 6zm7.4-3a7.4 7.4 0 00-.1-1l2-1.6-2-3.4-2.4 1a7.4 7.4 0 00-1.7-1L14.8 2h-4l-.4 2.6a7.4 7.4 0 00-1.7 1l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 000 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 001.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 001.7-1l2.4 1 2-3.4-2-1.6c.06-.33.1-.66.1-1z" },
+    ]
+  : [
+      { href: "/admin", key: "restaurants", label: "Restaurants",
+        d: "M4 21V9l8-6 8 6v12M9 21v-6h6v6" },
+    ];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title} · BetaReal</title>
+    <meta name="robots" content="noindex" />
+  </head>
+  <body>
+    <div class="topbar">
+      {back && <a class="back" href={back} aria-label="Back">&#8249;</a>}
+      <h1>{title}</h1>
+      <slot name="action" />
+    </div>
+
+    <main>
+      <slot />
+    </main>
+
+    <nav class="tabbar" aria-label="Sections">
+      {tabs.map((t) => (
+        <a href={t.href} aria-current={tab === t.key ? "page" : undefined}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d={t.d} />
+          </svg>
+          {t.label}
+        </a>
+      ))}
+    </nav>
+
+    <div class="saved" id="saved" role="status" aria-live="polite"></div>
+
+    <script is:inline>
+      // Every field saves itself. No form to submit, no Publish to remember, no way to
+      // close the tab having lost an edit - which is the failure a busy owner actually
+      // hits. Debounced so typing a dish name is one write, not thirty.
+      window.BR = (function () {
+        const el = document.getElementById("saved");
+        let hide;
+        function flash(text, bad) {
+          if (!el) return;
+          el.textContent = text;
+          el.className = "saved show" + (bad ? " bad" : "");
+          clearTimeout(hide);
+          hide = setTimeout(() => { el.className = "saved"; }, bad ? 5000 : 1600);
+        }
+        const pending = new Map();
+        async function post(url, body) {
+          const r = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!r.ok) throw new Error((await r.text()).slice(0, 140) || r.statusText);
+          return r.json().catch(() => ({}));
+        }
+        function save(url, body, { key = url, wait = 600, quiet = false } = {}) {
+          clearTimeout(pending.get(key));
+          pending.set(key, setTimeout(async () => {
+            try {
+              await post(url, body);
+              if (!quiet) flash("Saved");
+            } catch (err) {
+              // Never a silent failure. An owner who thinks a price changed and it did
+              // not is worse off than one who knows it did not.
+              flash("Not saved: " + err.message, true);
+            }
+          }, wait));
+        }
+        return { save, post, flash };
+      })();
+    </script>
+  </body>
+</html>

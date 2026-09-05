@@ -1,0 +1,275 @@
+---
+// One dish. The screen an owner spends their time in, so it is a single column of large
+// fields that saves itself as they type - no form to submit, no Publish to remember, no
+// way to close the tab having lost an edit.
+//
+// Every field the platform's admin has is here (PLATFORM-SPEC §6.2), including the ones
+// that are easy to forget and change what a diner sees: `is_3d`, `thumb_3d`, `text_only`,
+// `visible`, the old price, and the second language.
+import Admin from "../../../../layouts/Admin.astro";
+import { requireUser, userClient } from "../../../../lib/auth.js";
+
+const gate = await requireUser(Astro);
+if (gate) return gate;
+const { slug, id } = Astro.params;
+const isNew = id === "new";
+const supa = userClient(Astro.locals.user.token);
+
+const { data: tenant } = await supa
+  .from("tenants").select("id, name, slug, languages").eq("slug", slug).single();
+if (!tenant) return new Response("Not found", { status: 404 });
+
+const { data: cats } = await supa.from("categories")
+  .select("id, name").eq("tenant_id", tenant.id).order("position");
+
+let item = {
+  id: null, name: "", description: "", price_minor: 0, price_old_minor: null,
+  price_text: null, currency: "GEL", category_id: cats?.[0]?.id ?? null,
+  visible: true, text_only: false, is_3d: true, thumb_3d: false, featured: false,
+  photo_key: null, model_id: null, i18n: {}, position: 999,
+};
+if (!isNew) {
+  const { data } = await supa.from("items").select("*").eq("id", id).single();
+  if (!data) return new Response("Not found", { status: 404 });
+  item = data;
+}
+
+const { data: models } = await supa.from("models")
+  .select("id, title, tenant_state").eq("tenant_id", tenant.id)
+  .eq("tenant_state", "approved").order("created_utc", { ascending: false });
+
+// The second language, if this restaurant publishes one. A monolingual menu shows no
+// extra fields at all rather than empty ones nobody will fill in.
+const second = (tenant.languages || ["en"]).find((l) => l !== "en") || null;
+const LANG_NAME = { ka: "Georgian", ru: "Russian" };
+const i18n = item.i18n || {};
+const asMajor = (m) => (m ? (m / 100).toFixed(2).replace(/\.00$/, "") : "");
+---
+<Admin title={isNew ? "New dish" : item.name || "Dish"} slug={slug} tab="menu"
+       back={`/admin/${slug}/menu`}>
+  <form id="dish" data-id={item.id ?? ""} data-tenant={tenant.id} data-slug={slug}>
+    <div class="card">
+      <label>
+        <span>Name</span>
+        <input type="text" name="name" value={item.name} required autofocus={isNew} />
+      </label>
+
+      {second && (
+        <label>
+          <span>Name in {LANG_NAME[second] || second}</span>
+          <input type="text" name={`name_${second}`} value={i18n[second]?.name || ""} />
+        </label>
+      )}
+
+      <label>
+        <span>Description</span>
+        <textarea name="description">{item.description}</textarea>
+      </label>
+
+      {second && (
+        <label>
+          <span>Description in {LANG_NAME[second] || second}</span>
+          <textarea name={`description_${second}`}>{i18n[second]?.description || ""}</textarea>
+        </label>
+      )}
+    </div>
+
+    <div class="card">
+      <h2>Price</h2>
+      <div class="two">
+        <label>
+          <span>Price</span>
+          <input type="number" name="price" inputmode="decimal" step="0.01" min="0"
+                 value={asMajor(item.price_minor)} />
+        </label>
+        <label>
+          <span>Was (optional)</span>
+          <input type="number" name="price_old" inputmode="decimal" step="0.01" min="0"
+                 value={asMajor(item.price_old_minor)} />
+        </label>
+      </div>
+      <label>
+        <span>Or type it, for prices a number cannot say</span>
+        <input type="text" name="price_text" value={item.price_text || ""}
+               placeholder="16 / 70" />
+      </label>
+      <p class="hint">Leave empty unless the dish is priced two ways, like a glass and a
+        bottle. When it is filled in, this is what diners see.</p>
+
+      <label>
+        <span>Category</span>
+        <select name="category_id">
+          <option value="">No category</option>
+          {(cats || []).map((c) => (
+            <option value={c.id} selected={c.id === item.category_id}>{c.name}</option>
+          ))}
+        </select>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2>Photo</h2>
+      <div id="photo-box">
+        {item.photo_key
+          ? <img src={item.photo_key.startsWith("http") ? item.photo_key : `/a/${item.photo_key}`}
+                 alt="" style="width:100%;border-radius:10px;margin-bottom:10px" />
+          : <p class="hint" style="margin-top:0">No photo yet.</p>}
+      </div>
+      <input type="file" id="photo" accept="image/*" style="display:none" />
+      <div class="actions">
+        <button type="button" class="ghost grow"
+                onclick="document.getElementById('photo').click()">Choose photo</button>
+      </div>
+      <p class="hint">Resized to 860px before upload. The card draws it at 430px, so a
+        bigger file only costs the diner time.</p>
+    </div>
+
+    <div class="card">
+      <h2>3D</h2>
+      <label>
+        <span>Model</span>
+        <select name="model_id">
+          <option value="">None</option>
+          {(models || []).map((m) => (
+            <option value={m.id} selected={m.id === item.model_id}>{m.title || m.id}</option>
+          ))}
+        </select>
+      </label>
+      <p class="hint">Only models you have approved appear here.</p>
+
+      <div class="switch">
+        <span>Offer 3D and AR<small>Off keeps the model attached but the dish behaves like a photo dish.</small></span>
+        <input type="checkbox" name="is_3d" checked={item.is_3d} />
+      </div>
+      <div class="switch">
+        <span>Live 3D on the card<small>The thumbnail rotates instead of showing the photo. This is the thing nobody else has.</small></span>
+        <input type="checkbox" name="thumb_3d" checked={item.thumb_3d} />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Visibility</h2>
+      <div class="switch">
+        <span>On the menu<small>Off removes it from the page entirely.</small></span>
+        <input type="checkbox" name="visible" checked={item.visible} />
+      </div>
+      <div class="switch">
+        <span>Text only<small>A compact row with no picture, for drinks and sides.</small></span>
+        <input type="checkbox" name="text_only" checked={item.text_only} />
+      </div>
+      <div class="switch">
+        <span>Featured<small>Promoted in templates that show a signature strip.</small></span>
+        <input type="checkbox" name="featured" checked={item.featured} />
+      </div>
+    </div>
+
+    {!isNew && (
+      <div class="card">
+        <button type="button" class="danger" id="delete" style="width:100%">Delete this dish</button>
+      </div>
+    )}
+  </form>
+
+  <script is:inline define:vars={{ slug, itemId: item.id ?? null, second }}>
+    (function () {
+      const form = document.getElementById("dish");
+      let id = itemId;
+
+      function payload() {
+        const f = new FormData(form);
+        const num = (v) => {
+          const n = parseFloat(String(v ?? "").replace(",", "."));
+          return Number.isFinite(n) ? Math.round(n * 100) : null;
+        };
+        const i18n = {};
+        if (second) {
+          const name = String(f.get(`name_${second}`) || "").trim();
+          const desc = String(f.get(`description_${second}`) || "").trim();
+          if (name || desc) {
+            i18n[second] = {};
+            if (name) i18n[second].name = name;
+            if (desc) i18n[second].description = desc;
+          }
+        }
+        return {
+          id, slug,
+          name: String(f.get("name") || "").trim(),
+          description: String(f.get("description") || "").trim(),
+          // Integer minor units are the truth: 12.30 as a float is 12.299999999999999,
+          // and a menu that disagrees with the till by a tetri is a menu nobody trusts.
+          price_minor: num(f.get("price")) ?? 0,
+          price_old_minor: num(f.get("price_old")),
+          price_text: String(f.get("price_text") || "").trim() || null,
+          category_id: f.get("category_id") || null,
+          model_id: f.get("model_id") || null,
+          visible: form.visible.checked,
+          text_only: form.text_only.checked,
+          is_3d: form.is_3d.checked,
+          thumb_3d: form.thumb_3d.checked,
+          featured: form.featured.checked,
+          i18n,
+        };
+      }
+
+      async function save(wait) {
+        const body = payload();
+        if (!body.name) return;                 // a nameless dish is a half-typed one
+        if (id) {
+          BR.save("/api/item", body, { key: "item", wait });
+        } else {
+          // The first save creates the row and then adopts its id, so typing a name and
+          // a price is one dish rather than two.
+          const res = await BR.post("/api/item", body);
+          if (res?.id) {
+            id = res.id;
+            history.replaceState({}, "", `/admin/${slug}/item/${id}`);
+            BR.flash("Saved");
+          }
+        }
+      }
+
+      form.addEventListener("input", () => save(600));
+      form.addEventListener("change", () => save(0));
+
+      document.getElementById("photo").addEventListener("change", async (ev) => {
+        const file = ev.target.files?.[0];
+        if (!file) return;
+        BR.flash("Uploading…");
+        try {
+          // Resized in the browser before it leaves the phone. The card draws at 430px,
+          // so a 4000px camera shot is thousands of wasted kilobytes on every diner's
+          // page - and a photo the browser re-encodes can only get smaller.
+          const bmp = await createImageBitmap(file);
+          const w = Math.min(860, bmp.width);
+          const c = document.createElement("canvas");
+          c.width = w; c.height = Math.round(bmp.height * (w / bmp.width));
+          c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+          const blob = await new Promise((r) => c.toBlob(r, "image/webp", 0.82));
+          const fd = new FormData();
+          fd.append("file", blob, "photo.webp");
+          fd.append("slug", slug);
+          if (id) fd.append("item_id", id);
+          const r = await fetch("/api/upload", { method: "POST", body: fd });
+          if (!r.ok) throw new Error((await r.text()).slice(0, 120));
+          const { url } = await r.json();
+          document.getElementById("photo-box").innerHTML =
+            `<img src="${url}" alt="" style="width:100%;border-radius:10px;margin-bottom:10px">`;
+          BR.flash("Photo saved");
+        } catch (err) {
+          BR.flash("Upload failed: " + err.message, true);
+        }
+      });
+
+      const del = document.getElementById("delete");
+      if (del) del.addEventListener("click", async () => {
+        if (!confirm("Delete this dish? This cannot be undone.")) return;
+        try {
+          await BR.post("/api/item", { id, slug, _delete: true });
+          location.href = `/admin/${slug}/menu`;
+        } catch (err) {
+          BR.flash("Not deleted: " + err.message, true);
+        }
+      });
+    })();
+  </script>
+</Admin>

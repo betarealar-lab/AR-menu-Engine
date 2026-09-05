@@ -1,0 +1,99 @@
+---
+// The menu: categories and dishes. A list, not a table - a table on a 390px screen is a
+// horizontal scrollbar with extra steps. Every row is a tap target that opens a
+// full-screen editor.
+import Admin from "../../../layouts/Admin.astro";
+import { requireUser, userClient } from "../../../lib/auth.js";
+
+const gate = await requireUser(Astro);
+if (gate) return gate;
+const { slug } = Astro.params;
+const supa = userClient(Astro.locals.user.token);
+
+const { data: tenant } = await supa
+  .from("tenants").select("id, name, slug").eq("slug", slug).single();
+if (!tenant) return new Response("Not found", { status: 404 });
+
+// The queries are unfiltered by tenant on purpose beyond the id: `is_member_of` in the
+// database is the authority on who sees what (0001_skeleton), not a where-clause somebody
+// has to remember. check_schema.py proves one restaurant cannot read another's.
+const [{ data: cats }, { data: items }] = await Promise.all([
+  supa.from("categories").select("id, name, position, visible")
+      .eq("tenant_id", tenant.id).order("position"),
+  supa.from("items")
+      .select("id, name, price_minor, price_text, currency, category_id, position, " +
+              "visible, photo_key, model_id, is_3d, text_only")
+      .eq("tenant_id", tenant.id).order("position"),
+]);
+
+const money = (i) => i.price_text ||
+  (i.price_minor ? `${(i.price_minor / 100).toFixed(2).replace(/\.00$/, "")} ₾` : "—");
+const photo = (k) => (!k ? null : k.startsWith("http") ? k : `/a/${k}`);
+
+const byCat = new Map((cats || []).map((c) => [c.id, []]));
+const loose = [];
+for (const i of items || []) (byCat.get(i.category_id) || loose).push(i);
+---
+<Admin title={tenant.name} tab="menu" slug={slug} back="/admin">
+  <a slot="action" class="btn" href={`/admin/${slug}/item/new`} style="padding:8px 14px">
+    Add dish
+  </a>
+
+  <div class="card">
+    <h2>{(items || []).length} dishes · {(cats || []).length} categories</h2>
+    <div class="actions">
+      <a class="btn ghost grow" href={`/${slug}`} target="_blank" rel="noopener">View menu</a>
+      <a class="btn ghost grow" href={`/admin/${slug}/categories`}>Categories</a>
+    </div>
+  </div>
+
+  {(cats || []).map((c) => (
+    <div class="card">
+      <h2>{c.name}{!c.visible && <span class="pill off"> hidden</span>}</h2>
+      {byCat.get(c.id).length === 0 ? (
+        <p class="hint" style="margin:0">Nothing in this category yet.</p>
+      ) : (
+        <ul class="rows">
+          {byCat.get(c.id).map((i) => (
+            <li>
+              <a class="row" href={`/admin/${slug}/item/${i.id}`}>
+                {photo(i.photo_key)
+                  ? <img src={photo(i.photo_key)} alt="" loading="lazy" />
+                  : <div class="thumb"></div>}
+                <div class="body">
+                  <b>{i.name}</b>
+                  <small>
+                    {i.model_id && i.is_3d ? "3D · " : ""}
+                    {!i.visible ? "hidden" : i.text_only ? "text only" : "on the menu"}
+                  </small>
+                </div>
+                <span class="price">{money(i)}</span>
+                <span class="chev">&#8250;</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  ))}
+
+  {loose.length > 0 && (
+    <div class="card">
+      <h2>No category</h2>
+      <ul class="rows">
+        {loose.map((i) => (
+          <li>
+            <a class="row" href={`/admin/${slug}/item/${i.id}`}>
+              {photo(i.photo_key)
+                ? <img src={photo(i.photo_key)} alt="" loading="lazy" />
+                : <div class="thumb"></div>}
+              <div class="body"><b>{i.name}</b><small>needs a category</small></div>
+              <span class="price">{money(i)}</span>
+              <span class="chev">&#8250;</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+</Admin>

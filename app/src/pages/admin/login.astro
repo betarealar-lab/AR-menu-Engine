@@ -1,0 +1,48 @@
+---
+// Sign in. No signup route exists, deliberately: authorised accounts only while the
+// product is proven (DECISIONS §9.3), and accounts are made in the Supabase dashboard.
+// No password is ever stored by us - the platform's cleartext password table is the one
+// piece of its debt that must not come across (ARCHITECTURE-DEBT §1).
+import Admin from "../../layouts/Admin.astro";
+import { anonClient, setSession, getUser } from "../../lib/auth.js";
+
+const next = Astro.url.searchParams.get("next") || "/admin";
+let error = null;
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const { data, error: err } = await anonClient().auth.signInWithPassword({
+    email: String(form.get("email") || "").trim(),
+    password: String(form.get("password") || ""),
+  });
+  if (err) {
+    // Deliberately not "no such user" vs "wrong password" - that tells an attacker which
+    // addresses are real.
+    error = "That email and password did not match.";
+  } else {
+    setSession(Astro.cookies, data.session);
+    return Astro.redirect(next);
+  }
+} else if (await getUser(Astro.cookies)) {
+  return Astro.redirect(next);
+}
+---
+<Admin title="Sign in">
+  <div class="card">
+    {error && <p class="error">{error}</p>}
+    <form method="post">
+      <label>
+        <span>Email</span>
+        <input type="email" name="email" autocomplete="username" required autofocus />
+      </label>
+      <label>
+        <span>Password</span>
+        <input type="password" name="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit" style="width:100%">Sign in</button>
+    </form>
+    <p class="hint" style="margin-top:14px">
+      Accounts are created by the BetaReal team. There is no self-signup yet.
+    </p>
+  </div>
+</Admin>

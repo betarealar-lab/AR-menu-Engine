@@ -1,0 +1,57 @@
+---
+// Every restaurant this account can reach. RLS decides what comes back - the query is
+// unfiltered on purpose, because `is_member_of` in the database is the authority on who
+// sees what, not a where-clause somebody has to remember to write.
+import Admin from "../../layouts/Admin.astro";
+import { requireUser, userClient } from "../../lib/auth.js";
+
+const gate = await requireUser(Astro);
+if (gate) return gate;
+
+const supa = userClient(Astro.locals.user.token);
+const { data: tenants, error } = await supa
+  .from("tenants")
+  .select("id, slug, name, template_id, settings")
+  .order("name");
+---
+<Admin title="Restaurants" tab="restaurants">
+  <a slot="action" class="btn" href="/admin/new" style="padding:8px 14px">New</a>
+
+  {error && <p class="error">{error.message}</p>}
+
+  {!error && (!tenants || tenants.length === 0) && (
+    <div class="empty">
+      <p>No restaurants yet.</p>
+      <a class="btn" href="/admin/new">Create the first one</a>
+    </div>
+  )}
+
+  {tenants && tenants.length > 0 && (
+    <div class="card">
+      <ul class="rows">
+        {tenants.map((t) => (
+          <li>
+            <a class="row" href={`/admin/${t.slug}/menu`}>
+              {t.settings?.logo_url
+                ? <img src={t.settings.logo_url} alt="" loading="lazy" />
+                : <div class="thumb"></div>}
+              <div class="body">
+                <b>{t.name}</b>
+                <small>/{t.slug} · {t.template_id || "monday_greens"}</small>
+              </div>
+              <span class="chev">&#8250;</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+
+  <div class="card">
+    <h2>Signed in</h2>
+    <div class="actions">
+      <span class="body" style="flex:1">{Astro.locals.user.email}</span>
+      <form method="post" action="/admin/logout"><button class="ghost">Sign out</button></form>
+    </div>
+  </div>
+</Admin>
