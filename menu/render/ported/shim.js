@@ -118,6 +118,20 @@
     return _cleanText(item[field]);
   };
 
+  // theme_config stores lists as JSON strings - hero_images, drink_categories. Their
+  // parser, verbatim, because a malformed value must yield an empty list rather than
+  // throw and take the rest of the boot with it.
+  window._parseConfigList = function (raw) {
+    const t = String(raw || "").trim();
+    if (!t) return [];
+    try {
+      const list = JSON.parse(t);
+      return Array.isArray(list) ? list : [];
+    } catch (_) {
+      return [];
+    }
+  };
+
   window._escapeHtml = window._escapeHtml || function (v) {
     return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];

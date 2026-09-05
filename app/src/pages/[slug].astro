@@ -60,6 +60,21 @@ const template = SHEETS[menu.tenant.template] ? menu.tenant.template : DEFAULT_T
 const sheet = SHEETS[template];
 const title = cfg.site_name || menu.tenant.name;
 const vars = [themeCss(cfg, mode), settingsCss(cfg)].filter(Boolean).join(";");
+// The settings the deferred bundle needs at runtime: hero art, the venue block, the
+// links. SETTINGS only - a few hundred bytes, never the menu, which is already in the
+// markup. `init.js` reads this and starts the hero video, the photo crossfade, the
+// address/hours block and the delivery links exactly the way the platform starts them.
+const RUNTIME_KEYS = [
+  "hero_images", "hero_image_url", "hero_video_url", "hero_video_mobile_url",
+  "hero_video_poster_url", "hero_logo_url", "hero_min_h", "spin_enabled",
+  "site_address", "site_hours_range", "site_hours_note", "site_map_url",
+  "instagram_url", "google_review_label", "google_review_url",
+  "delivery_label", "delivery_url", "delivery_icon",
+  "delivery2_label", "delivery2_url", "delivery2_icon",
+  "drink_categories", "site_name", "site_name_ka",
+];
+const runtimeCfg = Object.fromEntries(
+  RUNTIME_KEYS.filter((k) => cfg[k]).map((k) => [k, cfg[k]]));
 const buildMs = Date.now() - started;
 ---
 <!doctype html>
@@ -98,6 +113,16 @@ const buildMs = Date.now() - started;
     {/* Everything interactive - the category filter, the 3D modal, AR, the WebXR
         carousel - in one cached file that every tenant shares, loaded after the menu is
         already readable. `defer` keeps it off the parser's critical path entirely. */}
+    {/* Settings for the deferred bundle. `</` is escaped because a closing tag inside
+        JSON would end the script early - the standard fix, and cheaper than a request. */}
+    <script
+      is:inline
+      set:html={`window.__CFG=${JSON.stringify(runtimeCfg).replace(/</g, "\\u003c")};`}
+    />
+    {/* Everything interactive - the category filter, the 3D modal, AR, the WebXR
+        carousel, the hero video and crossfade - in one cached file every tenant shares,
+        loaded after the menu is already readable. `defer` keeps it off the parser's
+        critical path entirely. */}
     <script
       is:inline
       defer

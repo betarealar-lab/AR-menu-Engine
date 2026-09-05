@@ -26,12 +26,20 @@ const pick = (item, field, lang) =>
   (lang !== "en" && item[`${field}_${lang}`]) || item[`${field}_en`] || "";
 
 export function hero(cfg) {
-  if (!cfg.hero_image_url && !cfg.hero_logo_url) return "";
+  const any = cfg.hero_image_url || cfg.hero_logo_url || cfg.hero_video_url
+    || cfg.hero_images;
+  if (!any) return "";
   // Photo, crossfade layer and veil are separate elements in the platform and the CSS
   // positions all three; one div gets the height and none of the treatment.
   return `<section class="mg-hero" aria-hidden="true">` +
     `<div class="mg-hero-photo"></div>` +
     `<div class="mg-hero-next"></div>` +
+    // Ships with NO src, on purpose. `_startHeroVideo` attaches one on idle, after the
+    // poster photo has already painted the band, so a clip can never compete with the
+    // menu for the first screenful - and it is skipped entirely on Data Saver, on 2G and
+    // under prefers-reduced-motion.
+    `<video id="mg-hero-video" class="mg-hero-video" preload="none" muted loop ` +
+    `playsinline autoplay disablepictureinpicture tabindex="-1" aria-hidden="true"></video>` +
     `<div class="mg-hero-veil"></div>` +
     (cfg.hero_logo_url
       ? `<img class="mg-hero-logo" src="${e(cfg.hero_logo_url)}" alt="" fetchpriority="high">`

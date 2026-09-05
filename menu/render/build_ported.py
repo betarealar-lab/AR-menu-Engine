@@ -35,7 +35,8 @@ OUT = HERE / "ported.mjs"
 # full.css is the platform's ENTIRE stylesheet, verbatim. Not a subset: a subset of a
 # cascade-dependent language is a different stylesheet, which is how the last four
 # bugs happened. See extract_css.py.
-FILES = ["full.css", "viewer.html", "xr.js", "shim.js", "viewer.js", "page.js"]
+FILES = ["full.css", "viewer.html", "xr.js", "shim.js", "viewer.js", "hero.js",
+         "page.js", "init.js"]
 
 # Every template's rules and every preset's values. Both are DATA - the point of
 # MENU-PLATFORM 2.2 is that a restaurant look is a row, not a branch - so each is
