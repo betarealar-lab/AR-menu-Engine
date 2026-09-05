@@ -621,9 +621,20 @@ member's personal account too. Temo created the **BetaReal GitHub account** and 
 member.* If a new Supabase, or a new anything, is needed to keep the self-serve stack under
 BetaReal's own control, create it.
 
-So it lives in **BetaReal-owned infrastructure** — the `betarealar-lab` org, alongside the
-engine, which is also where the handoff placed it: *"it is not a separate standalone repo; it
-is the delivery half of this product."*
+**Confirmed by Temo, 2026-09-05:** it lives in **this repo** —
+`github.com/betarealar-lab/AR-menu-Engine`, the BetaReal org, created on the BetaReal
+mail for exactly this reason. His words: *"creating another repo for astro
+rebuild/automated menu creation that needs to talk to 3d creation engine and library is
+inefficient... they are 2 different sides of system but they are both together the
+product."*
+
+That is also the technical answer. The menu half and the engine half share the job queue,
+the storage, and the definition of what a dish is. Split across two repos, every one of
+those becomes an API contract to version, and the admin app would have to re-implement
+`jobs.enqueue` over HTTP to ask for a model. One repo, two halves, one deploy each.
+
+The full architecture is in [MENU-PLATFORM.md](MENU-PLATFORM.md). Read it before writing
+a line of the menu side.
 
 **Parallel, not a replacement — for now.** New self-serve tenants only. The existing
 tenants, Monday Greens and the hand-built templates, stay on the current renderer. Replacement

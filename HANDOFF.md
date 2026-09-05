@@ -4,9 +4,10 @@ Written 2026-08-29, last revised 2026-09-05 (the job queue went in). Everything 
 **not** already in the other docs. The other docs carry the reasoning; this one carries the
 state, the environment, and the mistakes already made so they are not made again.
 
-**Read in this order:** this file → `ROADMAP.md` (what to build, in order) → `DECISIONS.md`
-(why the engine and capture work the way they do) → `COMPETITORS.md` (only when positioning
-or pricing comes up).
+**Read in this order:** this file → `DECISIONS.md` §9 (what the product is, settled by
+Temo) → `MENU-PLATFORM.md` (the self-serve half - read before building any of it) →
+`ROADMAP.md` (older, AI-written, partly wrong - see §9.8) → `COMPETITORS.md` (only when
+positioning or pricing comes up).
 
 ---
 
@@ -305,7 +306,10 @@ why the reconciler counts dead jobs — are in DECISIONS §5.1.
 Deliberately deferred; the queue uses R2 conditional writes and that is enough.
 
 **4 · The self-serve menu (the Astro half).** The delivery half of the product, and the
-next real piece. **Do not start it without reading DECISIONS §9.**
+next real piece. It lives in **this repo** - confirmed 2026-09-05. **Read
+[MENU-PLATFORM.md](MENU-PLATFORM.md) and DECISIONS §9 before writing a line of it.**
+The one decision everything else hangs off: a diner request never touches the database.
+Publishing compiles the menu to an immutable snapshot on R2 and the menu page reads that.
 
 **Not a phase:** hosting. It is a slider — 512 MB refuses raw masters, 2 GiB accepts
 them. Choose it, do not build it.
