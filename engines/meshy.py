@@ -271,10 +271,17 @@ class MeshyEngine(Engine):
                 return res
 
             out_dir.mkdir(parents=True, exist_ok=True)
-            # Meshy returns a USDZ as well. It is kept as a master artefact, but it is
-            # NOT what ships - the shipped one is built from our optimised GLB by
-            # usdz.py, because Meshy's is the undecimated master.
-            for fmt in ("glb", "usdz"):
+            # GLB only. Meshy also offers a USDZ, and we used to archive it - 73 MB a
+            # dish, 37% of the whole models bucket, that nothing in the codebase ever
+            # read. It was never shippable either: it is built from the UNDECIMATED
+            # master, and shipping it is the bug that sent every iPhone a 74 MB, 190 cm
+            # model while Android got 3 MB at 22 cm.
+            #
+            # There was never anything in it that the GLB does not have. A master is a
+            # master whatever container it is written in, and every format a diner
+            # loads is derived from that one GLB by our own pipeline - which is the only
+            # way the decimation, the textures and the real-world scale reach it.
+            for fmt in ("glb",):
                 url = (task.get("model_urls") or {}).get(fmt)
                 if url:
                     res.files[fmt] = _download(url, out_dir / f"{dish}.{fmt}")

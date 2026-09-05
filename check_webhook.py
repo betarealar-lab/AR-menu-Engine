@@ -53,7 +53,11 @@ class _Stub(_E):
         out_dir.mkdir(parents=True, exist_ok=True)
         dst = out_dir / (dish + ".glb")
         _sh.copyfile(r"MASTER_PATH", dst)
-        r.files = {"glb": dst}
+        # Meshy hands back a USDZ of the undecimated master alongside the GLB. This
+        # stub does the same so the pipeline can be tested for dropping it.
+        junk = out_dir / (dish + ".usdz")
+        junk.write_bytes(b"PK\x03\x04not-a-real-usdz")
+        r.files = {"glb": dst, "usdz": junk}
         r.seconds = 175.1
         r.ok = True
         return r
@@ -190,6 +194,16 @@ def main():
         st = d["export_stats"]
         check("dish completes", d["status"] == "review", d.get("error") or d.get("export_error"))
         check("master stored", bool(d["model_key"]))
+        # 73 MB a dish, 37% of the models bucket, that no code path ever opened - and
+        # the file that once got shipped to iOS at 74 MB and 190 cm. The engine offers
+        # one; nothing archives it. The master is the GLB and every shipped format is
+        # derived from it here.
+        check("the engine's own USDZ is NOT archived as a master",
+              "usdz" not in (d.get("master_keys") or {}), str(sorted(d.get("master_keys") or {})))
+        check("the master that IS archived is the GLB",
+              d["model_key"].endswith(".glb"), d["model_key"])
+        check("and the shipped USDZ is still built from the optimised GLB",
+              bool((d.get("catalog_keys") or {}).get("usdz")))
         check("all three files built",
               sorted(d["catalog_keys"]) == ["draco", "opt", "usdz"], str(sorted(d["catalog_keys"])))
         check("usdz matches the glb",

@@ -288,22 +288,51 @@ download bundle, not the optimiser, which correctly builds its own USDZ from the
 Right now it is **37% of everything in `betareal-models`** (145 MB of 388 MB). At 12,000
 dishes it is 0.9 TB and $14 a month to keep a file with no reader.
 
-It is also safe to stop keeping: the master GLB is the reproducible source, and a USDZ can
-always be rebuilt from it. What cannot be recovered is the master GLB itself — Meshy
-deletes its copy after 3 days.
+**Fixed 2026-09-05.** Temo: *"meshy should not build its own usdz, that is dumb, meshy
+should have its own glb and then glb is optimized and converted to usdz... master is same
+be it glb or usdz whatever u wanna call it."* Exactly right — it was never extra
+information, only the same mesh in another container, produced before any of our
+decimation, textures or real-world scale had touched it.
 
-**Recommendation, not yet done** (deleting is Temo's call): stop archiving `master.usdz`
-at generation, and drop the existing two. One line in `pipeline.store_result`.
+Two places, deliberately:
 
-### 4.2 · What we are storing is not the training corpus
+- `engines/meshy.py` no longer downloads it. Saves the 73 MB transfer as well as the
+  storage.
+- `pipeline.store_result` refuses to archive a `usdz` **whatever engine hands one over**,
+  so the next engine — Hunyuan, or anything else — inherits the rule rather than
+  rediscovering it.
 
-ROADMAP calls the photos "irreplaceable — the training corpus" for a future self-hosted
-engine. At 145 kB a frame, what is stored is a browser-downscaled JPEG, not the pro-camera
-original. That is the right call for generation — Meshy takes downscaled input happily and
-a 24 MB camera JPEG base64s to a ~32 MB request body — but it means **the archive is not
-what anyone would want to train on.** If the Hunyuan plan (DECISIONS §2) is real, the
-originals have to be kept deliberately somewhere, and they currently are not kept at all.
-Flagged, not solved.
+**The rule, stated once:** the master is the GLB. Every format a diner loads is derived
+from that GLB by our own pipeline, because that is the only path along which the
+decimation, the texture resize and the real-world scale actually reach the file.
+
+`check_webhook.py` now hands back a USDZ from the stub engine, the way Meshy does, and
+asserts it never reaches storage while the shipped USDZ is still built from the optimised
+GLB. The two existing files (145 MB) are still in the bucket pending Temo's word.
+
+### 4.2 · The pro-camera originals are not this system's problem — corrected
+
+An earlier version of this section worried that the 145 kB stored frames are downscaled
+JPEGs rather than pro-camera originals, and that this loses "the training corpus" for a
+future self-hosted engine. Temo corrected it, 2026-09-05:
+
+> *"there is no pro camera original and stuff, pro camera is used by us for manual
+> scanning then we take it to kiri and so on and on, it is our own manual pipeline, if
+> user uses pro camera or smth is not relevant to us, if we use pro camera photos in this
+> then that means pro camera photos of ours is already stored so worry not."*
+
+He is right, and it follows from DECISIONS §9's split. **The pro camera belongs to the
+Premium pipeline**, which is ours and lives outside this system — shoot, colour grade,
+export JPG, and from there either into KIRI for photogrammetry or straight into Meshy
+(the AI path is the shorter one; KIRI is bypassed). The originals are already kept there,
+by us, as part of that workflow.
+
+What reaches these buckets is the graded JPG that was going to be sent to the engine
+anyway. For **self-serve**, the input is a phone photo and there is no higher-fidelity
+original to lose. Either way, nothing is being thrown away here that anyone has.
+
+**So there is no action.** ROADMAP's "irreplaceable — the training corpus" framing is a
+Premium-pipeline concern that it filed under the wrong system.
 
 ---
 

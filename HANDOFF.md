@@ -196,6 +196,7 @@ attributable.
 | A 24 MB camera JPEG base64s to ~32 MB; four of those is a ~130 MB request body | Browser downscales before upload; engine skips re-encode when already sized |
 | Background server started with `&` inside a Bash call dies when the call returns | Use `run_in_background` |
 | **`studio.py --engine` defaulted to `meshy-7-lean`, which is not in the registry.** Lean was removed on 2026-08-31 and the default that named it was not; `python studio.py` with no flag built a Studio whose fallback engine could not be constructed. It never bit because the page always sends an engine explicitly — a dead default that looked alive, exactly like `target_polycount` | Default is `meshy-7`. Found 2026-09-05 |
+| **Meshy's own USDZ was archived as a master: 73 MB a dish that no code path ever read.** `master_keys` is read in exactly two places and both want `png`. It was never shippable either - built from the undecimated master, it is the file that once sent iPhones 74 MB at 190 cm. 37% of the models bucket | The master is the GLB, full stop. `engines/meshy.py` does not download it and `pipeline.store_result` refuses to archive one from ANY engine, so the next engine inherits the rule. Asserted in `check_webhook.py` |
 | **`jobs.claim` re-listed the leases once per candidate job.** On a queue of twenty that was twenty-one R2 listings to take one job, on a loop running every few seconds on two machines. Listing is a Class A operation with 1,000,000 free a month | One listing per claim, and `stats()` down from four to three. Measured and asserted in `check_jobs.py` — the count is now a test, not a hope |
 
 ---
@@ -283,8 +284,8 @@ real-world scale, judge with fault tags, rename, archive, the photo shelf, downl
 per-dish optimiser settings, queue depth and dead letters in the header, and a phone
 layout.
 
-**Run all three before pushing.** `check.py` covers 122 paths, `check_webhook.py` 23 and
-`check_jobs.py` 46 — 191 in total, all passing as of 2026-09-05. `check_webhook.py` and
+**Run all three before pushing.** `check.py` covers 122 paths, `check_webhook.py` 26 and
+`check_jobs.py` 46 — 194 in total, all passing as of 2026-09-05. `check_webhook.py` and
 `check_jobs.py` use stubs and cost nothing; `check.py` needs a real master GLB, and there
 is one at `C:\Users\temot\Desktop\BetaReal-inspect\chicken-balls-in-shqmeruli-sauce--raw-full\model.glb`.
 
@@ -342,7 +343,7 @@ dataset.py         dishes, variants, frames, verdicts, tickets. Keys and records
 storage.py         R2 or local disk behind one interface
 config.py          .env loading
 check.py           122 checks over a real server on a temp store. Never touches R2
-check_webhook.py   23 checks of the submit/callback path with a stub engine, no credits
+check_webhook.py   26 checks of the submit/callback path with a stub engine, no credits
 check_jobs.py      46 checks of the queue, including eight threads racing one claim
                    and what an idle poll costs in R2 listings. Free, no server
 pull.py            pull a dish's files to a folder and compare them, for Blender

@@ -246,6 +246,15 @@ def store_result(dish: str, variant: str, result, who: str) -> None:
     masters = {}
     for ext, path in result.files.items():
         kind = "png" if ext == "thumb" else ext
+        # The master is the GLB, and nothing else is a master. An engine may hand back
+        # a USDZ - Meshy does - but it is that same mesh in another container, built
+        # before any of our decimation, textures or real-world scale have touched it.
+        # Archiving it cost 73 MB a dish for a file no code path ever opened, and
+        # keeping it around is also how it once got shipped to iOS by accident. The
+        # rule lives here rather than only in the Meshy client so that the next engine
+        # inherits it. What ships is built from the GLB by optimize.py + usdz.py.
+        if kind == "usdz":
+            continue
         masters[kind] = dataset.save_model(dish, variant, rec.get("engine") or "",
                                            kind, Path(path).read_bytes())
     rec["master_keys"] = masters
