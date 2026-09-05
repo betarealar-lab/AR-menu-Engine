@@ -98,7 +98,8 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
         cur.execute("""
             select i.id, i.name, i.description, i.price_minor, i.currency,
                    i.category_id, i.position, i.photo_key,
-                   m.draco_key, m.usdz_key, m.poster_key, m.scale_cm, m.scale_axis
+                   m.draco_key, m.usdz_key, m.poster_key, m.scale_cm, m.scale_axis,
+                   m.view_orbit
             from items i
             left join models m
                    on m.id = i.model_id
@@ -109,7 +110,7 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
         """, (tenant_id,))
         items = []
         for (iid, iname, desc, price, cur_code, cat, pos, photo,
-             draco, usdz, poster, scale_cm, scale_axis) in cur.fetchall():
+             draco, usdz, poster, scale_cm, scale_axis, orbit) in cur.fetchall():
             model = None
             # A model with no shipping files is not a model. It happens: generation
             # succeeded and the optimiser has not run yet, because worker.py finishes
@@ -120,6 +121,9 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
                     "draco": draco, "usdz": usdz, "poster": poster,
                     "scale_cm": float(scale_cm) if scale_cm is not None else None,
                     "scale_axis": scale_axis,
+                    # How to frame it. The renderer clamps and validates; a bad value
+                    # here must render as "the default view", never as no page.
+                    "orbit": orbit or None,
                 }
             items.append({
                 "id": str(iid), "name": iname, "description": desc,

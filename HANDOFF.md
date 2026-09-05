@@ -198,6 +198,8 @@ attributable.
 | Background server started with `&` inside a Bash call dies when the call returns | Use `run_in_background` |
 | **`studio.py --engine` defaulted to `meshy-7-lean`, which is not in the registry.** Lean was removed on 2026-08-31 and the default that named it was not; `python studio.py` with no flag built a Studio whose fallback engine could not be constructed. It never bit because the page always sends an engine explicitly — a dead default that looked alive, exactly like `target_polycount` | Default is `meshy-7`. Found 2026-09-05 |
 | **Meshy's own USDZ was archived as a master: 73 MB a dish that no code path ever read.** `master_keys` is read in exactly two places and both want `png`. It was never shippable either - built from the undecimated master, it is the file that once sent iPhones 74 MB at 190 cm. 37% of the models bucket | The master is the GLB, full stop. `engines/meshy.py` does not download it and `pipeline.store_result` refuses to archive one from ANY engine, so the next engine inherits the rule. Asserted in `check_webhook.py` |
+| **model-viewer 3.4.0 does not reliably fire `load`, and a thumbnail that waits for it stays invisible forever.** Measured in Chrome on 2026-09-05 against real models: with `camera-controls` alone, `progress` reaches 1, `load` never fires and `.loaded` stays false; add `loading="eager"` and `.loaded` becomes true while `progress` stops at **0.9875** and `load` still never fires. Whichever single signal you pick, there is a configuration where it never arrives — and the poster underneath makes the result look almost right, so it would not be noticed quickly | Reveal on whichever of the three arrives first, with a bounded poll of `.loaded` as the backstop. Verified in a browser: the poll is what fires. `menu/render/viewer.mjs::reveal`. **⚠ Worth checking whether the live platform has the same latent bug** — its `_upgradeThumb` adds `thumb-model-ready` on `load` alone. Read-only observation, not ours to fix |
+| **A backtick inside a `String.raw` template literal silently ends it**, and the file then fails to parse pointing at a line dozens away from the cause. Cost time three times in one session — twice in `render.mjs` prose, once in a `viewer.mjs` doc comment. An inlined script that does not parse takes the WHOLE page down, not just the 3D | `check_render.py` extracts the inlined script, runs `node --check` on it, and asserts no stray backtick survives |
 | **`jobs.claim` re-listed the leases once per candidate job.** On a queue of twenty that was twenty-one R2 listings to take one job, on a loop running every few seconds on two machines. Listing is a Class A operation with 1,000,000 free a month | One listing per claim, and `stats()` down from four to three. Measured and asserted in `check_jobs.py` — the count is now a test, not a hope |
 
 ---
@@ -286,8 +288,8 @@ per-dish optimiser settings, queue depth and dead letters in the header, and a p
 layout.
 
 **Run all six before pushing.** `check.py` 122, `check_webhook.py` 26,
-`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 29 —
-300 in total, all passing as of 2026-09-05. `check_webhook.py` and
+`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 47 —
+318 in total, all passing as of 2026-09-05. `check_webhook.py` and
 `check_jobs.py` use stubs and cost nothing; `check.py` needs a real master GLB, and there
 is one at `C:\Users\temot\Desktop\BetaReal-inspect\chicken-balls-in-shqmeruli-sauce--raw-full\model.glb`.
 
@@ -358,9 +360,35 @@ python menu/preview.py            # http://127.0.0.1:8790/demo-kitchen
   Since `title_of` is dish-level, the chicken dish displays under the sushi name. Almost
   certainly a rename applied while the wrong dish was selected.
 
-Next: **step 4** — photo upload in the admin app enqueueing a `generate` job into the
-same queue the Scan Studio uses, and the owner's approve/reject landing in
-`models.tenant_state`. That closes the loop from a phone photo to a diner's table.
+- **3D and AR are wired, matching production.** `menu/render/viewer.mjs` reproduces what
+  the live platform does, deliberately: model-viewer **3.4.0** from the same CDN, lazy and
+  fail-open; posters first and live viewers upgraded in behind them, throttled and capped at
+  five WebGL contexts; `camera-orbit` as `"h v zoom"` with the same clamps the admin already
+  uses; iOS AR through `<a rel="ar">` holding an `<img>`, clicked inside the tap, because
+  Quick Look fires from nothing else.
+
+  **Deliberately NOT reproduced: the Android WebXR carousel.** The platform runs a custom
+  Three.js session that lets a diner swipe between dishes without leaving AR. It is a large
+  module in Niko's repo, it is his, and copying it is neither ours to do nor wise to fork.
+  Android here gets model-viewer's own `scene-viewer`/WebXR. **Porting or rebuilding that
+  carousel is a decision to take with him, deliberately.**
+
+  **One production workaround we do NOT need.** Their AR launcher bakes an `ar_scale` in and
+  swaps a y-offset-corrected blob so Quick Look seats the dish on the table. That exists
+  because their files are not sized; ours are — `optimize.py` bakes real-world scale into the
+  GLB and `usdz.py` builds the USDZ from the *optimised* GLB. None of that machinery carries
+  over.
+
+**A caveat on testing this.** `IntersectionObserver` does not report intersections in a
+**hidden** browser tab, so the lazy poster→3D upgrade cannot be validated from an automated
+tab that is not in the foreground. That is correct behaviour — nobody should be downloading
+models for a tab nobody is looking at — but it means **the upgrade path has to be eyeballed
+by a person**, in a real foreground tab. `check_render.py` covers the markup and the script;
+it cannot cover that.
+
+Next: **step 4** — photo upload in the admin app enqueueing a `generate` job into the same
+queue the Scan Studio uses, and the owner's approve/reject landing in `models.tenant_state`.
+That closes the loop from a phone photo to a diner's table.
 
 **Not a phase:** hosting. It is a slider — 512 MB refuses raw masters, 2 GiB accepts
 them. Choose it, do not build it.
@@ -401,8 +429,10 @@ check_schema.py    52 checks of the menu platform's tenancy against the REAL
                    as the other. Free; cleans up after itself
 check_publish.py   25 checks of the publish path on a throwaway tenant: hidden
                    items absent, unapproved models unattached, snapshots immutable
-check_render.py    29 checks of the rendered HTML, incl. XSS and CSS injection
-                   from a restaurant's own typing. Needs node; touches nothing
+check_render.py    47 checks of the rendered HTML: XSS and CSS injection from a
+                   restaurant's own typing, the no-flash properties, the viewer
+                   behaviour, and `node --check` on the inlined script. Needs node
+menu/render/viewer.mjs  the 3D + AR behaviour, inlined into the page
 menu/              the self-serve half. See MENU-PLATFORM.md before touching it
 menu/migrations/   numbered SQL, applied once each, checksummed
 menu/migrate.py    applies them. --status, --dry-run

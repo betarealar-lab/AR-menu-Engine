@@ -112,6 +112,69 @@ def main() -> int:
         check("it waits for load before doing anything",
               'addEventListener("load"' in tail)
 
+    print("\n== the inlined script is real JavaScript ==")
+    # It is built as a String.raw template literal, so a single backtick anywhere inside
+    # it silently ends the literal and the rest is parsed as code. That has broken this
+    # file three times in one session, each time reporting a syntax error dozens of lines
+    # from the actual cause - and an inlined script that does not parse takes the WHOLE
+    # page down, not just the 3D.
+    import tempfile
+    body_js = re.search(r"<script>(.*?)</script>", html, re.S)
+    check("there is an inlined script", bool(body_js))
+    if body_js:
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
+                                         encoding="utf-8") as fh:
+            fh.write(body_js.group(1))
+            tmp = fh.name
+        r = subprocess.run(["node", "--check", tmp], capture_output=True)
+        Path(tmp).unlink(missing_ok=True)
+        check("and node parses it without error", r.returncode == 0,
+              r.stderr.decode("utf-8", "replace").strip().splitlines()[0][:110]
+              if r.returncode else "")
+        check("it contains no stray backtick", "`" not in body_js.group(1),
+              "a backtick here ends the template literal that builds it")
+
+    print("\n== the 3D and AR behaviour, as production does it ==")
+    # Same model-viewer version the platform ships. A rendering difference between old
+    # menus and new ones is a thing somebody would have to chase down one day, for no
+    # gain at all.
+    check("model-viewer 3.4.0, the version already in production",
+          "model-viewer/3.4.0/model-viewer.min.js" in html)
+    check("loaded from the same CDN", "ajax.googleapis.com" in html)
+    check("but NOT in the head - it is ~250 KB",
+          "model-viewer.min.js" not in head)
+    check("and it fails OPEN, so a dead CDN leaves a working menu",
+          "onerror" in html and "resolve()" in html)
+
+    check("the card carries its own model url", 'data-glb="' in body)
+    check("and its usdz for iOS", 'data-usdz="' in body)
+    check("and its name, so the modal needs no lookup", 'data-name="' in body)
+
+    orbited = render(snapshot(items=[dict(
+        snapshot()["items"][0],
+        model=dict(snapshot()["items"][0]["model"], orbit="0 30 105"))]))
+    check("a per-model camera angle reaches the page",
+          'data-orbit="0 30 105"' in orbited)
+    # Same "h v zoom" convention, same clamps, as the admin people already use.
+    check("clamped the way the admin clamps it",
+          "Math.min(360" in html and "Math.min(85" in html and "Math.min(300" in html)
+
+    # Quick Look fires only from a click on an <a rel="ar"> CONTAINING an <img>, inside
+    # the tap. Anything asynchronous first loses the gesture and it silently does nothing
+    # - which is indistinguishable from AR being broken.
+    check("iOS AR goes through a rel=ar anchor, not activateAR",
+          'setAttribute("rel", "ar")' in html)
+    check("with the <img> Quick Look requires",
+          'a.appendChild(document.createElement("img"))' in html)
+    check("Android gets scene-viewer / WebXR",
+          '"ar-modes", "webxr scene-viewer"' in html)
+
+    check("live 3D cards are capped", "MAX_LIVE" in html)
+    check("posters upgrade only once in view", "IntersectionObserver" in html
+          and 'rootMargin: "200px"' in html)
+    check("and the modal drops its viewer on close, not just hides it",
+          'innerHTML = ""' in html)
+
     print("\n== the CSS actually resolves ==")
     # `--x: var(--x, ...)` is a cycle. CSS resolves a cyclic custom property to the
     # guaranteed-invalid value, so the page renders with NO colours - which looks exactly

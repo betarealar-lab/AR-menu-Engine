@@ -19,7 +19,11 @@
 // implementations drift, and the day they do, an owner approves a preview that is not
 // what diners get.
 //
-// Runs unchanged in a Cloudflare Worker, in Astro, and in Node. No imports on purpose.
+// Runs unchanged in a Cloudflare Worker, in Astro, and in Node. The only import is
+// the viewer's own source, which is inlined into the page rather than fetched - there
+// is no runtime dependency to install and nothing to resolve at request time.
+
+import { VIEWER_JS, VIEWER_CSS } from "./viewer.mjs";
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -81,11 +85,29 @@ export function renderMenu(snap, opts = {}) {
     // dishes on tables at the wrong size in a way that looks like a bad model.
     const m = it.model;
     const poster = asset(it.photo || m?.poster);
+    // Everything the viewer needs travels on the element. No lookup, no second request,
+    // and nothing for a script to go and fetch before a diner can tap a dish.
+    const data = m
+      ? ` data-glb="${e(asset(m.draco))}"` +
+        (m.usdz ? ` data-usdz="${e(asset(m.usdz))}"` : "") +
+        (m.scale_cm
+          ? ` data-cm="${e(m.scale_cm)}" data-axis="${e(m.scale_axis || "width")}"`
+          : "") +
+        (m.orbit ? ` data-orbit="${e(m.orbit)}"` : "") +
+        ` data-name="${e(it.name)}"`
+      : "";
+    // The poster sits inside a fixed-size wrapper the live viewer can take over without
+    // moving anything. A viewer swapped into unreserved space reflows the whole row.
+    const shot = m || poster
+      ? `<div class="shotwrap">${
+          poster
+            ? `<img class="shot" src="${e(poster)}" alt="" loading="lazy" decoding="async">`
+            : ""
+        }</div>`
+      : "";
     return `
-      <li class="item${m ? " has3d" : ""}"${m ? ` data-glb="${e(asset(m.draco))}"` : ""}${
-        m?.usdz ? ` data-usdz="${e(asset(m.usdz))}"` : ""
-      }${m?.scale_cm ? ` data-cm="${e(m.scale_cm)}" data-axis="${e(m.scale_axis || "width")}"` : ""}>
-        ${poster ? `<img class="shot" src="${e(poster)}" alt="" loading="lazy" decoding="async">` : ""}
+      <li class="item${m ? " has3d" : ""}"${data}>
+        ${shot}
         <div class="body">
           <h3>${e(it.name)}${m ? ` <span class="tag">3D</span>` : ""}</h3>
           ${it.description ? `<p>${e(it.description)}</p>` : ""}
@@ -135,8 +157,8 @@ ${themeCss(snap.theme)}
           align-items:start; padding:.9rem 0;
           border-bottom:1px solid color-mix(in srgb, var(--muted) 14%, transparent) }
   /* Reserved, so a late image cannot shove the text it sits beside. */
-  .shot { width:64px; height:64px; object-fit:cover; border-radius:8px; background:
-          color-mix(in srgb, var(--muted) 12%, transparent) }
+  .shot { width:64px; height:64px; object-fit:cover; display:block;
+          transition:opacity .25s }
   .body h3 { margin:0; font-size:1rem; font-weight:600 }
   .body p { margin:.2rem 0 0; font-size:.87rem; color:var(--muted); line-height:1.4 }
   .price { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap }
@@ -145,6 +167,7 @@ ${themeCss(snap.theme)}
          color:var(--paper) }
   footer { text-align:center; color:var(--muted); font-size:.75rem; padding:2rem 1rem }
   @media (prefers-reduced-motion:no-preference){ .item{ transition:background .15s } }
+${has3d ? VIEWER_CSS : ""}
 </style>
 </head>
 <body>
@@ -161,20 +184,8 @@ ${sections
 <footer>${e(name)} &middot; v${e(snap.version ?? "?")}</footer>
 ${
   has3d
-    ? `<script type="module">
-  /* The ONLY script on the page, and it runs after the menu is already readable.
-     model-viewer is ~250 KB and each live 3D card spawns its own WebGL context - the
-     real reason for the five-item cap (DECISIONS §7). None of that is allowed anywhere
-     near first paint: the menu is a menu before this file has been asked for. */
-  const cards = [...document.querySelectorAll(".item.has3d")];
-  if (cards.length) {
-    addEventListener("load", () => {
-      const io = new IntersectionObserver((es) => {
-        for (const en of es) if (en.isIntersecting) { io.unobserve(en.target); }
-      });
-      cards.forEach((c) => io.observe(c));
-    }, { once: true });
-  }
+    ? `<script>
+${VIEWER_JS}
 </script>`
     : ""
 }
