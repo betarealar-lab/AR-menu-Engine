@@ -35,12 +35,12 @@
 // `ported/shim.js` is the only adapter and the only file to edit.
 
 import {
-  VIEWER_CSS, MENU_CSS, VIEWER_HTML,
+  FULL_CSS, VIEWER_HTML,
   XR_JS, SHIM_JS, VIEWER_JS, PAGE_JS,
-  TEMPLATE_CSS, PRESETS,
+  PRESETS,
 } from "./ported.mjs";
 import { themeVars, themeMode } from "./theme.mjs";
-import { e, hero, header, catBar, menuList, langBar } from "./components.mjs";
+import { e, hero, header, catBar, menuList, toggles } from "./components.mjs";
 
 export function renderMenu(snap, opts = {}) {
   // Keys, never URLs, live in the snapshot (§2.6) - the buckets are private and a baked
@@ -50,11 +50,9 @@ export function renderMenu(snap, opts = {}) {
   const has3d = items.some((i) => i.model);
   const name = snap.tenant?.name || "Menu";
 
-  const template = snap.template && TEMPLATE_CSS[snap.template] !== undefined
-    ? snap.template
-    : (PRESETS[snap.template] ? snap.template : "");
+  const template = PRESETS[snap.template] ? snap.template : "";
   const preset = PRESETS[template] || {};
-  const mode = themeMode(snap.theme, template);
+  const mode = themeMode(snap.theme, template, snap.settings || {});
   const vars = themeVars(preset, snap.theme, mode);
 
   // The index on a card is its index in the WHOLE menu, not its section. The ported
@@ -77,36 +75,37 @@ export function renderMenu(snap, opts = {}) {
     (s.font_heading ? `    --font-heading: ${String(s.font_heading).replace(/[;{}]/g, "")};` : "");
 
   const primary = (snap.tenant?.languages || ["en"])[0];
+  // Their stylesheet keys off these, not off a scheme of our own. `data-theme` in
+  // particular selects the whole night/day half of every template, and naming it
+  // `data-mode` (as an earlier version did) means none of those rules match at all.
+  const attrs = [
+    `data-template="${e(template)}"`,
+    `data-theme="${e(mode)}"`,
+    `data-tenant="${e(snap.tenant?.slug || "")}"`,
+    `data-brand-slug="${e(snap.tenant?.slug || "")}"`,
+    `data-phone-layout="${e(s.phone_layout || "list")}"`,
+    s.hero_image_url ? 'data-hero-image="true"' : "",
+    s.hero_image_url ? 'data-generic-hero="true"' : "",
+  ].filter(Boolean).join(" ");
 
   return `<!doctype html>
-<html lang="${e(primary)}" data-template="${e(template)}" data-mode="${e(mode)}"
-      data-tenant="${e(snap.tenant?.slug || "")}">
+<html lang="${e(primary)}" ${attrs}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${e(name)}</title>
 <meta name="description" content="${e(name)} menu">
 <style>
-/* ── 1. the structural menu, the platform's own ─────────────────────────────────
-   This carries their DEFAULT :root palette too, which is why it comes first: a template
-   that omits a variable must fall back to something sensible rather than to nothing. */
-${MENU_CSS}
+/* ── 1. the platform's ENTIRE stylesheet, verbatim ─────────────────────────────────
+   Not a subset. CSS is order- and cascade-dependent, so a filtered stylesheet is a
+   different stylesheet - which is how four separate "it renders but looks wrong" bugs
+   happened before this file stopped being clever. See extract_css.py. */
+${FULL_CSS}
 
-/* ── 2. this template's own rules ───────────────────────────────────────────────── */
-${(template && TEMPLATE_CSS[template]) || ""}
-
-/* ── 3. the 3D + AR layer, only when the menu has 3D on it ──────────────────────── */
-${has3d ? VIEWER_CSS : ""}
-
-/* ── 4. the restaurant's palette, resolved at PUBLISH time ──────────────────────
-   LAST, and that placement is load-bearing: menu.css ships its own :root defaults, and
-   an earlier version put this block first, so every default quietly overrode the
-   template. The page came out with no background at all and the cause was ordering, not
-   a missing variable.
-
-   The platform sets these at runtime with style.setProperty after fetching theme_config,
-   which is exactly the re-skin a diner watches happen. Same variables, same CSS, written
-   before the first paint instead of after it. */
+/* ── 2. the restaurant's palette, resolved at PUBLISH time ────────────────────────
+   LAST, so it beats the defaults their sheet ships. The platform sets these at runtime
+   with style.setProperty after fetching theme_config, which is exactly the re-skin a
+   diner watches happen; here they are already in the head before the first paint. */
 :root {
 ${vars}
 ${heroImg}
@@ -114,16 +113,14 @@ ${heroH}
 ${fonts}
 }
 
-/* ── 5. what this page does NOT have yet ────────────────────────────────────────
-   No basket and no photo lightbox in the self-serve menu (see ported/shim.js), so the
-   controls that would drive them must not offer themselves. */
+/* ── 3. what this page does NOT have yet ────────────────────────────────────────── */
 .qty-ctrl, #modal-qty-wrap, #basket-bar, #img-lightbox { display: none !important; }
 </style>
 </head>
 <body>
+${toggles(snap)}
 ${hero(snap)}
 ${header(snap)}
-${langBar(snap)}
 ${catBar(snap)}
 ${menuList(snap, opts)}
 ${has3d ? VIEWER_HTML : ""}

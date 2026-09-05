@@ -146,9 +146,13 @@ def main() -> int:
     # Byte for byte. A drifted port looks exactly like an intact one, right up until a
     # bug is fixed upstream and not here - or an edit here silently diverges from the code
     # that is known to work on real phones in real restaurants.
-    for name in ("xr.js", "viewer.js"):
+    for name in ("xr.js", "viewer.js", "full.css"):
         src = (PORTED / name).read_text(encoding="utf-8")
         check(f"ported/{name} is in the page verbatim", src in html, f"{len(src):,} chars")
+    # The rules the old selector-filtering extractor lost, one at a time, each producing
+    # a page that looked wrong for a reason nobody could see.
+    for probe in ("body::before", ".tenant-logo", "max-width: 880px", "#lang-toggle"):
+        check(f"and the sheet still contains {probe}", probe in html)
     check("the shim is the only adapter",
           (PORTED / "shim.js").read_text(encoding="utf-8") in html)
     check("model-viewer 3.4.0, the version production ships",
@@ -163,13 +167,21 @@ def main() -> int:
     check("a known template is applied", 'data-template="monday_greens"' in mg)
     check("its preset supplies the palette",
           "--card-bg: linear-gradient(158deg" in mg)
-    check("Monday Greens opens in the DAY palette", 'data-mode="day"' in mg)
+    # The attribute is theirs - `data-theme`, not a name of our own. Every night/day
+    # rule in their sheet keys off it, so calling it `data-mode` (as an earlier version
+    # did) means none of them match and the palette silently does nothing.
+    check("the palette is selected by THEIR attribute", 'data-theme="' in mg)
+    check("and the tenant's own default_theme decides it",
+          'data-theme="day"' in render(snapshot(template="monday_greens",
+                                                settings={"default_theme": "day"})))
+    check("a tenant with no preference opens dark",
+          'data-theme="night"' in render(snapshot(template="monday_greens", settings={})))
     check("and its template-scoped rules come across",
           '[data-template="monday_greens"]' in mg)
     other = render(snapshot(template="urban_night", theme={}))
     check("another template is a different palette, same markup",
-          'data-mode="night"' in other
-          and other.count('class="menu-item') == mg.count('class="menu-item'))
+          other.count('class="menu-item') == mg.count('class="menu-item')
+          and other != mg)
     unknown = render(snapshot(template="not_a_template"))
     check("an unknown template falls back rather than breaking",
           'data-template=""' in unknown and "menu-item" in unknown)
@@ -209,13 +221,15 @@ def main() -> int:
     bi = render(snapshot(
         tenant={"id": "t", "slug": "s", "name": "Sakhli", "languages": ["en", "ka"]},
         items=[dict(snapshot()["items"][0], name_ka="ქათამი")]))
-    check("a bilingual tenant gets a language switch", 'class="lang-pill' in bi)
+    # Their own toggle, not a control of ours. An earlier version invented a `.lang-bar`
+    # which of course had no styling and landed on top of the category pills.
+    check("a bilingual tenant gets THEIR language toggle", 'id="lang-toggle"' in bi)
     check("and the translation is IN the page, not fetched", 'data-name-ka="ქათამი"' in bi)
     mono = render(snapshot())
     # The CSS for the switch ships either way (it is part of the base sheet), so this
     # has to look for the MARKUP. Asserting on the bare class name passes for the wrong
     # reason the moment a stylesheet mentions it.
-    check("a one-language tenant gets no switch", 'class="lang-pill' not in mono)
+    check("a one-language tenant gets no switch", 'id="lang-toggle"' not in mono)
 
     print("\n== the markup their code queries ==")
     # Their selectors are the contract. `_startThumbUpgrades` queries exactly this and
@@ -285,12 +299,14 @@ def main() -> int:
     print("\n== the shapes that will actually occur ==")
     empty = render(snapshot(items=[], categories=[]))
     check("a menu with no items still renders", "<html" in empty and "Sakhli" in empty)
-    check("and ships no 3D viewer it does not need", "model-viewer" not in empty)
-    check("nor the WebXR overlay", "xr-overlay" not in empty)
+    check("and ships no 3D viewer JS it does not need",
+          "model-viewer.min.js" not in empty)
+    check("nor the modal and WebXR markup", 'id="modal-viewer"' not in empty)
 
     no3d = render(snapshot(items=[dict(snapshot()["items"][0], model=None)]))
-    check("an item with no model has no 3D badge", "badge-3d" not in no3d)
-    check("a photo-only menu ships no 3D viewer either", "model-viewer" not in no3d)
+    check("an item with no model has no 3D badge", 'class="badge-3d"' not in no3d)
+    check("a photo-only menu ships no 3D viewer either",
+          "model-viewer.min.js" not in no3d)
     # ...but it DOES still get its own page behaviour. The category bar is the menu, not
     # part of the 3D.
     check("though it keeps its category and language behaviour",
@@ -317,15 +333,22 @@ def main() -> int:
     # inlined only because nothing may be fetched before paint. The number to watch is
     # that fixed part; the day it matters, the two big scripts move to one shared cached
     # file and only the CSS stays inline, which is all the no-flash claim needs.
-    check("and a 120-item menu stays under 340 KB", size < 340_000, f"{size:,} bytes")
+    # ~350 KB of every page is the platform's ENTIRE stylesheet, taken verbatim because
+    # a filtered one is a different stylesheet and that cost four separate "renders but
+    # looks wrong" bugs. It is identical on every page of every tenant, so it gzips hard.
+    # Trimming it is a real optimisation for later, and the honest way to do it is to ask
+    # a browser which rules matched - not to guess selectors again.
+    check("a 120-item menu stays under 700 KB", size < 700_000, f"{size:,} bytes")
     # A photo-only restaurant still gets the structural CSS - that is the menu itself -
     # but none of the 3D machinery, which is the part that costs.
     plain = render(snapshot(items=[], categories=[]))
-    check("a menu with no 3D carries no viewer JS", "model-viewer" not in plain)
-    check("nor the viewer CSS", "#modal-viewer" not in plain and "#xr-overlay" not in plain)
-    check("and it is a fraction of the size",
-          len(plain.encode()) < len(long_menu.encode()) / 5,
-          f"{len(plain.encode()):,} vs {len(long_menu.encode()):,} bytes")
+    check("a menu with no 3D carries no viewer JS", "model-viewer.min.js" not in plain)
+    check("nor the modal markup", 'id="modal-viewer"' not in plain)
+    # The stylesheet is a fixed cost on every page; what a 3D menu adds on top is the
+    # viewer, the carousel and the cards.
+    check("and the 3D machinery is a real chunk of what a menu adds",
+          len(long_menu.encode()) - len(plain.encode()) > 100_000,
+          f"{len(long_menu.encode()) - len(plain.encode()):,} bytes more")
 
     print("\n" + "=" * 62)
     bad = [n for n, ok, _ in RESULTS if not ok]

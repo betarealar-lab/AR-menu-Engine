@@ -207,20 +207,28 @@ export function menuList(snap, opts = {}) {
   </div>`;
 }
 
-/** A language switch, only when the restaurant actually publishes more than one.
+/** The language and theme toggles, which are the platform's own two floating buttons.
  *
- *  Monday Greens has `en` and `ka` on all 170 items; it does NOT have `ru`, though the
- *  platform has the column - which is why languages are a per-tenant list here rather
- *  than three fixed columns. A tenant with one language gets no toggle at all. */
-export function langBar(snap) {
+ *  `#lang-toggle` and `#theme-toggle` are `position: fixed` in their stylesheet, styled
+ *  per template, and every tenant already has them. An earlier version invented a
+ *  `.lang-bar` of its own, which of course had no styling at all and landed on top of the
+ *  category pills - the same mistake as putting their CSS on my markup, one element down.
+ *
+ *  The toggle SWAPS rather than reloads: every translation is already in the page, on the
+ *  card as `data-name-ka`. A diner changing language must not watch the menu re-fetch,
+ *  which is the same principle as the whole no-flash design.
+ */
+export function toggles(snap) {
   const langs = snap.tenant?.languages || ["en"];
-  if (langs.length < 2) return "";
   const label = { en: "EN", ka: "ქარ", ru: "RU" };
-  return `<div class="lang-bar" role="group" aria-label="Language">${langs
-    .map(
-      (l, i) =>
-        `<button type="button" class="lang-pill${i === 0 ? " active" : ""}" ` +
-        `data-lang="${e(l)}">${e(label[l] || l.toUpperCase())}</button>`
-    )
-    .join("")}</div>`;
+  // The button shows the language it will switch TO, which is why a one-language
+  // restaurant gets no button at all rather than one that does nothing.
+  const other = langs.find((l) => l !== langs[0]);
+  return (
+    `<button id="theme-toggle" aria-label="Toggle theme"></button>` +
+    (other
+      ? `<button id="lang-toggle" aria-label="Toggle language" ` +
+        `data-langs="${e(langs.join(","))}">${e(label[other] || other.toUpperCase())}</button>`
+      : "")
+  );
 }

@@ -288,8 +288,8 @@ per-dish optimiser settings, queue depth and dead letters in the header, and a p
 layout.
 
 **Run all six before pushing.** `check.py` 122, `check_webhook.py` 26,
-`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 93 —
-364 in total, all passing as of 2026-09-05. `check_webhook.py` and
+`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 100 —
+371 in total, all passing as of 2026-09-05. `check_webhook.py` and
 `check_jobs.py` use stubs and cost nothing; `check.py` needs a real master GLB, and there
 is one at `C:\Users\temot\Desktop\BetaReal-inspect\chicken-balls-in-shqmeruli-sauce--raw-full\model.glb`.
 

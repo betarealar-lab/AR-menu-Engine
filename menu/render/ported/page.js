@@ -70,44 +70,67 @@
     sync();
   }
 
-  // ── language ──────────────────────────────────────────────────────
+  // ── language and theme ────────────────────────────────────────────
   // Every translation is already in the page - the card carries `data-name-ka` and the
   // server rendered the primary language into the text. Switching is a swap, not a
   // re-fetch and not a re-render: a diner changing language must not watch the menu
   // reload, which is the same principle as the whole no-flash design.
-  function applyLang(lang) {
+  const LABEL = { en: "EN", ka: "ქარ", ru: "RU" };
+
+  function applyLang(lang, langs) {
     document.documentElement.lang = lang;
     window.__lang = lang;
     for (const card of $$(".menu-item")) {
       const el = card.querySelector(".item-name");
       if (!el) continue;
-      const ka = card.dataset.nameKa;
-      const en = card.dataset.name;
-      const wanted = lang !== "en" && ka ? ka : en;
+      const alt = card.dataset["name" + lang.charAt(0).toUpperCase() + lang.slice(1)];
+      const wanted = lang === "en" ? card.dataset.name : alt || card.dataset.name;
       if (wanted && el.textContent !== wanted) el.textContent = wanted;
     }
     for (const p of $$(".cat-pill")) {
-      const ka = p.dataset.catKa;
       if (!p.dataset.catEn) p.dataset.catEn = p.textContent;
+      const ka = p.dataset.catKa;
       p.textContent = lang !== "en" && ka ? ka : p.dataset.catEn;
     }
-    for (const b of $$(".lang-pill")) {
-      b.classList.toggle("active", b.dataset.lang === lang);
+    const btn = document.getElementById("lang-toggle");
+    if (btn && langs.length > 1) {
+      // The button always offers the OTHER language, so its label is never the one you
+      // are already reading.
+      const next = langs[(langs.indexOf(lang) + 1) % langs.length];
+      btn.textContent = LABEL[next] || next.toUpperCase();
+      btn.dataset.next = next;
     }
   }
 
   function wireLanguage() {
-    const bar = document.querySelector(".lang-bar");
-    if (!bar) return;
-    bar.addEventListener("click", (ev) => {
-      const b = ev.target.closest(".lang-pill");
-      if (b) applyLang(b.dataset.lang);
+    const btn = document.getElementById("lang-toggle");
+    if (!btn) return;
+    const langs = (btn.dataset.langs || "en").split(",");
+    applyLang(langs[0], langs);
+    btn.addEventListener("click", () => applyLang(btn.dataset.next || langs[0], langs));
+  }
+
+  // Day/night. The platform stores the choice per visitor; the SERVER already rendered
+  // the tenant's default into `data-theme`, so this only has to flip it.
+  function wireTheme() {
+    const btn = document.getElementById("theme-toggle");
+    if (!btn) return;
+    const root = document.documentElement;
+    const sync = () => {
+      const day = root.dataset.theme === "day";
+      btn.textContent = day ? "Night" : "Day";
+    };
+    sync();
+    btn.addEventListener("click", () => {
+      root.dataset.theme = root.dataset.theme === "day" ? "night" : "day";
+      sync();
     });
   }
 
   function start() {
     wireCategories();
     wireLanguage();
+    wireTheme();
   }
 
   if (document.readyState === "complete") start();

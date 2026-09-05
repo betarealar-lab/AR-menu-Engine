@@ -1,28 +1,39 @@
 #!/usr/bin/env python3
-"""Pull the platform's CSS out of its index.html as WHOLE RULES, split base vs template.
+"""Take the platform's stylesheet. All of it. Verbatim.
 
-    python menu/render/extract_css.py            rewrite the ported css
-    python menu/render/extract_css.py --check    report only, change nothing
+    python menu/render/extract_css.py
+    python menu/render/extract_css.py --check
 
-Writes three files:
+Writes `ported/full.css` - every `<style>` block from their index.html, concatenated in
+document order, byte for byte.
 
-    ported/viewer.css                the 3D modal, thumbnails, the WebXR overlay
-    ported/menu.css                  the structural menu: cards, hero, prices, layout
-    ported/templates/<name>.css      one file per [data-template="..."] look
+**Why not the clever version.** This file used to select rules by selector text and split
+them into viewer / menu / per-template sheets. It was wrong four separate times, and every
+failure looked identical from the outside - a page that renders but looks wrong:
 
-**Why parse instead of taking a line range.** The first version took line ranges, cut
-inside a block, and left the stylesheet one `{` out of balance. The browser then dropped
-rules silently and `#modal` came out `position: static` - so the 3D modal "opened" as an
-ordinary element in the page flow, with no geometry and nothing visible. It cost a
-debugging round, and the fix is not better line numbers, it is not using line numbers.
-This walks the braces and keeps only complete rules, and refuses to write an unbalanced
-file at all.
+  a line range cut inside a block and left the sheet one `{` unbalanced, so the browser
+  silently dropped rules and `#modal` came out `position: static`, opening as an ordinary
+  element in the page flow with no geometry;
 
-**The split is the point.** The platform's look is not a layout - it is one set of
-structural rules consuming CSS custom properties, plus a preset that supplies them
-(`--bg`, `--card-bg`, `--accent`, `--thumb-vignette`, ...). A template is a palette, not a
-page. Splitting the files the same way is what lets a new template be data rather than
-code, which is MENU-PLATFORM §2.2.
+  a comment above a rule landed in front of its selector, so `body::before` - where the
+  entire page background lives - never matched and the page had no background at all;
+
+  `.header` and `.tenant-logo` were not in the selector list, so the logo rendered with no
+  max-height and filled the viewport;
+
+  and then `.menu-list`'s desktop grid stopped applying for a reason that took a browser,
+  a CSSOM diff and a bisect to even localise.
+
+All four are the same mistake: **reconstructing a stylesheet instead of copying one.** CSS
+is order- and cascade-dependent, so a subset is not a smaller version of a stylesheet, it
+is a different stylesheet. Temo put it plainly - "cant u just copy a design correctly."
+
+**The cost, honestly.** ~600 KB of CSS covering 22 templates and every tenant special
+case, where one page needs perhaps a tenth of it. That is real and it is the right cost to
+pay first: correct-and-fat beats clever-and-wrong, and trimming a sheet that demonstrably
+works is a measurable optimisation later. When it is worth doing, the honest way is to
+load the page and ask the browser which rules actually matched - not to guess selectors
+again.
 
 Read-only on their repo, always (DECISIONS §9.7).
 """
@@ -34,101 +45,20 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SRC = Path(r"C:\Users\temot\BetaReal scaleable\index.html")
-OUT = HERE / "ported"
+OUT = HERE / "ported" / "full.css"
 
-# The 3D and AR layer.
-VIEWER = re.compile(
-    r"#modal|#xr-|#xr\b|\.thumb-wrap|\.thumb-img|\.thumb-vignette|\.badge-3d"
-    r"|\.nav-arrow|\.close-btn|\.spin-btn|\.spin-|\.modal-vignette"
-    r"|#lightbox|#img-lightbox")
+HEADER = (
+    "/* The platform's complete stylesheet, taken verbatim by extract_css.py.\n"
+    "   Every <style> block from index.html, in document order, unmodified.\n"
+    "   DO NOT EDIT and do not trim by hand - the module docstring lists the four\n"
+    "   separate ways that went wrong. Re-run the extractor instead. */\n\n"
+)
 
-# The structural menu a preset skins. `:root` comes across for the DEFAULT palette - a
-# template that omits a variable must still render, not fall back to nothing.
-BASE = re.compile(
-    r"^:root|^body|\.menu-item|\.item-left|\.item-right|\.item-name|\.item-actions"
-    r"|\.ingredients|\.price\b|\.price-was|\.no-image|\.mg-|\.hero\b|\.cat-"
-    r"|\.section|\.ar-btn|\.variant|\.addon|\.qty-|#menu\b|\.menu\b"
-    # Added after the header logo rendered at full screen height: `.header` and
-    # `.tenant-logo` were not in this list, so their rules were dropped and a logo
-    # with no max-height filled the viewport. The lesson generalises - every class the
-    # page emits needs a rule here or it renders unstyled, and unstyled is not
-    # obviously broken, it is just wrong.
-    r"|^\.header|\.tenant-logo|#brand-title|\.lang-|\.brand\b")
-
-TEMPLATE = re.compile(r'\[data-template="([a-z0-9_]+)"\]')
-
-
-def blocks(css: str):
-    """Yield (selector, body, is_at_rule) for each COMPLETE top-level block."""
-    i, n = 0, len(css)
-    while i < n:
-        brace = css.find("{", i)
-        if brace == -1:
-            return
-        selector = css[i:brace].strip()
-        depth, j = 1, brace + 1
-        while j < n and depth:
-            if css[j] == "{":
-                depth += 1
-            elif css[j] == "}":
-                depth -= 1
-            j += 1
-        if depth:                      # unterminated - the file ended mid-rule
-            return
-        # A comment sitting above a rule lands in front of its selector, so matching on
-        # the raw text silently skips it. `body::before` - which is where the whole page
-        # background lives - is preceded by a four-line comment, and was dropped for
-        # exactly this reason until somebody noticed the page had no background at all.
-        clean = re.sub(r"/\*.*?\*/", "", selector, flags=re.S).strip()
-        yield clean, css[brace + 1: j - 1], clean.startswith("@")
-        i = j
-
-
-def sort_rule(selector: str, body: str, buckets: dict) -> None:
-    tpl = TEMPLATE.search(selector)
-    if tpl:
-        # A template-scoped rule belongs to that template, whatever else it matches.
-        buckets["templates"].setdefault(tpl.group(1), []).append(
-            f"{selector} {{{body}}}")
-    elif VIEWER.search(selector):
-        buckets["viewer"].append(f"{selector} {{{body}}}")
-    elif BASE.search(selector):
-        buckets["base"].append(f"{selector} {{{body}}}")
-
-
-def collect(css: str, buckets: dict) -> None:
-    for selector, body, is_at in blocks(css):
-        if not is_at:
-            sort_rule(selector, body, buckets)
-            continue
-        # An @media is kept per bucket, holding only the inner rules that bucket wants,
-        # so a modal's phone layout comes across without the whole menu's responsive CSS.
-        inner = {"viewer": [], "base": [], "templates": {}}
-        for s, b, _ in blocks(body):
-            sort_rule(s, b, inner)
-        if inner["viewer"]:
-            buckets["viewer"].append(selector + " {\n" + "\n".join(inner["viewer"]) + "\n}")
-        if inner["base"]:
-            buckets["base"].append(selector + " {\n" + "\n".join(inner["base"]) + "\n}")
-        for name, rules in inner["templates"].items():
-            buckets["templates"].setdefault(name, []).append(
-                selector + " {\n" + "\n".join(rules) + "\n}")
-
-
-HEADER = ("/* Extracted from the platform's index.html by extract_css.py - whole rules,\n"
-          "   selected by selector text. Do NOT edit; re-run the extractor. */\n\n")
-
-
-def write(path: Path, rules: list[str], check: bool) -> bool:
-    body = HEADER + "\n".join(rules) + "\n"
-    if body.count("{") != body.count("}"):
-        print(f"  !! {path.name}: UNBALANCED, refusing to write")
-        return False
-    print(f"  {path.name:34} {len(rules):4} rules  {len(body):>7,} chars")
-    if not check:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
-    return True
+# Rules the old selector-filtering version lost, one at a time, each time producing a page
+# that looked wrong for a reason nobody could see. Cheap insurance that an extraction has
+# not quietly stopped early.
+PROBES = ("body::before", ".tenant-logo", "max-width: 880px", "#modal-viewer",
+          "#xr-overlay", ".thumb-img", ".badge-3d", ".mg-hero", ".cat-pill")
 
 
 def main() -> int:
@@ -140,17 +70,34 @@ def main() -> int:
     if not SRC.is_file():
         print(f"cannot read {SRC}")
         return 1
-    html = SRC.read_text(encoding="utf-8", errors="replace")
-    buckets = {"viewer": [], "base": [], "templates": {}}
-    for style in re.findall(r"<style[^>]*>(.*?)</style>", html, re.S):
-        collect(style, buckets)
 
-    ok = True
-    ok &= write(OUT / "viewer.css", buckets["viewer"], a.check)
-    ok &= write(OUT / "menu.css", buckets["base"], a.check)
-    for name, rules in sorted(buckets["templates"].items()):
-        ok &= write(OUT / "templates" / f"{name}.css", rules, a.check)
-    return 0 if ok else 1
+    html = SRC.read_text(encoding="utf-8", errors="replace")
+    blocks = re.findall(r"<style[^>]*>(.*?)</style>", html, re.S)
+    if not blocks:
+        print("no <style> blocks found - has index.html changed shape?")
+        return 1
+
+    body = HEADER + "\n\n".join(blocks) + "\n"
+
+    opens, closes = body.count("{"), body.count("}")
+    print(f"{len(blocks)} style blocks, {len(body):,} chars, braces {opens}/{closes}")
+    if opens != closes:
+        print("!! UNBALANCED - refusing to write")
+        return 1
+
+    missing = [p for p in PROBES if p not in body]
+    if missing:
+        print("!! missing:", ", ".join(missing))
+        return 1
+    print(f"  all {len(PROBES)} probes present")
+
+    if a.check:
+        print("(check only)")
+        return 0
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(body, encoding="utf-8")
+    print(f"wrote {OUT.relative_to(HERE.parent.parent)}")
+    return 0
 
 
 if __name__ == "__main__":

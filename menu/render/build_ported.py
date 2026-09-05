@@ -32,8 +32,10 @@ OUT = HERE / "ported.mjs"
 
 # Order matters at runtime: xr defines window.XR, the shim defines what viewer.js expects,
 # viewer.js then wires the modal and AR on top of both.
-FILES = ["viewer.css", "menu.css", "viewer.html", "xr.js", "shim.js", "viewer.js",
-         "page.js"]
+# full.css is the platform's ENTIRE stylesheet, verbatim. Not a subset: a subset of a
+# cascade-dependent language is a different stylesheet, which is how the last four
+# bugs happened. See extract_css.py.
+FILES = ["full.css", "viewer.html", "xr.js", "shim.js", "viewer.js", "page.js"]
 
 # Every template's rules and every preset's values. Both are DATA - the point of
 # MENU-PLATFORM 2.2 is that a restaurant look is a row, not a branch - so each is
@@ -66,7 +68,7 @@ def main() -> int:
         parts.append(f"export const {var} = {json.dumps(body)};\n")
         print(f"  {name:14} {len(body):>7,} chars -> {var}")
 
-    tpl = {}
+    tpl = {}  # template CSS now lives inside full.css; kept for the API
     for f in sorted(TEMPLATE_DIR.glob('*.css')):
         tpl[f.stem] = f.read_text(encoding='utf-8')
     parts.append(f'export const TEMPLATE_CSS = {json.dumps(tpl)};' + chr(10))

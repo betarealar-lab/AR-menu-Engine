@@ -80,8 +80,13 @@ export function themeVars(preset = {}, overrides = {}, mode = "day") {
 /** Which palette a tenant is on. Monday Greens is a daytime cafe and the platform
  *  defaults that template to the light one; everything else opens dark. Stored as a
  *  plain key so it is an editor toggle later, not a code change. */
-export function themeMode(theme = {}, template = "") {
-  const named = String(theme.mode || "").toLowerCase();
-  if (named === "day" || named === "night") return named;
-  return template === "monday_greens" ? "day" : "night";
+export function themeMode(theme = {}, template = "", settings = {}) {
+  // `default_theme` is the platform's own key and lives in theme_config, which we split
+  // into `settings`. A tenant that has not chosen opens dark, which is what their sheet
+  // is written around.
+  for (const v of [settings.default_theme, theme.mode, theme.default_theme]) {
+    const named = String(v || "").toLowerCase();
+    if (named === "day" || named === "night") return named;
+  }
+  return "night";
 }
