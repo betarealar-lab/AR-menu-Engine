@@ -1,40 +1,58 @@
 // render.mjs — a published snapshot becomes a complete page. No database, no re-skin.
 //
-// This is MENU-PLATFORM.md §2.1a, the thing Temo asked for in his own words: "we want
-// template and unique menu to be the og custom build for them where users dont have to
-// wait for a website to load and then reload."
+// This is MENU-PLATFORM.md §2.1a, in Temo's own words: "we want template and unique menu
+// to be the og custom build for them where users dont have to wait for a website to load
+// and then reload."
 //
-// What exists today does the opposite. One generic index.html loads, JavaScript fetches
-// the tenant's theme, and the page re-skins itself in front of the diner. Three states:
-// blank, generic, branded. The middle one is the bug, and it is architectural - no amount
-// of shrinking the payload removes it.
+// What the platform does today is the opposite. One generic index.html loads, JavaScript
+// fetches the tenant's theme, and the page re-skins itself in front of the diner. Three
+// states: blank, generic, branded. The middle one is the bug, and it is architectural.
 //
 // So this is a PURE FUNCTION: (snapshot, options) -> a complete HTML document, with the
 // template's CSS and the restaurant's colours already inside <head> and every dish
 // already in the markup. The first bytes the browser receives are that restaurant's
 // menu. There is no second state to flash to, because there is no first state.
 //
-// It is pure for a second reason that matters as much (§2.2): the admin app's preview
-// calls THIS function, and so does the live page. Not a reimplementation of it - it. Two
-// implementations drift, and the day they do, an owner approves a preview that is not
-// what diners get.
+// Pure for a second reason (§2.2): the admin app's preview calls THIS function, and so
+// does the live page. Not a reimplementation of it - it. Two implementations drift, and
+// the day they do, an owner approves a preview that is not what diners get.
 //
-// Runs unchanged in a Cloudflare Worker, in Astro, and in Node. The only import is
-// the viewer's own source, which is inlined into the page rather than fetched - there
-// is no runtime dependency to install and nothing to resolve at request time.
+// ── The 3D and AR are PRODUCTION'S, not a rewrite ────────────────────────────────────
+//
+// An earlier version of this file reimplemented the viewer from reading the platform's
+// source. It did not work, and Temo was right to reject it: "why not just copy the
+// existing systems." A rewrite of something that already works on real phones in real
+// restaurants is a downgrade however clean it looks.
+//
+// So `menu/render/ported/` holds the platform's own code, byte for byte - the 3D modal,
+// the poster-to-live-thumbnail upgrade, the AR routing, iOS Quick Look, and the Three.js
+// WebXR carousel. `ported/shim.js` is the only adapter: it supplies the nine symbols that
+// code expects from the app it was lifted out of. `build_ported.py` turns them into
+// `ported.mjs` so a Worker needs no filesystem.
+//
+// The consequence for THIS file is that the card markup must be the markup their code
+// expects - `.menu-item` / `.thumb-wrap` / `.thumb-img[data-model]` - rather than a shape
+// of our own. That is the right trade: their selectors are the contract, and matching
+// them is what lets the code stay unedited.
 
-import { VIEWER_JS, VIEWER_CSS } from "./viewer.mjs";
+import {
+  VIEWER_CSS,
+  VIEWER_HTML,
+  XR_JS,
+  SHIM_JS,
+  VIEWER_JS,
+} from "./ported.mjs";
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
-/** Everything interpolated below goes through this. A dish called `Chicken & <b>Chips</b>`
+/** Everything interpolated below goes through this. A dish called Chicken & <b>Chips</b>
  *  is a restaurant's typing, not markup, and a menu is user-generated content the moment
  *  self-serve exists. */
 const e = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
 
-/** 1250 -> "12.50". Integer minor units all the way to the last possible moment, because
- *  12.30 as a float is 12.299999999999999 and a menu that disagrees with the till by a
- *  tetri is a menu nobody trusts. */
+/** 1250 -> "12.50". Integer minor units to the last possible moment, because 12.30 as a
+ *  float is 12.299999999999999 and a menu that disagrees with the till by a tetri is a
+ *  menu nobody trusts. */
 const money = (minor, currency) => {
   const sym = { GEL: "₾", USD: "$", EUR: "€", GBP: "£" }[currency] || "";
   return `${sym}${(Math.round(minor) / 100).toFixed(2)}`;
@@ -43,9 +61,8 @@ const money = (minor, currency) => {
 /** Theme values become CSS custom properties, inline, in the head.
  *
  *  Filtered hard, because a theme is data a restaurant owner typed and it is being
- *  written into a <style> block. `--x: red; } body { display:none } .a{` would otherwise
- *  be a CSS injection with a very boring but very effective payload. Keys and values are
- *  both restricted to what a design token can legitimately contain. */
+ *  written into a style block. A value like `red; } body { display:none } .a{` would
+ *  otherwise be a CSS injection with a very boring but very effective payload. */
 const themeCss = (theme = {}) => {
   const safeKey = /^[a-z0-9_]{1,40}$/i;
   const safeVal = /^[a-zA-Z0-9 ,.'"()#%\/_-]{1,120}$/;
@@ -70,49 +87,65 @@ const group = (snap) => {
 };
 
 export function renderMenu(snap, opts = {}) {
-  // Where the Worker serves bucket bytes from. Keys, never URLs, live in the snapshot
-  // (§2.6) - the buckets are private and a baked URL would be one that expires inside an
-  // object that is supposed to be immutable.
+  // Keys, never URLs, live in the snapshot (§2.6) - the buckets are private and a baked
+  // URL would be one that expires inside an object meant to be immutable.
   const asset = (key) => (key ? `${opts.assetBase || "/a"}/${key}` : null);
   const sections = group(snap);
-  const has3d = (snap.items || []).some((i) => i.model);
+  const items = snap.items || [];
+  const has3d = items.some((i) => i.model);
   const name = snap.tenant?.name || "Menu";
 
+  // The index a card carries is its index in the WHOLE menu, not in its section. The
+  // ported viewer navigates with it (modal arrows, the AR carousel), so it has to match
+  // the array shim.js builds - which it reads off these same cards, in document order.
+  const idxOf = new Map(items.map((it, i) => [it.id, i]));
+
   const card = (it) => {
-    // Scale carries its AXIS as well as its number. "4 cm" alone is not a size - the
-    // real records use `height` as often as `width`, and a 26 cm plate and a 4 cm stack
-    // of chicken are both correct readings of a bare 4. Dropping the axis here would put
-    // dishes on tables at the wrong size in a way that looks like a bad model.
     const m = it.model;
+    const i = idxOf.get(it.id);
     const poster = asset(it.photo || m?.poster);
-    // Everything the viewer needs travels on the element. No lookup, no second request,
-    // and nothing for a script to go and fetch before a diner can tap a dish.
-    const data = m
-      ? ` data-glb="${e(asset(m.draco))}"` +
-        (m.usdz ? ` data-usdz="${e(asset(m.usdz))}"` : "") +
-        (m.scale_cm
-          ? ` data-cm="${e(m.scale_cm)}" data-axis="${e(m.scale_axis || "width")}"`
-          : "") +
-        (m.orbit ? ` data-orbit="${e(m.orbit)}"` : "") +
-        ` data-name="${e(it.name)}"`
-      : "";
-    // The poster sits inside a fixed-size wrapper the live viewer can take over without
-    // moving anything. A viewer swapped into unreserved space reflows the whole row.
-    const shot = m || poster
-      ? `<div class="shotwrap">${
-          poster
-            ? `<img class="shot" src="${e(poster)}" alt="" loading="lazy" decoding="async">`
-            : ""
-        }</div>`
-      : "";
+    const glb = m ? asset(m.draco) : null;
+    const usdz = m?.usdz ? asset(m.usdz) : null;
+    // Everything the viewer needs travels on the element: no lookup, no second request,
+    // nothing to fetch before a diner can tap a dish. shim.js reads these back into the
+    // item shape production's code expects.
+    const data =
+      ` data-idx="${i}" data-name="${e(it.name)}"` +
+      ` data-desc="${e(it.description || "")}"` +
+      ` data-price="${e(money(it.price_minor, it.currency))}"` +
+      (glb ? ` data-glb="${e(glb)}"` : "") +
+      (usdz ? ` data-usdz="${e(usdz)}"` : "") +
+      (poster ? ` data-poster="${e(poster)}"` : "") +
+      (m?.orbit ? ` data-orbit="${e(m.orbit)}"` : "") +
+      (m?.scale_cm
+        ? ` data-cm="${e(m.scale_cm)}" data-axis="${e(m.scale_axis || "width")}"`
+        : "");
+
+    // `.thumb-wrap` / `.thumb-img[data-model]` / `data-global-idx` are the platform's own
+    // selectors. `_startThumbUpgrades` queries exactly this and `_upgradeThumb` reads
+    // exactly these attributes, so the markup is a contract - not a style choice.
+    const thumb =
+      m || poster
+        ? `<div class="thumb-wrap">
+            <img class="thumb-img"${poster ? ` src="${e(poster)}"` : ""}${
+              glb ? ` data-model="${e(glb)}"` : ""
+            } data-global-idx="${i}" alt="${e(it.name)}" loading="lazy" decoding="async">
+            <div class="thumb-vignette"></div>
+            ${m ? '<span class="badge-3d">3D</span>' : ""}
+          </div>`
+        : "";
+
     return `
-      <li class="item${m ? " has3d" : ""}"${data}>
-        ${shot}
+      <li class="menu-item${m ? " has-3d" : " no-image"}"${data}>
+        ${thumb}
         <div class="body">
-          <h3>${e(it.name)}${m ? ` <span class="tag">3D</span>` : ""}</h3>
+          <h3>${e(it.name)}</h3>
           ${it.description ? `<p>${e(it.description)}</p>` : ""}
         </div>
-        <div class="price">${e(money(it.price_minor, it.currency))}</div>
+        <div class="right">
+          <div class="price">${e(money(it.price_minor, it.currency))}</div>
+          ${m ? `<button class="ar-btn" data-idx="${i}">View 3D</button>` : ""}
+        </div>
       </li>`;
   };
 
@@ -124,16 +157,13 @@ export function renderMenu(snap, opts = {}) {
 <title>${e(name)}</title>
 <meta name="description" content="${e(name)} menu">
 <style>
-  /* The restaurant's colours, inline, before anything paints. NOT a class the client
-     adds, NOT a stylesheet fetched after first paint - either of those is the flash
-     coming back. */
   :root {
     /* Defaults FIRST, the restaurant's values after, so theirs win by cascade order.
-       The obvious-looking alternative - redeclaring a property in terms of itself,
-       after the theme - is a self-reference, and such a property resolves
-       to the guaranteed-invalid value. The page then renders with no colours at all,
-       which looks like the theme failed to load: the exact failure this whole design
-       exists to make impossible. */
+       The obvious-looking alternative - redeclaring a property in terms of itself, after
+       the theme - is a self-reference, and such a property resolves to the
+       guaranteed-invalid value. The page then renders with no colours at all, which
+       looks like a theme that failed to load: the exact failure this design exists to
+       make impossible. */
     --ink: #16130f;
     --paper: #faf7f2;
     --accent: #b4552d;
@@ -152,21 +182,27 @@ ${themeCss(snap.theme)}
        text-transform:uppercase; letter-spacing:.12em; color:var(--muted);
        border-bottom:1px solid color-mix(in srgb, var(--muted) 25%, transparent);
        padding-bottom:.4rem; margin:2.2rem 0 .4rem }
-  ul { list-style:none; margin:0; padding:0 }
-  .item { display:grid; grid-template-columns:auto 1fr auto; gap:.9rem;
-          align-items:start; padding:.9rem 0;
+  main ul { list-style:none; margin:0; padding:0 }
+  .menu-item { display:grid; grid-template-columns:auto 1fr auto; gap:.9rem;
+          align-items:center; padding:.9rem 0;
           border-bottom:1px solid color-mix(in srgb, var(--muted) 14%, transparent) }
-  /* Reserved, so a late image cannot shove the text it sits beside. */
-  .shot { width:64px; height:64px; object-fit:cover; display:block;
-          transition:opacity .25s }
+  .menu-item.has-3d { cursor:pointer }
   .body h3 { margin:0; font-size:1rem; font-weight:600 }
   .body p { margin:.2rem 0 0; font-size:.87rem; color:var(--muted); line-height:1.4 }
+  .right { display:flex; flex-direction:column; align-items:flex-end; gap:.4rem }
   .price { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap }
-  .tag { font-size:.62rem; letter-spacing:.09em; vertical-align:middle;
-         padding:.15em .45em; border-radius:4px; background:var(--accent);
-         color:var(--paper) }
+  .ar-btn { border:0; border-radius:999px; padding:.35rem .75rem; font:inherit;
+            font-size:.72rem; font-weight:600; cursor:pointer;
+            background:var(--accent); color:var(--paper) }
+  .ar-btn[disabled] { opacity:.6 }
   footer { text-align:center; color:var(--muted); font-size:.75rem; padding:2rem 1rem }
-  @media (prefers-reduced-motion:no-preference){ .item{ transition:background .15s } }
+  /* No basket in the self-serve menu yet (see ported/shim.js), so the ported markup's
+     quantity controls have nothing behind them and must not offer themselves. */
+  .qty-ctrl, #modal-qty-wrap, #basket-bar { display:none !important }
+
+/* ── the platform's own viewer styles, verbatim ──────────────────────────────────
+   Only when the menu actually has 3D on it. A photo-only restaurant should not carry
+   18 KB of modal and WebXR-overlay CSS for machinery it never opens. */
 ${has3d ? VIEWER_CSS : ""}
 </style>
 </head>
@@ -182,10 +218,23 @@ ${sections
   .join("\n")}
 </main>
 <footer>${e(name)} &middot; v${e(snap.version ?? "?")}</footer>
+${has3d ? VIEWER_HTML : ""}
 ${
   has3d
     ? `<script>
+${XR_JS}
+</script>
+<script>
+${SHIM_JS}
+</script>
+<script>
 ${VIEWER_JS}
+</script>
+<script>
+  /* Boot after first paint. Everything above only DEFINES things - nothing has touched
+     the network or the GPU yet, and the menu is already readable by the time this runs. */
+  if (document.readyState === "complete") window.__bootViewer();
+  else addEventListener("load", function () { window.__bootViewer(); }, { once: true });
 </script>`
     : ""
 }

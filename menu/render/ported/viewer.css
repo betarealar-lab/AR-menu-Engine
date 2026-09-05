@@ -1,0 +1,497 @@
+        .thumb-wrap {
+            position: relative;
+            width: 108px;
+            height: 100%;
+            min-height: 108px;
+            flex: 0 0 108px;
+            border-radius: 14px;
+            overflow: hidden;
+            contain: paint;
+            isolation: isolate;
+            background: var(--stage-bg);
+            border: 1px solid var(--border);
+            transition: background var(--t), border-color var(--t);
+        }
+        .thumb-vignette {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            background: var(--thumb-vignette);
+            opacity: 0.6;
+        }
+        .thumb-wrap model-viewer {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            min-height: 108px;
+            background: transparent;
+            display: block;
+            border-radius: inherit;
+            overflow: hidden;
+            contain: paint;
+            touch-action: pan-y;
+            opacity: 0;
+            visibility: hidden;
+        }
+        .thumb-wrap.thumb-model-ready model-viewer {
+            opacity: 1;
+            visibility: visible;
+        }
+        .thumb-wrap .thumb-img {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            min-height: 108px;
+            object-fit: cover;
+            object-position: center center;
+            display: block;
+            cursor: pointer;
+        }
+        .thumb-wrap.thumb-model-ready .thumb-img {
+            visibility: hidden;
+        }
+
+        /* ── Fullscreen image lightbox (photo-only items) ── */
+        #img-lightbox {
+            display: none;
+        #modal {
+            position: fixed;
+            inset: 0;
+            background-color: var(--modal-bg);
+            background: var(--modal-bg-image);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            overflow: hidden;
+            transition: opacity 0.2s, background var(--t);
+        }
+        #modal.active { opacity: 1; }
+
+        /* Mobile: title above viewer */
+        #modal-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(2.2rem, 8vw, 3.2rem);
+            letter-spacing: 4px;
+            background: linear-gradient(100deg, var(--accent), var(--accent2), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: var(--accent);
+            text-shadow: 0 2px 18px var(--glow);
+            text-align: center;
+            width: 100%;
+            padding: 0 24px;
+            margin-top: 56px;
+            line-height: 1.1;
+        }
+
+        /* Viewer wrapper */
+        #modal-viewer-wrap {
+            position: relative;
+            display: inline-block;
+            width: 95vw;
+            margin-top: 8px;
+            overflow: hidden;
+            contain: paint;
+            border-radius: 18px;
+        }
+        #modal-viewer {
+            width: 100%;
+            height: 62vh;
+            background: transparent;
+            display: block;
+            position: relative;
+            z-index: 1;
+            border-radius: inherit;
+            overflow: hidden;
+            contain: paint;
+        }
+        /* Stage floor glow — grounds the model on a pool of light */
+        #modal-viewer-wrap::before {
+            content: '';
+            position: absolute;
+            left: 50%; bottom: 7%;
+            transform: translateX(-50%);
+            width: 66%; height: 16%;
+            background: radial-gradient(ellipse at center, var(--glow) 0%, transparent 72%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .modal-vignette {
+            position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+            background: radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,0.55) 100%);
+        }
+
+        /* Mobile: drawer is a flat always-open block */
+        #modal-drawer { width: 100%; text-align: center; padding: 0; background: none; }
+        #modal-drawer-handle { display: none; }
+        #modal-title-d       { display: none; }
+
+        #modal-price {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(1.6rem, 6vw, 2.3rem);
+            letter-spacing: 3px;
+            background: linear-gradient(100deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: var(--accent);
+            text-align: center;
+            margin-top: 8px;
+        }
+        #modal-description {
+            font-size: 0.75rem;
+            color: var(--dim);
+            line-height: 1.5;
+            text-align: center;
+            padding: 0 28px;
+            margin-top: 6px;
+            max-width: 380px;
+            transition: color var(--t);
+        }
+        #modal-qty-wrap { display: flex; justify-content: center; margin-top: 10px; }
+
+        .close-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(var(--modal-rgb), 0.6);
+            color: var(--text);
+            border: 1px solid var(--accent);
+            border-radius: 50%;
+            padding: 0;
+            cursor: pointer;
+            font-size: 1.05rem;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 800;
+            line-height: 1;
+            box-shadow: 0 4px 16px var(--glow);
+            transition: background var(--t), color var(--t), transform 0.12s;
+        }
+        /* Auto-spin toggle: mirrors the close button on the top-left. */
+        .spin-btn {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 3;
+            width: 52px;
+            height: 52px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            background: rgba(var(--modal-rgb), 0.6);
+            color: var(--text);
+            border: 1px solid var(--accent);
+            border-radius: 50%;
+            padding: 0;
+            cursor: pointer;
+            font-family: 'Nunito', system-ui, sans-serif;
+            box-shadow: 0 4px 16px var(--glow);
+            transition: background var(--t), color var(--t), transform 0.12s;
+        }
+        .spin-360   { font-size: 13px; font-weight: 900; line-height: 1; letter-spacing: -0.5px; }
+        .spin-label { font-size: 8.5px; font-weight: 800; line-height: 1; letter-spacing: 1.5px; }
+        .spin-btn:active { transform: scale(0.9); }
+        .spin-btn.active {
+            background: var(--accent);
+            color: var(--accent-text);
+            border-color: transparent;
+        }
+        .close-btn:active { transform: scale(0.92); }
+
+        /* ── Desktop: slide-up drawer (>=640px) ── */
+        @media (min-width: 640px) {
+            #modal { overflow: hidden; }
+            #modal-title { display: none; }
+
+            /* Viewer shifts up when drawer opens */
+            #modal-viewer-wrap {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 88px;
+                width: 100%; display: block; margin-top: 0;
+                transition: bottom 0.32s cubic-bezier(0.4,0,0.2,1);
+            }
+            #modal.drawer-expanded #modal-viewer-wrap { bottom: var(--drawer-full-h, 300px); }
+            #modal-viewer { width: 100%; height: 100%; }
+
+            #modal-drawer {
+                position: absolute;
+                bottom: 0; left: 0; right: 0; z-index: 2;
+                padding: 12px 32px max(36px, env(safe-area-inset-bottom, 36px));
+                background: linear-gradient(to bottom,
+                    rgba(var(--modal-rgb),0) 0%,
+                    rgba(var(--modal-rgb),0.9) 22%,
+                    rgba(var(--modal-rgb),0.98) 100%
+                );
+                cursor: pointer; user-select: none; text-align: center;
+                transition: background var(--t);
+            }
+            #modal-drawer.expanded { cursor: default; }
+
+            #modal-drawer-handle {
+                display: block; width: 36px; height: 4px;
+                background: rgba(255,255,255,0.2); border-radius: 2px;
+                margin: 0 auto 14px;
+            }
+            #modal-title-d {
+                display: block;
+                font-family: 'Bebas Neue', sans-serif;
+                font-size: clamp(1.6rem, 3vw, 2.2rem);
+                letter-spacing: 3px; color: var(--accent); line-height: 1.1;
+                transition: color var(--t);
+            }
+            #modal-price { font-size: 1rem; letter-spacing: 2px; opacity: 0.6; margin-top: 2px; }
+
+            #modal-drawer-body {
+                display: grid; grid-template-rows: 0fr;
+                transition: grid-template-rows 0.32s cubic-bezier(0.4,0,0.2,1);
+            }
+            #modal-drawer.expanded #modal-drawer-body { grid-template-rows: 1fr; }
+            #modal-drawer-body > div { overflow: hidden; min-height: 0; padding-bottom: 4px; }
+
+            #modal-description { text-align: center; padding: 0; margin: 14px auto 0; font-size: 0.88rem; max-width: 560px; width: 100%; }
+            #modal-qty-wrap { justify-content: center; margin-top: 16px; }
+            #modal-ar-btn { width: auto; min-width: 220px; margin: 14px auto 0; }
+            .close-btn { z-index: 3; }
+        }
+
+        .tip {
+            margin-top: 4px;
+            color: var(--dim);
+            font-size: 0.82rem;
+            letter-spacing: 1px;
+            transition: color var(--t);
+        }
+
+        /* Monday Greens · day theme · 3D modal:
+           the product-detail text is pinned white for the dark NIGHT backdrop,
+           but in the light day theme the modal sits on a pale aqua background,
+           so white washes out. In day mode use the theme's own dark text colours
+           instead — deep teal (var(--text)) for the title/price/description and a
+           slightly softer teal for the tip. Crisp, on-brand, no outline/scrim.
+           Scoped to day + monday_greens only — night mode is untouched. */
+        [data-theme="day"][data-template="monday_greens"] #modal-title,
+        [data-theme="day"][data-template="monday_greens"] #modal-title-d,
+        [data-theme="day"][data-template="monday_greens"] #modal-price,
+        [data-theme="day"][data-template="monday_greens"] #modal-description {
+            color: var(--modal-ink, #0d7b98);
+            -webkit-text-fill-color: var(--modal-ink, #0d7b98);
+        }
+        [data-theme="day"][data-template="monday_greens"] .tip {
+            color: var(--modal-ink, #0d7b98);
+            -webkit-text-fill-color: var(--modal-ink, #0d7b98);
+            opacity: 0.8;
+        }
+
+        #modal-message {
+            display: none;
+            max-width: 340px;
+            margin: 10px auto 0;
+            color: var(--accent);
+            font-size: 0.82rem;
+            font-weight: 800;
+            line-height: 1.35;
+            letter-spacing: 0.5px;
+        }
+
+        .nav-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            border: 1px solid var(--accent);
+            background: rgba(var(--modal-rgb), 0.6);
+            color: var(--accent);
+            font-size: 1.5rem;
+            line-height: 1;
+            padding: 0;
+            cursor: pointer;
+            z-index: 10000;
+            box-shadow: 0 4px 18px var(--glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.12s;
+        }
+        .nav-arrow:active { transform: translateY(-50%) scale(0.9); }
+        .left-arrow  { left: 10px; }
+        .right-arrow { right: 10px; }
+
+        /* ── WebXR overlay ── */
+        #xr-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 51;
+            pointer-events: none;
+        }
+        #xr-gesture-layer {
+            display: none;
+            position: absolute;
+            inset: 0;
+            pointer-events: all;
+            z-index: 1;
+        }
+        #xr-place-hint {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    background: rgba(0,0,0,0.65);
+    padding: 10px 20px;
+    border-radius: 20px;
+    white-space: normal;
+    text-align: center;
+    width: 80%;
+    max-width: 320px;
+}
+        #xr-nav-row {
+            display: none;
+            position: absolute;
+            z-index: 2;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: all;
+            align-items: center;
+            gap: 16px;
+            background: rgba(0,0,0,0.65);
+            padding: 8px 20px;
+            border-radius: 30px;
+        }
+        #xr-nav-row button {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.35);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            pointer-events: all;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #xr-move-hint {
+            display: none;
+            position: absolute;
+            bottom: 36px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.5);
+            font-family: 'Nunito', sans-serif;
+            font-size: 12px;
+            white-space: normal;
+            text-align: center;
+            max-width: 80%;
+        }
+        #xr-exit, #xr-carousel-toggle, #xr-label-toggle, #xr-place-again, #xr-hide-ui {
+            pointer-events: all;
+            position: absolute;
+            z-index: 2;
+            background: rgba(0,0,0,0.65);
+            color: #ccc;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        #xr-exit             { top: 18px; right: 18px; }
+        #xr-place-again      { top: 62px; right: 18px; display: none; }
+        #xr-hide-ui          { top: 18px; left: 18px; display: block; transition: opacity 0.25s; }
+        #xr-carousel-toggle  { top: 62px; left: 18px; display: none; }
+        #xr-label-toggle     { top: 106px; left: 18px; display: none; }
+        #xr-hide-ui.ui-hidden { opacity: 0.35; }
+        #xr-add-btn {
+            display: none;
+            pointer-events: all;
+            position: absolute;
+            z-index: 2;
+            bottom: 55px;
+            right: 18px;
+            background: rgba(0,0,0,0.45);
+            color: rgba(255,255,255,0.55);
+            border: 1.5px solid rgba(255,255,255,0.25);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        }
+        #xr-add-btn.visible   { display: flex; }
+        #xr-add-btn.in-basket { background: rgba(240,192,64,0.92); color: #0d0d0d; border-color: transparent; }
+        #xr-hint-step {
+            font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+            color: rgba(255,255,255,.5); margin-bottom: 3px;
+        }
+        #xr-hint-main { font-size: 14px; color: #fff; }
+        #xr-scale-gauge {
+            display: none;
+            position: absolute;
+            bottom: 180px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.65);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 8px 16px;
+            pointer-events: none;
+            min-width: 130px;
+            text-align: center;
+        }
+        #xr-scale-track {
+            height: 4px;
+            background: rgba(255,255,255,0.18);
+            border-radius: 2px;
+            position: relative;
+            margin-bottom: 5px;
+        }
+        #xr-scale-fill {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            background: #f0c040;
+            border-radius: 2px;
+        }
+        #xr-scale-mark {
+            position: absolute;
+            top: -3px;
+            width: 2px;
+            height: 10px;
+            background: rgba(255,255,255,0.55);
+            border-radius: 1px;
+            left: calc(53.7% - 1px);
+        }
+        #xr-scale-pct {
+            font-family: 'Nunito', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        /* ── Category filter bar ── */
+        /* Wrapper holds the optional FOOD|DRINKS switch above the category pills so
+           the whole bar sticks together. Centers like .header / .menu-list. */

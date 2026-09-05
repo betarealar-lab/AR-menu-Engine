@@ -1,35 +1,43 @@
 #!/usr/bin/env python3
-"""The rendered page: complete on arrival, and safe with a stranger's typing in it.
+"""The rendered page: complete on arrival, safe with a stranger's typing, and carrying
+production's own viewer rather than a lookalike.
 
     python check_render.py
 
 Renders snapshots through `menu/render/render.mjs` - the real module, not a copy - and
 reads the HTML that comes back. Needs Node. Touches no database, no bucket, no credits.
 
-**The claim under test** is MENU-PLATFORM §2.1a: a diner never watches a generic page
-re-skin itself into a restaurant's page. That is not a feeling, it is four structural
-properties of the bytes, and each of them is one careless edit away from being lost:
+**Two claims are under test.**
 
-    the theme's colours are inside <head>, before any content
-    every dish is in the markup, not fetched afterwards
-    nothing is fetched before first paint at all
-    the CSS actually resolves - a self-referential custom property renders colourless,
-    which looks exactly like a theme that failed to load
+The first is MENU-PLATFORM §2.1a: a diner never watches a generic page re-skin itself into
+a restaurant's page. That is not a feeling, it is structural properties of the bytes -
+theme colours inside `<head>`, every dish in the markup, nothing fetched before paint, and
+CSS that actually resolves.
 
-And the part nobody thinks about until self-serve exists: **a menu is a stranger's
-typing.** Dish names, descriptions and theme values are all written by a restaurant owner
-we have never met, and they end up in HTML and in a <style> block respectively.
+The second is that the 3D and AR code is **the platform's, unedited**. An earlier version
+of this reimplemented it and it did not work; Temo's correction was blunt and right - "why
+not just copy the existing systems". So these checks assert the ported files appear byte
+for byte, that every inlined script parses, and that the markup carries the selectors
+their code queries. A port that has quietly drifted from its source is the failure worth
+catching, because it looks exactly like a port that has not.
+
+**What this file CANNOT check**, and a person has to: whether the models actually appear.
+`IntersectionObserver` does not report intersections in a hidden tab and model-viewer does
+not decode in one, so the poster-to-3D upgrade is invisible to any automated browser that
+is not in the foreground. Open the preview and look.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
-import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 RENDERER = ROOT / "menu" / "render" / "render.mjs"
+PORTED = ROOT / "menu" / "render" / "ported"
 RESULTS: list[tuple[str, bool, str]] = []
 
 
@@ -59,7 +67,8 @@ def snapshot(**over) -> dict:
             "price_minor": 2450, "currency": "GEL", "category_id": "c1", "position": 0,
             "photo": None,
             "model": {"draco": "catalog/a/model_draco.glb", "usdz": "catalog/a/model.usdz",
-                      "poster": None, "scale_cm": 26.0, "scale_axis": "width"},
+                      "poster": None, "scale_cm": 26.0, "scale_axis": "width",
+                      "orbit": None},
         }],
     }
     base.update(over)
@@ -85,104 +94,91 @@ def main() -> int:
           html.startswith("<!doctype html>") and html.rstrip().endswith("</html>"))
     check("the restaurant's accent colour is in the HEAD", "#2f6f4f" in head)
     check("and so is its paper colour", "#fffdf7" in head)
-    check("the dish name is in the markup, not fetched",
-          "Chicken Shqmeruli" in body)
-    check("so is the price, already formatted", "₾24.50" in body,
-          re.search(r"₾[\d.]+", body).group(0) if re.search(r"₾[\d.]+", body) else "none")
+    check("the dish name is in the markup, not fetched", "Chicken Shqmeruli" in body)
+    check("so is the price, already formatted", "₾24.50" in body)
     check("and the restaurant's name", "Sakhli" in body)
-    check("the 3D badge is on the item that has a model", ">3D<" in body)
-    # A number with no axis is not a size. The live records use `height` as often as
-    # `width` - a bare "4" reads as a 4 cm plate or a 4 cm tall stack depending on which,
-    # and getting it wrong puts a dish on a table at the wrong size in a way that looks
-    # like a bad model rather than a bad attribute.
-    check("real-world scale carries its axis, not just a number",
-          'data-cm="26"' in body and 'data-axis="width"' in body,
-          re.search(r'data-cm="[^"]*"( data-axis="[^"]*")?', body).group(0))
 
     print("\n== nothing loads before the menu does ==")
     check("no stylesheet is fetched", "<link" not in html.lower())
-    check("no menu data is fetched",
-          not re.search(r"\bfetch\s*\(|XMLHttpRequest|\.json\b", html))
-    scripts = re.findall(r"<script", html)
-    check("at most one script tag", len(scripts) <= 1, f"{len(scripts)}")
-    if scripts:
-        tail = html[html.index("<script"):]
-        check("and it comes after the menu markup",
-              html.index("<script") > html.index("Chicken Shqmeruli"))
-        check("it waits for load before doing anything",
-              'addEventListener("load"' in tail)
+    check("no menu data is fetched by the page itself",
+          not re.search(r"fetch\(\s*['\"]/", html))
+    # The scripts sit after the markup, so the menu is readable before a line of them has
+    # run. That ordering IS the no-flash claim; nothing else gives it.
+    check("every script comes after the menu markup",
+          html.index("<script") > html.index("Chicken Shqmeruli"))
+    check("and the viewer boots on load, not during parse",
+          "window.__bootViewer();" in html and 'readyState === "complete"' in html)
 
-    print("\n== the inlined script is real JavaScript ==")
-    # It is built as a String.raw template literal, so a single backtick anywhere inside
-    # it silently ends the literal and the rest is parsed as code. That has broken this
-    # file three times in one session, each time reporting a syntax error dozens of lines
-    # from the actual cause - and an inlined script that does not parse takes the WHOLE
-    # page down, not just the 3D.
-    import tempfile
-    body_js = re.search(r"<script>(.*?)</script>", html, re.S)
-    check("there is an inlined script", bool(body_js))
-    if body_js:
+    print("\n== the CSS actually resolves ==")
+    cycles = re.findall(r"--([a-z-]+)\s*:\s*var\(\s*--\1\b", head)
+    check("no custom property refers to itself", not cycles, str(cycles))
+    check("defaults come BEFORE the theme, so the theme wins",
+          head.index("#b4552d") < head.index("#2f6f4f"))
+
+    print("\n== every inlined script is real JavaScript ==")
+    blocks = re.findall(r"<script>(.*?)</script>", html, re.S)
+    check("four script blocks: xr, shim, viewer, boot", len(blocks) == 4, f"{len(blocks)}")
+    for i, b in enumerate(blocks):
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
                                          encoding="utf-8") as fh:
-            fh.write(body_js.group(1))
+            fh.write(b)
             tmp = fh.name
         r = subprocess.run(["node", "--check", tmp], capture_output=True)
-        Path(tmp).unlink(missing_ok=True)
-        check("and node parses it without error", r.returncode == 0,
+        os.unlink(tmp)
+        check(f"block {i} parses ({len(b):,} chars)", r.returncode == 0,
               r.stderr.decode("utf-8", "replace").strip().splitlines()[0][:110]
               if r.returncode else "")
-        check("it contains no stray backtick", "`" not in body_js.group(1),
-              "a backtick here ends the template literal that builds it")
 
-    print("\n== the 3D and AR behaviour, as production does it ==")
-    # Same model-viewer version the platform ships. A rendering difference between old
-    # menus and new ones is a thing somebody would have to chase down one day, for no
-    # gain at all.
-    check("model-viewer 3.4.0, the version already in production",
+    print("\n== it is PRODUCTION'S viewer, not a lookalike ==")
+    # Byte for byte. A drifted port looks exactly like an intact one, right up until a
+    # bug is fixed upstream and not here - or an edit here silently diverges from the code
+    # that is known to work on real phones in real restaurants.
+    for name in ("xr.js", "viewer.js"):
+        src = (PORTED / name).read_text(encoding="utf-8")
+        check(f"ported/{name} is in the page verbatim", src in html, f"{len(src):,} chars")
+    check("the shim is the only adapter",
+          (PORTED / "shim.js").read_text(encoding="utf-8") in html)
+    check("model-viewer 3.4.0, the version production ships",
           "model-viewer/3.4.0/model-viewer.min.js" in html)
-    check("loaded from the same CDN", "ajax.googleapis.com" in html)
-    check("but NOT in the head - it is ~250 KB",
-          "model-viewer.min.js" not in head)
-    check("and it fails OPEN, so a dead CDN leaves a working menu",
-          "onerror" in html and "resolve()" in html)
+    check("the 3D modal is on the page", 'id="modal-viewer"' in html)
+    check("so is the WebXR overlay", 'id="xr-overlay"' in html)
+    check("iOS AR goes through a rel=ar anchor", "setAttribute('rel', 'ar')" in html)
+    check("Android AR has the Three.js carousel", "window.XR = {" in html)
 
-    check("the card carries its own model url", 'data-glb="' in body)
-    check("and its usdz for iOS", 'data-usdz="' in body)
-    check("and its name, so the modal needs no lookup", 'data-name="' in body)
+    print("\n== the markup their code queries ==")
+    # Their selectors are the contract. `_startThumbUpgrades` queries exactly this and
+    # `_upgradeThumb` reads exactly these attributes, so renaming a class here is a silent
+    # break rather than a style tweak.
+    check("cards are .menu-item with a data-idx",
+          'class="menu-item' in body and 'data-idx="0"' in body)
+    check("thumbnails are .thumb-img[data-model]",
+          'class="thumb-img"' in body and "data-model=" in body)
+    check("with the global index their code reads", 'data-global-idx="0"' in body)
+    check("the 3D badge is production's", 'class="badge-3d">3D<' in body)
+    check("the card carries its usdz for Quick Look", "data-usdz=" in body)
+    check("and real-world scale WITH its axis",
+          'data-cm="26"' in body and 'data-axis="width"' in body)
 
     orbited = render(snapshot(items=[dict(
         snapshot()["items"][0],
         model=dict(snapshot()["items"][0]["model"], orbit="0 30 105"))]))
     check("a per-model camera angle reaches the page",
           'data-orbit="0 30 105"' in orbited)
-    # Same "h v zoom" convention, same clamps, as the admin people already use.
-    check("clamped the way the admin clamps it",
-          "Math.min(360" in html and "Math.min(85" in html and "Math.min(300" in html)
+    check("and the shim feeds it in production's own key format",
+          "item_view_" in orbited)
 
-    # Quick Look fires only from a click on an <a rel="ar"> CONTAINING an <img>, inside
-    # the tap. Anything asynchronous first loses the gesture and it silently does nothing
-    # - which is indistinguishable from AR being broken.
-    check("iOS AR goes through a rel=ar anchor, not activateAR",
-          'setAttribute("rel", "ar")' in html)
-    check("with the <img> Quick Look requires",
-          'a.appendChild(document.createElement("img"))' in html)
-    check("Android gets scene-viewer / WebXR",
-          '"ar-modes", "webxr scene-viewer"' in html)
-
-    check("live 3D cards are capped", "MAX_LIVE" in html)
-    check("posters upgrade only once in view", "IntersectionObserver" in html
-          and 'rootMargin: "200px"' in html)
-    check("and the modal drops its viewer on close, not just hides it",
-          'innerHTML = ""' in html)
-
-    print("\n== the CSS actually resolves ==")
-    # `--x: var(--x, ...)` is a cycle. CSS resolves a cyclic custom property to the
-    # guaranteed-invalid value, so the page renders with NO colours - which looks exactly
-    # like a theme that failed to load. Found in this renderer's first draft.
-    cycles = re.findall(r"--([a-z-]+)\s*:\s*var\(\s*--\1\b", head)
-    check("no custom property refers to itself", not cycles, str(cycles))
-    check("defaults come BEFORE the theme, so the theme wins",
-          head.index("#b4552d") < head.index("#2f6f4f"))
+    print("\n== the nine symbols the port needs from us ==")
+    shim = (PORTED / "shim.js").read_text(encoding="utf-8")
+    for sym in ("menuItems", "_themeConfig", "track", "idle", "_trackFirstInteraction",
+                "addToBasket", "_setQty", "_syncQtyCtrl", "_basketKey", "t",
+                "_setPriceWithOld", "_variantsHtml", "_addonsHtml", "_variantIndex"):
+        check(f"shim provides {sym}", f"window.{sym} =" in shim)
+    # Every one of these is bound at top level by viewer.js. A missing element is
+    # `null.addEventListener`, which aborts the rest of the block and leaves every `let`
+    # after it in the temporal dead zone - the symptom being "openModal exists but throws
+    # Cannot access '_mvPromise' before initialization", which points nowhere useful.
+    check("and stubs the lightbox DOM it wires at parse time",
+          "img-lightbox" in shim and "qty-add-btn" in shim)
 
     print("\n== a menu is a stranger's typing ==")
     nasty = snapshot(items=[{
@@ -193,8 +189,7 @@ def main() -> int:
     }])
     out = render(nasty)
     check("a dish name cannot open a tag", "<script>alert(1)" not in out)
-    check("nor can a description close the stylesheet",
-          "</style><img" not in out)
+    check("nor can a description close the stylesheet", "</style><img" not in out)
     check("the text still shows, escaped", "&lt;script&gt;alert(1)" in out)
 
     injected = render(snapshot(theme={
@@ -204,33 +199,43 @@ def main() -> int:
         "url_ok": "Georgia, 'Times New Roman', serif",
     }))
     ihead = injected[: injected.index("</head>")]
+    root = ihead.split(":root {")[1].split("}")[0]
     check("a theme value cannot escape its declaration",
-          "display: none" not in ihead and "}" not in ihead.split(":root {")[1].split("}")[0])
-    check("nor close the style block", "</style><script>" not in injected)
-    check("a legitimate font stack survives the filter",
-          "Times New Roman" in ihead)
+          "display: none" not in root and "}" not in root)
+    check("nor close the style block", "</style><script>alert(3)" not in injected)
+    check("a legitimate font stack survives the filter", "Times New Roman" in ihead)
     check("and a legitimate colour does", "#0f0" in ihead)
 
     print("\n== the shapes that will actually occur ==")
     empty = render(snapshot(items=[], categories=[]))
     check("a menu with no items still renders", "<html" in empty and "Sakhli" in empty)
-    check("and loads no 3D machinery it does not need", "<script" not in empty)
+    check("and ships no viewer it does not need", "<script" not in empty)
+    check("nor the WebXR overlay", "xr-overlay" not in empty)
 
     no3d = render(snapshot(items=[dict(snapshot()["items"][0], model=None)]))
-    check("an item with no model has no 3D badge", ">3D<" not in no3d)
-    check("and such a page ships no script at all", "<script" not in no3d)
+    check("an item with no model has no 3D badge", "badge-3d" not in no3d)
+    check("a photo-only menu ships no viewer either", "<script" not in no3d)
 
     loose = render(snapshot(items=[dict(snapshot()["items"][0], category_id=None)]))
-    check("an item in no category is still on the menu",
-          "Chicken Shqmeruli" in loose)
+    check("an item in no category is still on the menu", "Chicken Shqmeruli" in loose)
 
     long_menu = render(snapshot(items=[
         dict(snapshot()["items"][0], id=str(i), name=f"Dish {i}", position=i)
         for i in range(120)]))
     check("120 items render", "Dish 119" in long_menu)
+    # ~90 KB of that is the viewer, identical for every tenant, inlined so nothing is
+    # fetched before paint. Worth watching rather than worrying about: if it ever matters,
+    # the two big scripts move to one shared cached file and only the CSS stays inline -
+    # which is all the no-flash claim actually needs.
     size = len(long_menu.encode())
-    # The payload is the thing being sold: a menu that arrives instantly on café wifi.
-    check("and a 120-item menu is still small", size < 120_000, f"{size:,} bytes")
+    # ~92 KB of that is the viewer, byte-identical for every tenant and every page, plus
+    # ~1 KB per dish. Gzip takes the whole thing to roughly a quarter. The number to
+    # watch is the FIXED part: the day it matters, the two big scripts move to one shared
+    # cached file and only the CSS stays inline, which is all the no-flash claim needs.
+    check("and a 120-item menu stays under 260 KB", size < 260_000, f"{size:,} bytes")
+    fixed = len(render(snapshot(items=[], categories=[])).encode())
+    check("a menu with no 3D carries none of the viewer", fixed < 6_000,
+          f"{fixed:,} bytes")
 
     print("\n" + "=" * 62)
     bad = [n for n, ok, _ in RESULTS if not ok]

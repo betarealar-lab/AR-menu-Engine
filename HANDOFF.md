@@ -288,8 +288,8 @@ per-dish optimiser settings, queue depth and dead letters in the header, and a p
 layout.
 
 **Run all six before pushing.** `check.py` 122, `check_webhook.py` 26,
-`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 47 —
-318 in total, all passing as of 2026-09-05. `check_webhook.py` and
+`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 64 —
+335 in total, all passing as of 2026-09-05. `check_webhook.py` and
 `check_jobs.py` use stubs and cost nothing; `check.py` needs a real master GLB, and there
 is one at `C:\Users\temot\Desktop\BetaReal-inspect\chicken-balls-in-shqmeruli-sauce--raw-full\model.glb`.
 
@@ -360,31 +360,51 @@ python menu/preview.py            # http://127.0.0.1:8790/demo-kitchen
   Since `title_of` is dish-level, the chicken dish displays under the sushi name. Almost
   certainly a rename applied while the wrong dish was selected.
 
-- **3D and AR are wired, matching production.** `menu/render/viewer.mjs` reproduces what
-  the live platform does, deliberately: model-viewer **3.4.0** from the same CDN, lazy and
-  fail-open; posters first and live viewers upgraded in behind them, throttled and capped at
-  five WebGL contexts; `camera-orbit` as `"h v zoom"` with the same clamps the admin already
-  uses; iOS AR through `<a rel="ar">` holding an `<img>`, clicked inside the tap, because
-  Quick Look fires from nothing else.
+- **3D and AR are the PLATFORM'S OWN CODE, ported verbatim.** An earlier attempt
+  reimplemented the viewer from reading their source. It did not work, and Temo's
+  correction was right: *"why not just copy the existing systems."* A rewrite of something
+  that already works on real phones in real restaurants is a downgrade however clean it
+  looks.
 
-  **Deliberately NOT reproduced: the Android WebXR carousel.** The platform runs a custom
-  Three.js session that lets a diner swipe between dishes without leaving AR. It is a large
-  module in Niko's repo, it is his, and copying it is neither ours to do nor wise to fork.
-  Android here gets model-viewer's own `scene-viewer`/WebXR. **Porting or rebuilding that
-  carousel is a decision to take with him, deliberately.**
+  `menu/render/ported/` now holds `xr.js` (the Three.js WebXR carousel, ~870 lines),
+  `viewer.js` (the 3D modal, the poster→live-thumbnail upgrade, AR routing, iOS Quick
+  Look), and their CSS and markup — **byte for byte, unedited.** `check_render.py` asserts
+  the files appear in the page verbatim, because a drifted port looks exactly like an
+  intact one until an upstream fix silently fails to arrive.
 
-  **One production workaround we do NOT need.** Their AR launcher bakes an `ar_scale` in and
-  swaps a y-offset-corrected blob so Quick Look seats the dish on the table. That exists
-  because their files are not sized; ours are — `optimize.py` bakes real-world scale into the
-  GLB and `usdz.py` builds the USDZ from the *optimised* GLB. None of that machinery carries
-  over.
+  **`ported/shim.js` is the only adapter**, and the only file to edit. It supplies the
+  fourteen symbols that code expects from the app it was lifted out of: `menuItems` (built
+  from the page's own cards), `_themeConfig`, `t()`, `_setPriceWithOld`, `track`, `idle`,
+  and stubs for the basket and the photo lightbox, which the self-serve menu does not have
+  yet.
 
-**A caveat on testing this.** `IntersectionObserver` does not report intersections in a
-**hidden** browser tab, so the lazy poster→3D upgrade cannot be validated from an automated
-tab that is not in the foreground. That is correct behaviour — nobody should be downloading
-models for a tab nobody is looking at — but it means **the upgrade path has to be eyeballed
-by a person**, in a real foreground tab. `check_render.py` covers the markup and the script;
-it cannot cover that.
+  **The trap that cost the most, and will again.** `viewer.js` binds its listeners at top
+  level. A missing element is `null.addEventListener`, which aborts the REST of the block
+  and leaves every `let` after it in the temporal dead zone. The symptom points nowhere
+  useful: `openModal` exists (function declarations hoist) but throws *"Cannot access
+  '_mvPromise' before initialization"*. Three separate crashes hid behind that one
+  message. If the port ever half-works, **read the console for the FIRST error, not the
+  one your call produced.**
+
+  **One production workaround deliberately not carried over.** Their AR launcher bakes an
+  `ar_scale` in and swaps a y-offset-corrected blob so Quick Look seats the dish on the
+  table rather than through it. That exists because their files are not sized. Ours are —
+  `optimize.py` bakes real-world scale into the GLB and `usdz.py` builds the USDZ from the
+  *optimised* one — so `shim.js` reports `ar_scale: 1` and the file handed to Quick Look
+  is already correct.
+
+**A hard caveat on testing this.** `IntersectionObserver` does not report intersections
+in a **hidden** browser tab, and **model-viewer does not decode a model in one either** —
+both measured. So neither the poster→3D upgrade nor the modal actually rendering can be
+validated from an automated browser that is not in the foreground. That is correct
+behaviour, not a bug: nobody should download models for a tab nobody is looking at. But it
+means **a person has to open the preview and look.**
+
+What automation DID verify, in a real Chrome against the real page: no JavaScript errors,
+`menuItems` built (7 items, 4 with 3D), `window.XR` present, `openModal` runs clean and
+sets the modal title, the formatted price and the model `src`, model-viewer 3.4.0 loaded
+with a canvas in its shadow root, and the AR button labelled. Everything up to the point
+where a hidden tab stops painting.
 
 Next: **step 4** — photo upload in the admin app enqueueing a `generate` job into the same
 queue the Scan Studio uses, and the owner's approve/reject landing in `models.tenant_state`.
@@ -429,10 +449,15 @@ check_schema.py    52 checks of the menu platform's tenancy against the REAL
                    as the other. Free; cleans up after itself
 check_publish.py   25 checks of the publish path on a throwaway tenant: hidden
                    items absent, unapproved models unattached, snapshots immutable
-check_render.py    47 checks of the rendered HTML: XSS and CSS injection from a
-                   restaurant's own typing, the no-flash properties, the viewer
-                   behaviour, and `node --check` on the inlined script. Needs node
-menu/render/viewer.mjs  the 3D + AR behaviour, inlined into the page
+check_render.py    64 checks of the rendered HTML: XSS and CSS injection from a
+                   restaurant's own typing, the no-flash properties, `node --check`
+                   on every inlined script, and that the ported viewer is present
+                   BYTE FOR BYTE. Needs node
+menu/render/ported/     the platform's 3D + AR code, VERBATIM. Do not edit
+                   xr.js / viewer.js   theirs, unmodified
+                   viewer.css / .html  theirs, unmodified
+                   shim.js             the ONLY adapter - ours
+menu/render/build_ported.py  turns those into ported.mjs. Re-run after any change
 menu/              the self-serve half. See MENU-PLATFORM.md before touching it
 menu/migrations/   numbered SQL, applied once each, checksummed
 menu/migrate.py    applies them. --status, --dry-run

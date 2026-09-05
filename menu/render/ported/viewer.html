@@ -1,0 +1,73 @@
+    <div id="modal">
+        <button class="nav-arrow left-arrow"  id="modal-prev">&#10094;</button>
+        <button class="nav-arrow right-arrow" id="modal-next">&#10095;</button>
+        <button class="close-btn" id="close-btn" aria-label="Close">&#10005;</button>
+        <button class="spin-btn" id="modal-spin" aria-label="Auto-spin" aria-pressed="false" title="360° auto-spin" style="display:none">
+            <span class="spin-360">360&deg;</span>
+            <span class="spin-label">SPIN</span>
+        </button>
+        <div id="modal-title"></div>
+        <div id="modal-viewer-wrap">
+            <model-viewer id="modal-viewer"
+                camera-controls
+                shadow-intensity="1"
+                min-camera-orbit="auto 0deg auto"
+                max-camera-orbit="auto 85deg auto">
+            </model-viewer>
+            <div class="modal-vignette"></div>
+        </div>
+        <div id="modal-drawer">
+            <div id="modal-drawer-handle"></div>
+            <div id="modal-title-d"></div>
+            <div id="modal-price"></div>
+            <div id="modal-drawer-body">
+                <div>
+                    <p id="modal-description"></p>
+                    <div id="modal-qty-wrap">
+                        <div class="qty-ctrl" id="modal-qty-ctrl" data-idx="0">
+                            <button class="qty-add-btn" aria-label="Add to basket"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></button>
+                            <div class="qty-stepper">
+                                <button class="qty-dec">&#8722;</button>
+                                <span class="qty-num">1</span>
+                                <button class="qty-inc">+</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="modal-ar-btn"></button>
+                    <p id="modal-message"></p>
+                    <p class="tip" id="modal-tip">Drag to rotate</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="xr-overlay">
+        <div id="xr-gesture-layer"></div>
+        <div id="xr-place-hint">
+            <div id="xr-hint-step"></div>
+            <div id="xr-hint-main"></div>
+        </div>
+        <div id="xr-nav-row">
+            <button id="xr-prev">&#10094;</button>
+            <button id="xr-next">&#10095;</button>
+        </div>
+        <div id="xr-move-hint">Drag to move &middot; Twist two fingers to rotate</div>
+        <button id="xr-exit">Exit AR</button>
+        <button id="xr-place-again"></button>
+        <button id="xr-carousel-toggle"></button>
+        <button id="xr-label-toggle"></button>
+        <button id="xr-hide-ui">HIDE UI</button>
+        <div id="xr-scale-gauge">
+            <div id="xr-scale-track">
+                <div id="xr-scale-fill"></div>
+                <div id="xr-scale-mark"></div>
+            </div>
+            <span id="xr-scale-pct">100%</span>
+        </div>
+        <button id="xr-add-btn" aria-label="Add to basket">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        </button>
+    </div>
+
+
+    <!-- Basket bar -->
