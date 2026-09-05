@@ -1,0 +1,1053 @@
+/* Extracted from the platform's index.html by extract_css.py - whole rules,
+   selected by selector text. Do NOT edit; re-run the extractor. */
+
+:root { --t: 0.22s ease; }
+body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Nunito', sans-serif;
+            min-height: 100vh;
+            padding: 0 16px 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: color var(--t);
+            /* clip (not hidden) prevents horizontal scroll WITHOUT creating a
+               scroll container, so position:sticky descendants keep working. */
+            overflow-x: clip;
+        }
+body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background-color: var(--bg);
+            background-image: var(--bg-image);
+            background-repeat: var(--bg-repeat);
+            background-size: var(--bg-size);
+            background-position: center;
+        }
+.menu-list {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+.menu-item {
+            position: relative;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            box-shadow: var(--item-shadow);
+            display: grid;
+            grid-template-columns: 108px 1fr;
+            grid-template-rows: auto 1fr;
+            grid-template-areas: "name  right" "left  right";
+            padding: 12px;
+            column-gap: 12px;
+            row-gap: 6px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color var(--t);
+            contain: content;
+            touch-action: manipulation;
+            backdrop-filter: blur(var(--card-blur));
+            -webkit-backdrop-filter: blur(var(--card-blur));
+        }
+.menu-item::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            background: var(--accent-edge);
+        }
+.menu-item:active { transform: scale(0.985); box-shadow: 0 2px 6px var(--shadow); }
+@media (hover: hover) {
+.menu-item:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--item-hover-shadow);
+                border-color: var(--accent);
+            }
+}
+.menu-item.no-image {
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-rows: auto;
+            grid-template-areas: "name right"
+                                 "desc right";
+            align-items: start;
+            column-gap: 12px;
+            row-gap: 3px;
+            padding: 12px;
+            background:
+                linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 46%),
+                var(--card-bg);
+        }
+.menu-item.no-image .item-left { display: none; }
+.menu-item.no-image .item-name {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: normal;
+        }
+.menu-item.no-image .item-right {
+            grid-area: right;
+            display: block;
+            min-width: max-content;
+            padding: 0;
+            align-self: center;
+        }
+.menu-item.no-image .ar-btn {
+            display: none;
+        }
+.menu-item.no-image .ingredients {
+            grid-area: desc;
+            min-width: 0;
+            margin: 0;
+            min-height: 0;
+            overflow-wrap: anywhere;
+            word-break: normal;
+        }
+.menu-item.no-image .item-actions {
+            margin-top: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+        }
+.menu-item.no-image .no-image-extra {
+            grid-column: 1 / -1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px;
+        }
+.item-left {
+            grid-area: left;
+        }
+.item-right {
+            grid-area: right;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            user-select: none;
+        }
+.item-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 8px;
+            flex-shrink: 0;
+            min-height: 34px;
+        }
+.item-name {
+            grid-area: name;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.15rem;
+            letter-spacing: 1px;
+            color: var(--accent);
+            line-height: 1.2;
+            transition: color var(--t);
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+.ar-btn {
+            background: var(--cta-bg);
+            color: var(--accent-text);
+            border: none;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 0.63rem;
+            font-weight: 800;
+            font-family: 'Nunito', sans-serif;
+            letter-spacing: 0.8px;
+            cursor: pointer;
+            white-space: nowrap;
+            text-transform: uppercase;
+            display: block;
+            width: 100%;
+            min-height: 44px;
+            margin-top: 6px;
+            box-shadow: var(--cta-shadow);
+            transition: background var(--t), opacity 0.15s, box-shadow 0.15s;
+        }
+.ar-btn:active { opacity: 0.7; transition: opacity 0.08s; }
+.ar-btn:disabled { opacity: 0.45; cursor: wait; }
+.ingredients {
+            flex: 1;
+            font-size: 0.72rem;
+            color: var(--dim);
+            line-height: 1.3;
+            transition: color var(--t);
+            overflow-wrap: break-word;
+        }
+.price {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.15rem;
+            letter-spacing: 1px;
+            color: var(--price-color, var(--accent));
+            transition: color var(--t);
+        }
+.price-was {
+            color: var(--dim);
+            font-size: 0.78em;
+            margin-right: 0.42em;
+            text-decoration: line-through;
+            text-decoration-thickness: 1px;
+            opacity: 0.75;
+        }
+.addons {
+            margin-top: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+.addon {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            background: transparent;
+            border: none;
+            appearance: none;
+            -webkit-appearance: none;
+            padding: 4px 0;
+            cursor: pointer;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--dim);
+            text-align: left;
+            line-height: 1.25;
+            transition: color 0.15s;
+        }
+.addon-l { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.addon-check {
+            width: 16px; height: 16px; flex: 0 0 auto;
+            border: 1.5px solid var(--border);
+            border-radius: 5px;
+            position: relative;
+            transition: background 0.15s, border-color 0.15s;
+        }
+.addon.selected { color: var(--text); }
+.addon.selected .addon-check {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+.addon.selected .addon-check::after {
+            content: '';
+            position: absolute; left: 4.5px; top: 1px;
+            width: 4px; height: 8px;
+            border: solid #fff; border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+.addon-price {
+            color: var(--accent);
+            font-weight: 800;
+            white-space: nowrap;
+        }
+.variants {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+.variant {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 6px;
+            background: var(--pill-bg);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 6px 12px;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--dim);
+            line-height: 1.1;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+.variant-price { font-weight: 800; color: var(--accent); white-space: nowrap; }
+.variant.selected {
+            background: var(--pill-active-bg, var(--accent));
+            border-color: transparent;
+            color: var(--accent-text, #fff);
+        }
+.variant.selected .variant-price { color: var(--accent-text, #fff); }
+.qty-add-btn.just-added { animation: br-pop 0.32s ease; }
+.mg-hero-tagline {
+            position: relative; z-index: 2;
+            display: inline-block;
+            margin: 12px 0 0;
+            max-width: min(480px, calc(100% - 48px));
+            padding: 8px 18px;
+            border-radius: 999px;
+            background: rgba(0,0,0,0.28);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            font-family: 'Nunito', sans-serif;
+            font-weight: 600;
+            font-size: clamp(0.85rem, 2.4vw, 1.05rem);
+            line-height: 1.4;
+            text-align: center;
+            color: rgba(255,255,255,0.95);
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+.mg-hero-tagline[hidden] { display: none; }
+[data-tenant="burger-planet-main"] .mg-hero-tagline {
+            position: absolute;
+            z-index: 2;
+            top: max(64px, calc(env(safe-area-inset-top, 0px) + 64px));
+            left: 50%;
+            transform: translateX(-50%);
+            margin: 0;
+        }
+.cat-bar {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+.cat-filter {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 0 0 8px;
+            margin-bottom: 2px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+.cat-filter::-webkit-scrollbar { display: none; }
+.cat-scroll { position: relative; width: 100%; }
+.cat-nav {
+            position: absolute;
+            top: 0;
+            height: 40px;
+            width: 46px;
+            display: none;
+            align-items: center;
+            border: none;
+            cursor: pointer;
+            z-index: 3;
+            padding: 0;
+            font-size: 1.7rem;
+            line-height: 1;
+            font-weight: 700;
+            color: var(--accent, var(--text));
+            background: var(--bg);
+        }
+.cat-nav-l { left: 0;  justify-content: flex-start; padding-left: 6px;
+            background: linear-gradient(to right, var(--bg) 58%, transparent); }
+.cat-nav-r { right: 0; justify-content: flex-end;   padding-right: 6px;
+            background: linear-gradient(to left,  var(--bg) 58%, transparent); }
+.cat-nav:active { opacity: 0.6; }
+@media (min-width: 640px) {
+.cat-nav:not([hidden]) { display: flex; }
+}
+.menu-groups {
+            display: flex;
+            gap: 6px;
+            width: 100%;
+            max-width: 360px;
+            background: var(--pill-bg);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 4px;
+            box-sizing: border-box;
+        }
+.menu-groups[hidden] { display: none; }
+[data-tenant="food-market-main"] .menu-groups {
+            max-width: 450px;
+            gap: 8px;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+        }
+.cat-pill {
+            background: var(--pill-bg);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 8px 14px;
+            min-height: 40px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--dim);
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: background var(--t), border-color var(--t), color var(--t);
+            touch-action: manipulation;
+        }
+.cat-pill[hidden] { display: none; }
+.cat-pill:active { opacity: 0.7; transition: opacity 0.08s; }
+.cat-pill.active {
+            background: var(--pill-active-bg);
+            color: var(--accent-text);
+            border-color: transparent;
+            box-shadow: var(--cta-shadow);
+        }
+.cat-section { display: contents; }
+.menu-item.ar-featured {
+            border-color: var(--accent);
+            box-shadow: var(--item-hover-shadow);
+        }
+.menu-item.ar-featured::before {
+            width: 5px;
+            background: var(--cta-bg);
+        }
+.mg-hero { display: none; }
+html[data-generic-hero="true"] .mg-hero {
+            position: relative;
+            width: 100vw;
+            margin-left: calc(50% - 50vw);
+            margin-right: calc(50% - 50vw);
+            min-height: var(--mg-hero-h, min(52svh, 520px));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
+        }
+html[data-generic-hero="true"] .mg-hero-photo,
+        html[data-generic-hero="true"] .mg-hero-next {
+            position: absolute; inset: 0; z-index: 0;
+            background-image: var(--hero-image, none);
+            background-position: center;
+            background-size: cover;
+            background-repeat: no-repeat;
+        }
+html[data-generic-hero="true"] .mg-hero-next { opacity: 0; pointer-events: none; }
+html[data-generic-hero="true"] .mg-hero-veil {
+            position: absolute; inset: 0; z-index: 1;
+            background: linear-gradient(180deg, rgba(0,0,0,0.16), rgba(0,0,0,0.62));
+        }
+html[data-generic-hero="true"] .mg-hero-logo,
+        html[data-generic-hero="true"] .mg-hero-brand,
+        html[data-generic-hero="true"] .mg-hero-tagline { position: relative; z-index: 2; }
+html[data-generic-hero="true"] .mg-hero-logo { max-width: min(58vw, 360px); max-height: 180px; object-fit: contain; }
+html[data-generic-hero="true"] .mg-hero-brand { color: #fff; font-size: clamp(2.25rem, 9vw, 4.5rem); text-shadow: 0 3px 18px rgba(0,0,0,0.62); }
+html[data-generic-hero="true"] .mg-hero-tagline { color: rgba(255,255,255,0.9); max-width: min(88vw, 560px); }
+html[data-generic-hero="true"] .mg-hero-scroll { position: absolute; z-index: 2; bottom: 22px; color: #fff; }
+.mg-hero-video {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            opacity: 0;
+            transition: opacity 600ms ease-in-out;
+            pointer-events: none;
+            background: transparent;
+        }
+html[data-hero-video="loading"] .mg-hero-video,
+        html[data-hero-video="true"] .mg-hero-video { display: block; }
+html[data-hero-video="true"] .mg-hero-video { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+.mg-hero-video { transition: none; }
+}
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .mg-hero,
+        [data-tenant="mugsy-main"][data-brand-slug="mugsy"] .baoma-shell,
+        [data-tenant="mugsy-main"][data-brand-slug="mugsy"] .header {
+            display: none;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .cat-bar {
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            width: 100vw;
+            max-width: none;
+            margin-left: calc(50% - 50vw);
+            margin-right: calc(50% - 50vw);
+            padding: 10px 0;
+            background: var(--mugsy-catbar-bg);
+            border-bottom: 1px solid var(--mugsy-border);
+            backdrop-filter: blur(12px) saturate(140%);
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .cat-scroll,
+        [data-tenant="mugsy-main"][data-brand-slug="mugsy"] .cat-filter {
+            max-width: 1180px;
+            margin-left: auto;
+            margin-right: auto;
+            padding-left: max(12px, env(safe-area-inset-left));
+            padding-right: max(12px, env(safe-area-inset-right));
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .cat-filter {
+            scrollbar-width: none;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .cat-filter::-webkit-scrollbar {
+            display: none;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .cat-pill {
+            min-height: 44px;
+            border-radius: 999px;
+            border-color: var(--mugsy-border);
+            background: var(--mugsy-pill);
+            color: var(--mugsy-text);
+            font-weight: 900;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .cat-pill.active {
+            background: var(--mugsy-red);
+            color: var(--mugsy-accent-text);
+            box-shadow: var(--mugsy-cta-shadow);
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-list {
+            max-width: 1180px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+            padding-top: 16px;
+            padding-right: max(12px, env(safe-area-inset-right));
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .cat-section {
+            display: contents;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) {
+            grid-template-columns: 126px minmax(0, 1fr);
+            grid-template-areas: "left name" "left right";
+            padding: 10px;
+            border-radius: 16px;
+            border-color: var(--mugsy-border);
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item::before {
+            width: 4px;
+            background: var(--mugsy-red);
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .item-name {
+            color: var(--mugsy-red-deep);
+            font-family: 'Bebas Neue', 'Nunito', sans-serif;
+            font-size: 1.45rem;
+            letter-spacing: 0;
+            line-height: 1;
+            text-transform: uppercase;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .ingredients {
+            color: var(--mugsy-dim);
+            font-size: 0.78rem;
+            line-height: 1.38;
+            font-weight: 700;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .price {
+            color: var(--mugsy-price);
+            font-family: 'Bebas Neue', 'Nunito', sans-serif;
+            font-size: 1.45rem;
+            letter-spacing: 0;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .qty-add-btn,
+        [data-tenant="mugsy-main"][data-brand-slug="mugsy"] .qty-stepper {
+            border-color: var(--mugsy-red);
+            color: var(--mugsy-red);
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .qty-add-btn {
+            width: 44px;
+            height: 44px;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .qty-stepper {
+            min-height: 44px;
+            height: 44px;
+        }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .qty-dec,
+        [data-tenant="mugsy-main"][data-brand-slug="mugsy"] .qty-inc {
+            min-width: 44px;
+            justify-content: center;
+        }
+html[lang="ka"][data-tenant="mugsy-main"][data-brand-slug="mugsy"] .mugsy-title,
+        html[lang="ka"][data-tenant="mugsy-main"][data-brand-slug="mugsy"] .category-header,
+        html[lang="ka"][data-tenant="mugsy-main"][data-brand-slug="mugsy"] .item-name {
+            font-family: 'Noto Sans Georgian', 'Nunito', system-ui, sans-serif !important;
+            font-weight: 900;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+@media (min-width: 700px) {
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-list,
+            .mugsy-location-list {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-list {
+                padding-right: 16px;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) {
+                grid-template-columns: 1fr;
+                grid-template-areas: "left" "name" "right";
+            }
+}
+@media (min-width: 1040px) {
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-list {
+                grid-template-columns: repeat(3, 1fr);
+            }
+}
+@media (max-width: 380px) {
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-list {
+                padding-right: max(12px, env(safe-area-inset-right));
+            }
+}
+@media (max-width: 699px) {
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-list {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+                padding-left: max(12px, env(safe-area-inset-left));
+                padding-right: max(12px, env(safe-area-inset-right));
+                box-sizing: border-box;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) {
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+                padding: 0;
+                border-radius: 14px;
+                overflow: hidden;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image)::before {
+                width: 0;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .item-left {
+                order: 1;
+                width: 100%;
+                min-width: 0;
+                overflow: hidden;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .item-name {
+                order: 2;
+                min-width: 0;
+                padding: 8px 9px 0;
+                font-size: 1rem;
+                line-height: 1.12;
+                overflow-wrap: anywhere;
+                word-break: normal;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .item-right {
+                order: 3;
+                min-width: 0;
+                padding: 7px 9px 10px;
+                gap: 7px;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .ingredients {
+                font-size: 0.72rem;
+                line-height: 1.3;
+                max-height: 3.9em;
+                overflow: hidden;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .item-actions {
+                align-items: center;
+                gap: 8px;
+                min-height: 44px;
+                margin-top: 0;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .price {
+                min-width: 0;
+                font-size: 1.05rem;
+                line-height: 1;
+                overflow-wrap: anywhere;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .qty-add-btn {
+                width: 44px;
+                height: 44px;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .qty-stepper {
+                width: 100%;
+                max-width: 104px;
+                min-height: 44px;
+                height: 44px;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .qty-dec,
+            [data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .qty-inc {
+                min-width: 38px;
+                padding: 0;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .qty-num {
+                min-width: 22px;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .ar-btn {
+                width: 100%;
+                min-height: 44px;
+                padding: 8px 6px;
+                font-size: 0.58rem;
+                line-height: 1.15;
+                white-space: normal;
+                overflow-wrap: anywhere;
+            }
+}
+@media (max-width: 340px) {
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .item-actions {
+                flex-direction: column;
+                align-items: flex-start;
+                justify-content: flex-start;
+                gap: 6px;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .price {
+                white-space: nowrap;
+            }
+[data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .qty-ctrl,
+            [data-tenant="mugsy-main"][data-brand-slug="mugsy"] .menu-item:not(.no-image) .qty-stepper {
+                width: 100%;
+                max-width: 100%;
+            }
+}
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .header,
+        [data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .mg-hero,
+        [data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .baoma-shell,
+        [data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .mugsy-shell,
+        [data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .site-footer { display: none; }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .cat-bar {
+            position: sticky;
+            top: calc(58px + env(safe-area-inset-top, 0px));
+            z-index: 1000;
+            width: 100%;
+            max-width: none;
+            padding: 8px 0;
+            margin: 0;
+            background: rgba(245,240,230,0.96);
+            border-bottom: 2px solid #171717;
+            backdrop-filter: blur(10px);
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .cat-scroll,
+        [data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .cat-filter {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding-left: max(12px, env(safe-area-inset-left));
+            padding-right: max(12px, env(safe-area-inset-right));
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .cat-pill {
+            min-height: 44px;
+            border-radius: 0;
+            border: 2px solid #171717;
+            background: #FFFDF7;
+            color: #171717;
+            font-weight: 900;
+            box-shadow: 3px 3px 0 rgba(23,23,23,0.16);
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .cat-pill.active {
+            background: #171717;
+            color: #FFFDF7;
+            box-shadow: 3px 3px 0 #F05A28;
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-list {
+            width: 100%;
+            max-width: 1180px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 14px;
+            padding: 18px max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left));
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .cat-section { display: contents; }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-item {
+            border: 2px solid #171717;
+            border-radius: 8px;
+            background: #FFFDF7;
+            box-shadow: 5px 5px 0 rgba(23,23,23,0.18);
+            overflow: hidden;
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-item::before { background: #F05A28; width: 5px; }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-item:not(.no-image) {
+            grid-template-columns: 1fr;
+            grid-template-areas: "left" "name" "right";
+            padding: 0;
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .item-name {
+            padding: 12px 12px 0;
+            color: #171717;
+            font-family: 'Anton', 'Nunito', sans-serif;
+            font-size: 1.28rem;
+            line-height: 1.04;
+            letter-spacing: 0;
+            text-transform: uppercase;
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .item-right { padding: 8px 12px 12px; }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .ingredients { color: #555; font-weight: 700; line-height: 1.4; }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .price {
+            color: #C7431C;
+            font-family: 'Anton', 'Nunito', sans-serif;
+            font-size: 1.28rem;
+            letter-spacing: 0;
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .qty-add-btn,
+        [data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .qty-stepper {
+            min-height: 44px;
+            border: 2px solid #171717;
+            border-radius: 0;
+            color: #171717;
+            background: #F4C542;
+        }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .qty-add-btn { width: 44px; height: 44px; }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-item.no-image { padding: 14px 12px 12px; }
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-item.no-image .item-name,
+        [data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-item.no-image .item-right { padding: 0; }
+html[lang="ka"][data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .pipes-title,
+        html[lang="ka"][data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .pipes-mark,
+        html[lang="ka"][data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .category-header,
+        html[lang="ka"][data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .item-name,
+        html[lang="ka"][data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .pipes-signature-name,
+        html[lang="ka"][data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .pipes-location h2 {
+            font-family: 'Noto Sans Georgian', 'Nunito', system-ui, sans-serif !important;
+            text-transform: none;
+            letter-spacing: 0;
+            font-weight: 900;
+        }
+@media (min-width: 700px) {
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1020px) {
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .menu-list {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 18px;
+            }
+}
+@media (max-width: 520px) {
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"] .cat-bar {
+                top: calc(110px + env(safe-area-inset-top, 0px));
+            }
+}
+/* Burger Planet only: delivery-app CTA row. Lives inside the sticky
+           #cat-bar (see modern_cafe's `.cat-bar { position: sticky; top: 0 }
+.qty-ctrl { flex-shrink: 0; }
+.qty-add-btn {
+            background: transparent;
+            color: var(--add-btn-color, var(--accent));
+            border: 1.5px solid var(--add-btn-color, var(--accent));
+            border-radius: 9px;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background var(--t), color var(--t), border-color var(--t), opacity 0.15s;
+            touch-action: manipulation;
+        }
+.qty-add-btn:active { opacity: 0.7; transition: opacity 0.08s; }
+.qty-stepper {
+            display: none;
+            align-items: stretch;
+            border: 1.5px solid var(--accent);
+            border-radius: 9px;
+            overflow: hidden;
+            height: 34px;
+            box-sizing: border-box;
+            transition: border-color var(--t);
+        }
+.qty-stepper.visible { display: flex; }
+.qty-dec, .qty-inc {
+            background: transparent;
+            border: none;
+            color: var(--accent);
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 0 10px;
+            cursor: pointer;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            touch-action: manipulation;
+            transition: background var(--t), color var(--t);
+            user-select: none;
+        }
+.qty-dec { border-right: 1px solid var(--accent); }
+.qty-inc { border-left:  1px solid var(--accent); }
+.qty-dec:active, .qty-inc:active {
+            background: var(--accent);
+            color: var(--accent-text);
+            transition: none;
+        }
+.qty-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            color: var(--accent);
+            min-width: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 2px;
+            user-select: none;
+            transition: color var(--t);
+        }
+body.basket-bar-visible { padding-bottom: 80px; }
+.qty-btn {
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-size: 1.1rem;
+            width: 26px;
+            height: 26px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+            transition: color var(--t);
+        }
+.qty-count {
+            font-weight: 700;
+            font-size: 0.88rem;
+            min-width: 18px;
+            text-align: center;
+            color: var(--text);
+            transition: color var(--t);
+        }
+@media (max-width: 639px) {
+[data-phone-layout="twin"] .menu-list {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+                max-width: 520px;
+                /* stretch (not start): two dishes with different name lengths must not
+                   leave the price/cart row sitting at two different heights across a
+                   row -- see .item-right below, which is what actually claims the
+                   extra space this creates. */
+                align-items: stretch;
+            }
+[data-phone-layout="twin"] .menu-item {
+                display: flex;
+                flex-direction: column;
+                padding: 0;
+                overflow: hidden;
+            }
+[data-phone-layout="twin"] .item-left { order: 1; width: 100%; }
+[data-phone-layout="twin"] .item-left { min-width: 0; overflow: hidden; }
+[data-phone-layout="twin"] .item-name {
+                order: 2;
+                padding: 7px 10px 0;
+                font-size: 0.98rem;
+                line-height: 1.12;
+                overflow-wrap: anywhere;
+            }
+[data-phone-layout="twin"] .item-right {
+                order: 3;
+                padding: 6px 10px 9px;
+                gap: 6px;
+                /* .menu-item is now stretched to match its row-mate's height (see
+                   .menu-list above); .item-right must claim that extra space itself
+                   -- it doesn't happen automatically just because the outer card grew.
+                   Its only child here is .item-actions (ingredients is hidden in twin
+                   mode), so the base rule's `justify-content: space-between` has
+                   nothing to space between and would leave it stuck at the top --
+                   flex-end pins it to the bottom of the now-taller card instead. */
+                flex: 1;
+                justify-content: flex-end;
+            }
+[data-phone-layout="twin"] .item-right .ingredients { display: none; }
+[data-phone-layout="twin"] .item-actions { margin-top: 0; min-height: 0; }
+[data-phone-layout="twin"] .price { font-size: 0.92rem; }
+[data-phone-layout="twin"] .qty-add-btn,
+            [data-phone-layout="twin"] .qty-stepper { height: 28px; border-radius: 8px; }
+[data-phone-layout="twin"] .qty-add-btn { width: 28px; }
+[data-phone-layout="twin"] .qty-add-btn svg { width: 14px; height: 14px; }
+[data-phone-layout="twin"] .qty-dec,
+            [data-phone-layout="twin"] .qty-inc { padding: 0 8px; font-size: 0.9rem; }
+[data-phone-layout="twin"] .qty-num { font-size: 0.9rem; min-width: 18px; }
+[data-phone-layout="twin"] .ar-btn {
+                width: 100%;
+                padding: 6px;
+                font-size: 0.6rem;
+                border-radius: 8px;
+            }
+/* Twin layout was built for photo cards (square image, name,
+               price/cart) and never accounted for text-only items -- a
+               no-image card fell back to the generic
+               [data-phone-layout="twin"] .menu-item { display:flex; padding:0 }
+rule, which strips the card's padding (description text touches
+               the card edge / overflows above it) and leaves every child at
+               its default flex order (0) except .item-name/.item-right, which
+               that same generic rule pins to order 2/3 -- so the description
+               (still order 0) sorted BEFORE the name instead of after it.
+               Higher specificity here ((0,3,0) vs the generic rule's (0,2,0))
+               guarantees this wins regardless of source order. Unlike photo
+               cards, the description stays visible: a photo already shows
+               what a dish is, but a no-image card has nothing else to. */
+            [data-phone-layout="twin"] .menu-item.no-image {
+                display: flex;
+                flex-direction: column;
+                padding: 10px 12px 9px;
+            }
+[data-phone-layout="twin"] .menu-item.no-image .item-name {
+                order: 1;
+                padding: 0 0 4px;
+            }
+[data-phone-layout="twin"] .menu-item.no-image .ingredients {
+                order: 2;
+                display: block;
+                font-size: 0.66rem;
+                margin: 0 0 8px;
+            }
+[data-phone-layout="twin"] .menu-item.no-image .item-right {
+                /* .menu-item.no-image .item-right sets display:block elsewhere (built
+                   for the grid-based no-image layout, where block is correct for a
+                   grid-area). That rule is still higher-specificity than the generic
+                   twin .item-right{display:flex}, and a property this block doesn't
+                   redeclare still falls through to it -- so display/flex-direction
+                   have to be repeated here, or justify-content below is a no-op on a
+                   block box and .item-actions sits at the top instead of the bottom. */
+                display: flex;
+                flex-direction: column;
+                order: 3;
+                flex: 1;
+                justify-content: flex-end;
+                padding: 0;
+            }
+}
+@media (min-width: 640px) {
+body { padding: 0 32px 64px; }
+.header, .cat-bar { max-width: 880px; }
+.cat-filter { max-width: 100%; justify-content: safe center; }
+.menu-list {
+                max-width: 880px;
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 16px;
+                /* stretch, not start -- see the matching comment on the twin-layout
+                   .menu-list above. This rule is shared by every template that
+                   doesn't override its own .menu-list here (i.e. most of them,
+                   and the >=1100px 3-column grid below, which doesn't redeclare
+                   align-items and so inherits this), so the fix applies platform-
+                   wide, not just to Monday Greens. */
+                align-items: stretch;
+            }
+.menu-item {
+                display: flex;
+                flex-direction: column;
+                padding: 0;
+                overflow: hidden;
+            }
+.menu-item.no-image {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-areas: "name right"
+                                     "desc right";
+                padding: 12px 14px;
+            }
+.menu-item.no-image .item-name,
+            .menu-item.no-image .item-right {
+                padding: 0;
+            }
+.item-left { order: 1; width: 100%; }
+.item-name { order: 2; padding: 10px 14px 4px; }
+.item-right { order: 3; padding: 4px 14px 14px; flex: 1; }
+}
+@media (min-width: 1100px) {
+.header, .cat-bar { max-width: 1160px; }
+.menu-list {
+                max-width: 1160px;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 20px;
+            }
+}
+.mg-hero-brand { display: none; }

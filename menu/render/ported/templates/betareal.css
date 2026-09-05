@@ -1,0 +1,7 @@
+/* Extracted from the platform's index.html by extract_css.py - whole rules,
+   selected by selector text. Do NOT edit; re-run the extractor. */
+
+[data-template="betareal"] .footer-logo-dark,
+        [data-template="betareal"] .footer-logo-light { display: none; }
+[data-template="betareal"] .footer-logo-white { display: block; }
+[data-template="betareal"] #brand-title { display: none; }

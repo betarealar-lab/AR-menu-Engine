@@ -1,0 +1,16 @@
+/* Extracted from the platform's index.html by extract_css.py - whole rules,
+   selected by selector text. Do NOT edit; re-run the extractor. */
+
+[data-tenant="pipes-burger-main"][data-brand-slug="pipes-burger"][data-template="pipes_fabrika"] {
+            --bg: #E9E3D7; --bg2: #F5F0E6; --card: #FFFDF7; --card2: #F5F0E6;
+            --border: #171717; --text: #171717; --dim: #555; --accent: #F05A28;
+            --accent2: #B7D936; --accent-text: #FFFDF7; --thumb-bg: #E9E3D7;
+            --modal-bg: #F5F0E6; --modal-rgb: 245,240,230;
+            --bg-image: linear-gradient(90deg, rgba(23,23,23,0.035) 1px, transparent 1px), linear-gradient(180deg, #E9E3D7 0%, #F5F0E6 50%, #E9E3D7 100%);
+            --bg-size: 24px 24px, auto; --bg-repeat: repeat, no-repeat;
+            --card-bg: #FFFDF7; --card-radius: 8px; --stage-bg: #E9E3D7;
+            --pill-bg: #FFFDF7; --pill-active-bg: #171717; --cta-bg: #F05A28;
+            --cta-shadow: 4px 4px 0 #171717; --item-shadow: 5px 5px 0 rgba(23,23,23,0.18);
+            --item-hover-shadow: 7px 7px 0 rgba(23,23,23,0.24);
+            --price-color: #C7431C; --add-btn-color: #F05A28;
+        }

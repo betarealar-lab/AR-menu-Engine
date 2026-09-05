@@ -1,0 +1,17 @@
+/* Extracted from the platform's index.html by extract_css.py - whole rules,
+   selected by selector text. Do NOT edit; re-run the extractor. */
+
+[data-template="minimal_sushi"] {
+            --card-radius: 14px;
+        }
+[data-template="minimal_sushi"] .menu-item::before {
+            width: 2px;
+        }
+[data-template="minimal_sushi"] .ar-btn,
+        [data-template="minimal_sushi"] .cat-pill.active,
+        [data-template="urban_night"] .ar-btn,
+        [data-template="urban_night"] .cat-pill.active,
+        [data-template="elegant_black"] .ar-btn,
+        [data-template="elegant_black"] .cat-pill.active {
+            box-shadow: 0 7px 20px var(--glow);
+        }

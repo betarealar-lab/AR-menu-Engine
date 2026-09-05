@@ -411,3 +411,107 @@ is a Worker and not a Pages site.
 
 Until then, `*.workers.dev` is a real, working, SSL-terminated hostname and is enough for
 everything up to the first paying self-serve tenant.
+
+---
+
+## 8. What a template actually is — learned by replicating Monday Greens
+
+Temo, 2026-09-05: *"replicate monday greens and tell me what u learn and what u dont."*
+This is that answer, and the finding reshaped §2.2 from a guess into a description.
+
+### 8.1 · A template is a palette, not a page
+
+There is no Monday Greens layout. There is **one** set of structural rules and **one** set
+of markup, shared by every restaurant, and a template is:
+
+| | |
+|---|---|
+| **a preset** | ~38 values — `night_card_bg`, `day_accent`, `day_bg_image`… |
+| **a variable map** | those keys onto ~40 CSS custom properties: `card_bg` → `--card-bg` |
+| **a few scoped rules** | `[data-template="monday_greens"] {...}` — 28 of them, for the handful of things a palette cannot express |
+| **the same everything else** | identical markup, identical structural CSS |
+
+Monday Greens is **38 numbers and 28 rules.** That is the whole look.
+
+It is also the proof that §2.2 is achievable rather than aspirational: `extract_css.py`
+found **18 templates** and `extract_presets.py` **22 presets**, neither written by hand,
+because the platform already stores looks as data. What it does *not* have is a way to add
+one without a developer — the presets live in a TypeScript file and the scoped rules in a
+619 KB HTML file. Moving both into the database is the entire remaining distance to
+"restaurants can add a custom template", and it is a smaller distance than it looked.
+
+### 8.2 · The 3D and AR base, and what a future template must do to get it
+
+`ported/` is the base every template inherits. A template author writes no JavaScript and
+touches no viewer code. They get the 3D modal, live thumbnails, iOS Quick Look and the
+WebXR carousel **for free**, on one condition: the card markup keeps the platform's
+contract, because the viewer queries it directly.
+
+```
+.menu-item[data-idx]                     the card, indexed across the WHOLE menu
+  .item-left > .thumb-wrap
+      img.thumb-img[data-model][data-global-idx]     ← _startThumbUpgrades queries this
+      .thumb-vignette
+      .badge-3d
+  .item-right
+      .ingredients · .item-actions > .price
+      button.ar-btn[data-idx]
+```
+
+Plus the data attributes the shim reads back: `data-glb`, `data-usdz`, `data-poster`,
+`data-orbit`, `data-cm` / `data-axis`, `data-name`, `data-desc`, `data-price`.
+
+**Rename any of those and the 3D silently stops**, with no error — which is why
+`check_render.py` asserts each one.
+
+### 8.3 · Four things that were wrong, and were only found by looking
+
+Every one of these rendered as "the 3D doesn't work" and none of them was the 3D.
+
+**Line ranges are the wrong tool for a brace language.** The first CSS extraction took
+line numbers, cut inside a block, and left the stylesheet one `{` out of balance. The
+browser dropped rules silently and `#modal` came out `position: static` — so the modal
+*was* opening, as an ordinary element in the page flow, with no geometry and nothing
+visible. The extractor now walks braces and refuses to write an unbalanced file.
+
+**A comment above a rule lands in front of its selector.** `body::before` — where the
+entire page background lives — is preceded by a four-line comment, so matching on the raw
+selector text skipped it and the page rendered with no background while every variable was
+present and correct. Comments are now stripped before matching.
+
+**The tenant's palette has to be the LAST `:root` in the document.** `menu.css` ships its
+own defaults; with our block first, every default overrode the template.
+
+**`viewer.js` binds its listeners at parse time.** A missing element is
+`null.addEventListener`, which aborts the rest of the block and leaves every `let` after it
+in the temporal dead zone. The symptom points nowhere useful: `openModal` exists — function
+declarations hoist — but throws *"Cannot access `_mvPromise` before initialization"*. Three
+separate causes hid behind that one message. **Read the FIRST console error, never the one
+your own call produced.**
+
+### 8.4 · What is NOT replicated, and what is not yet known
+
+**Not replicated, deliberately:**
+
+- **The hero.** Monday Greens' `.mg-hero` is a full-bleed photo with a veil and a logo,
+  driven by `theme_config.hero_image_url` and a crossfade gallery. We have no hero image
+  field and no uploads, so the page carries a plain title block. It is a column and an
+  upload away, not a redesign.
+- **The basket, the category filter bar, the waiter QR, variants and add-ons.** All real
+  platform features with no schema behind them here yet. `shim.js` stubs them so the
+  ported code runs; the CSS hides the controls.
+- **Georgian.** `t(item, 'name')` is ported in full and reads `name_ka`, so the day a
+  Georgian column exists it works. Nothing populates it.
+
+**Not known, honestly:**
+
+- **Whether it looks right.** `IntersectionObserver` does not fire and model-viewer does
+  not decode in a hidden tab, so an automated browser cannot see the thumbnails upgrade or
+  the modal paint. Verified programmatically: no JS errors, the modal opens `position:
+  fixed` at `z-index: 9999` with its title, price and model `src` set, the Monday Greens
+  day gradient resolving on `body::before`, cards at their 18px radius. **A person still
+  has to look.**
+- **Whether the WebXR carousel runs.** It is ported verbatim and loads, but it needs an
+  ARCore phone. Never exercised.
+- **Whether iOS Quick Look opens.** Same — it needs an iPhone, and per HANDOFF §9 nobody
+  on the team owns one.

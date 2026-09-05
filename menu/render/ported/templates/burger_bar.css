@@ -1,0 +1,494 @@
+/* Extracted from the platform's index.html by extract_css.py - whole rules,
+   selected by selector text. Do NOT edit; re-run the extractor. */
+
+[data-template="burger_bar"] {
+            --bg: var(--bb-bg);
+            --bg2: var(--bb-bg2);
+            --glow: var(--bb-glow);
+            --glow2: var(--bb-glow2);
+            --shadow: var(--bb-shadow);
+            --card: var(--bb-card);
+            --card2: var(--bb-card2);
+            --border: var(--bb-border);
+            --text: var(--bb-text);
+            --dim: var(--bb-dim);
+            --accent: var(--bb-accent);
+            --accent2: var(--bb-accent2);
+            --accent-text: var(--bb-accent-text);
+            --thumb-bg: var(--bb-thumb-bg);
+            --modal-bg: var(--bb-modal-bg);
+            --modal-rgb: var(--bb-modal-rgb);
+            --bg-image: var(--bb-bg-image);
+            --bg-size: auto, auto, auto;
+            --bg-repeat: no-repeat, no-repeat, no-repeat;
+            --card-bg: var(--bb-card-bg);
+            --card-blur: 0px;
+            --card-radius: 18px;
+            --item-shadow: var(--bb-item-shadow);
+            --item-hover-shadow: var(--bb-item-hover-shadow);
+            --accent-edge: var(--bb-accent-edge);
+            --stage-bg: var(--bb-thumb-bg);
+            --thumb-vignette: var(--bb-thumb-vignette);
+            --pill-bg: var(--bb-pill-bg);
+            --pill-active-bg: var(--bb-accent);
+            --cta-bg: var(--bb-accent);
+            --cta-shadow: var(--bb-cta-shadow);
+            --hero-color: var(--bb-accent);
+            --hero-shadow: none;
+            --divider-bg: var(--bb-divider-bg);
+            --modal-bg-image: var(--bb-modal-bg-image);
+            --price-color: var(--bb-price);
+            --add-btn-color: var(--bb-accent);
+        }
+[data-theme="night"][data-template="burger_bar"] {
+            --bb-bg: #17161a;
+            --bb-bg2: #0f0e11;
+            --bb-glow: rgba(255,106,43,0.16);
+            --bb-glow2: rgba(255,181,71,0.09);
+            --bb-shadow: rgba(0,0,0,0.58);
+            --bb-card: #232228;
+            --bb-card2: #2b2930;
+            --bb-border: rgba(255,181,71,0.18);
+            --bb-text: #f5efe6;
+            --bb-dim: #9b968f;
+            --bb-accent: #ff6a2b;
+            --bb-accent2: #ffb547;
+            --bb-accent-text: #17161a;
+            --bb-price: #ffb547;
+            --bb-thumb-bg: #131215;
+            --bb-modal-bg: #131215;
+            --bb-modal-rgb: 19,18,21;
+            --bb-bg-image:
+                radial-gradient(82% 46% at 50% -8%, rgba(255,106,43,0.16) 0%, transparent 62%),
+                radial-gradient(60% 38% at 88% 24%, rgba(255,181,71,0.09) 0%, transparent 70%),
+                linear-gradient(180deg, #17161a 0%, #131215 56%, #0f0e11 100%);
+            --bb-card-bg: linear-gradient(170deg, #262429 0%, #1e1d22 100%);
+            --bb-item-shadow: 0 4px 16px rgba(0,0,0,0.48);
+            --bb-item-hover-shadow: 0 14px 34px rgba(0,0,0,0.58);
+            --bb-accent-edge: linear-gradient(180deg, #ff6a2b, #ffb547);
+            --bb-thumb-vignette: linear-gradient(180deg, transparent 58%, rgba(15,14,17,0.38));
+            --bb-pill-bg: rgba(38,36,41,0.94);
+            --bb-cta-shadow: 0 6px 20px rgba(255,106,43,0.32);
+            --bb-divider-bg: linear-gradient(90deg, transparent, #ffb547, transparent);
+            --bb-modal-bg-image:
+                radial-gradient(70% 46% at 50% 30%, rgba(255,106,43,0.18) 0%, transparent 64%),
+                linear-gradient(180deg, #1e1d22 0%, #0f0e11 100%);
+            --bb-bar-bg: rgba(19,18,21,0.9);
+            --bb-scrim: linear-gradient(180deg, rgba(15,14,17,0) 38%, rgba(15,14,17,0.86) 100%);
+        }
+[data-theme="day"][data-template="burger_bar"] {
+            --bb-bg: #faf6ef;
+            --bb-bg2: #f3ece0;
+            --bb-glow: rgba(184,65,15,0.10);
+            --bb-glow2: rgba(138,52,16,0.07);
+            --bb-shadow: rgba(60,38,20,0.16);
+            --bb-card: #ffffff;
+            --bb-card2: #fbf6ee;
+            --bb-border: rgba(60,38,20,0.16);
+            --bb-text: #1b1a1e;
+            --bb-dim: #6b6560;
+            --bb-accent: #b8410f;
+            --bb-accent2: #8a3410;
+            --bb-accent-text: #ffffff;
+            --bb-price: #8a3410;
+            --bb-thumb-bg: #f2e9dc;
+            --bb-modal-bg: #fffdf8;
+            --bb-modal-rgb: 255,253,248;
+            --bb-bg-image:
+                radial-gradient(82% 46% at 50% -8%, rgba(184,65,15,0.10) 0%, transparent 62%),
+                radial-gradient(60% 38% at 88% 24%, rgba(138,52,16,0.07) 0%, transparent 70%),
+                linear-gradient(180deg, #faf6ef 0%, #f3ece0 56%, #fffdf8 100%);
+            --bb-card-bg: linear-gradient(170deg, #ffffff 0%, #fbf6ee 100%);
+            --bb-item-shadow: 0 4px 14px rgba(60,38,20,0.12);
+            --bb-item-hover-shadow: 0 12px 30px rgba(60,38,20,0.18);
+            --bb-accent-edge: linear-gradient(180deg, #b8410f, #8a3410);
+            --bb-thumb-vignette: linear-gradient(180deg, transparent 60%, rgba(60,38,20,0.10));
+            --bb-pill-bg: rgba(255,255,255,0.9);
+            --bb-cta-shadow: 0 6px 18px rgba(184,65,15,0.24);
+            --bb-divider-bg: linear-gradient(90deg, transparent, #8a3410, transparent);
+            --bb-modal-bg-image:
+                radial-gradient(70% 46% at 50% 30%, rgba(184,65,15,0.10) 0%, transparent 64%),
+                linear-gradient(180deg, #faf6ef 0%, #fffdf8 100%);
+            --bb-bar-bg: rgba(250,246,239,0.92);
+            --bb-scrim: linear-gradient(180deg, rgba(27,26,30,0) 34%, rgba(27,26,30,0.78) 100%);
+        }
+[data-template="burger_bar"] .cat-bar {
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            width: 100vw;
+            max-width: none;
+            margin-left: calc(50% - 50vw);
+            margin-right: calc(50% - 50vw);
+            background: var(--bb-bar-bg);
+            backdrop-filter: blur(14px) saturate(140%);
+            /* The 49px of top padding is the seat for the two fixed toggles: once
+               the bar is pinned it fills the strip behind them, so they read as
+               part of the bar instead of floating over the menu. It is padding
+               rather than an ::before, because an absolutely positioned strip
+               anchored to bottom:100% would sit ABOVE the bar's own box and paint
+               over the restaurant name while the bar is still unpinned.
+               58px, not 49: #theme-toggle is a round icon button and measures
+               14->52px, so a 49px seat clipped it by 3px. */
+            padding: 58px 0 8px;
+            border-bottom: 1px solid var(--bb-border);
+        }
+[data-template="burger_bar"] .cat-scroll,
+        [data-template="burger_bar"] .cat-filter,
+        [data-template="burger_bar"] .menu-groups {
+            max-width: 478px;          /* 450 column + 2 x 14 padding */
+            margin-left: auto;
+            margin-right: auto;
+            padding-left: 14px;
+            padding-right: 14px;
+            box-sizing: border-box;
+        }
+[data-template="burger_bar"] .cat-pill,
+        [data-template="gochit_monster"] .cat-pill {
+            border-radius: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            border: 1px solid var(--bb-border);
+            min-height: 44px;              /* brief: tappable targets >= 44px */
+        }
+[data-template="burger_bar"] .cat-pill.active,
+        [data-template="gochit_monster"] .cat-pill.active {
+            border-color: transparent;
+            color: var(--bb-accent-text);
+        }
+[data-template="burger_bar"] .category-header,
+        [data-template="gochit_monster"] .category-header {
+            text-transform: uppercase;
+            color: var(--bb-text);
+        }
+[data-template="burger_bar"] .item-name,
+        [data-template="gochit_monster"] .item-name { text-transform: uppercase; }
+html[lang="ka"][data-template="burger_bar"] .item-name,
+        html[lang="ka"][data-template="burger_bar"] .category-header {
+            font-family: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif !important;
+            text-transform: none;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+        }
+[data-template="burger_bar"] .bb-featured,
+        [data-template="gochit_monster"] .bb-featured {
+            display: grid;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto 6px;
+            padding: 0 14px;
+            gap: 12px;
+            box-sizing: border-box;
+        }
+[data-template="burger_bar"] .bb-featured:empty,
+        [data-template="gochit_monster"] .bb-featured:empty { display: none; }
+@media (min-width: 760px) {
+[data-template="burger_bar"] .bb-featured,
+        [data-template="gochit_monster"] .bb-featured {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                max-width: 920px;
+            }
+[data-template="burger_bar"] .bb-card:last-child:nth-child(odd) {
+                grid-column: 1 / -1;
+            }
+}
+[data-template="burger_bar"] .bb-feat-head,
+        [data-template="gochit_monster"] .bb-feat-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 18px auto 2px;
+            width: 100%;
+            max-width: 450px;
+            padding: 0 14px;
+            box-sizing: border-box;
+            font-family: 'Anton', 'Nunito', sans-serif;
+            font-size: 1.05rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--bb-text);
+        }
+html[lang="ka"] [data-template="burger_bar"] .bb-feat-head,
+        html[lang="ka"] [data-template="gochit_monster"] .bb-feat-head,
+        html[lang="ka"][data-template="burger_bar"] .bb-feat-head,
+        html[lang="ka"][data-template="gochit_monster"] .bb-feat-head {
+            font-family: 'Nunito', sans-serif;
+            text-transform: none;
+            font-weight: 800;
+        }
+[data-template="burger_bar"] .bb-feat-head::before,
+        [data-template="gochit_monster"] .bb-feat-head::before {
+            content: "";
+            width: 26px;
+            height: 3px;
+            border-radius: 2px;
+            background: var(--bb-accent);
+            flex: none;
+        }
+[data-template="burger_bar"] .bb-feat-head[hidden],
+        [data-template="gochit_monster"] .bb-feat-head[hidden] { display: none; }
+[data-template="burger_bar"] .bb-card,
+        [data-template="gochit_monster"] .bb-card {
+            position: relative;
+            display: block;
+            width: 100%;
+            border: 1px solid var(--bb-border);
+            border-radius: 18px;
+            overflow: hidden;
+            background: var(--bb-card-bg);
+            box-shadow: var(--bb-item-shadow);
+            cursor: pointer;
+            text-align: left;
+            padding: 0;
+            font: inherit;
+            color: inherit;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+[data-template="burger_bar"] .bb-card:active,
+        [data-template="gochit_monster"] .bb-card:active { opacity: 0.85; }
+[data-template="burger_bar"] .bb-card-img,
+        [data-template="gochit_monster"] .bb-card-img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            background: var(--bb-thumb-bg);
+        }
+[data-template="burger_bar"] .bb-card-img[data-empty="1"] {
+            background:
+                repeating-linear-gradient(135deg, transparent 0 12px, rgba(255,181,71,0.06) 12px 24px),
+                var(--bb-thumb-bg);
+        }
+[data-template="burger_bar"] .bb-card-body,
+        [data-template="gochit_monster"] .bb-card-body {
+            position: absolute;
+            inset: auto 0 0 0;
+            padding: 44px 14px 12px;
+            background: var(--bb-scrim);
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 12px;
+        }
+[data-template="burger_bar"] .bb-card-name,
+        [data-template="gochit_monster"] .bb-card-name {
+            font-family: 'Anton', 'Nunito', sans-serif;
+            font-size: 1.15rem;
+            line-height: 1.15;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: #fff;
+            margin: 0 0 3px;
+        }
+html[lang="ka"][data-template="burger_bar"] .bb-card-name,
+        html[lang="ka"][data-template="gochit_monster"] .bb-card-name {
+            font-family: 'Nunito', sans-serif;
+            text-transform: none;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+[data-template="burger_bar"] .bb-card-desc,
+        [data-template="gochit_monster"] .bb-card-desc {
+            font-size: 0.74rem;
+            line-height: 1.35;
+            color: rgba(255,255,255,0.82);
+            margin: 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+[data-template="burger_bar"] .bb-card-price,
+        [data-template="gochit_monster"] .bb-card-price {
+            flex: none;
+            font-family: 'Anton', 'Nunito', sans-serif;
+            font-size: 1.1rem;
+            letter-spacing: 0.5px;
+            color: var(--bb-accent2);
+            white-space: nowrap;
+        }
+[data-template="burger_bar"] .bb-card-price,
+        [data-template="gochit_monster"] .bb-card-price { color: var(--bb-price); }
+[data-template="burger_bar"] .bb-card-price .price-was,
+        [data-template="gochit_monster"] .bb-card-price .price-was {
+            display: block;
+            text-align: right;
+            margin: 0 0 1px;
+            color: rgba(255,255,255,0.6);
+        }
+[data-template="burger_bar"] .venue-info,
+        [data-template="gochit_monster"] .venue-info {
+            display: block;
+            width: 100%;
+            max-width: 450px;
+            margin: 26px auto 8px;
+            padding: 18px 16px 20px;
+            box-sizing: border-box;
+            border-top: 1px solid var(--bb-border);
+        }
+[data-template="burger_bar"] .venue-info[hidden],
+        [data-template="gochit_monster"] .venue-info[hidden] { display: none; }
+[data-template="burger_bar"] .venue-kicker,
+        [data-template="gochit_monster"] .venue-kicker {
+            font-size: 0.68rem;
+            letter-spacing: 1.6px;
+            text-transform: uppercase;
+            color: var(--bb-accent);
+            margin: 0 0 6px;
+            font-weight: 700;
+        }
+[data-template="burger_bar"] .venue-title,
+        [data-template="gochit_monster"] .venue-title {
+            font-family: 'Anton', 'Nunito', sans-serif;
+            font-size: 1.2rem;
+            letter-spacing: 0.6px;
+            color: var(--bb-text);
+            margin: 0 0 8px;
+        }
+html[lang="ka"][data-template="burger_bar"] .venue-title,
+        html[lang="ka"][data-template="gochit_monster"] .venue-title {
+            font-family: 'Nunito', sans-serif;
+            font-weight: 800;
+        }
+[data-template="burger_bar"] .venue-text,
+        [data-template="gochit_monster"] .venue-text {
+            font-size: 0.8rem;
+            line-height: 1.5;
+            color: var(--bb-dim);
+            margin: 0 0 14px;
+            white-space: pre-line;
+        }
+[data-template="burger_bar"] .venue-actions,
+        [data-template="gochit_monster"] .venue-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+[data-template="burger_bar"] .venue-link,
+        [data-template="gochit_monster"] .venue-link {
+            display: inline-flex;
+            align-items: center;
+            min-height: 44px;
+            padding: 0 16px;
+            border-radius: 10px;
+            border: 1px solid var(--bb-border);
+            color: var(--bb-text);
+            text-decoration: none;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+[data-template="burger_bar"] .venue-link.primary,
+        [data-template="gochit_monster"] .venue-link.primary {
+            background: var(--bb-accent);
+            border-color: transparent;
+            color: var(--bb-accent-text);
+        }
+[data-template="burger_bar"] .venue-link[hidden],
+        [data-template="gochit_monster"] .venue-link[hidden] { display: none; }
+[data-template="burger_bar"] .tenant-logo {
+            display: block;
+            width: min(42vw, 168px);
+            height: auto;
+            margin: 4px auto 0;
+        }
+[data-template="burger_bar"] .tenant-logo[src] ~ #brand-title,
+        [data-template="gochit_monster"] .tenant-logo[src] ~ #brand-title { display: none; }
+[data-template="burger_bar"] .venue-links,
+        [data-template="gochit_monster"] .venue-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto 18px;
+            padding: 0 16px;
+            box-sizing: border-box;
+        }
+[data-template="burger_bar"] .venue-links[hidden],
+        [data-template="gochit_monster"] .venue-links[hidden] { display: none; }
+[data-template="burger_bar"] .venue-chip,
+        [data-template="gochit_monster"] .venue-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 44px;
+            padding: 0 14px 0 10px;
+            border-radius: 12px;
+            border: 1px solid var(--bb-border);
+            background: var(--bb-card);
+            color: var(--bb-text);
+            text-decoration: none;
+            font-size: 0.8rem;
+            font-weight: 700;
+            line-height: 1;
+            transition: border-color .15s, transform .12s;
+        }
+[data-template="burger_bar"] .venue-chip:active,
+        [data-template="gochit_monster"] .venue-chip:active { transform: scale(0.97); }
+[data-template="burger_bar"] .venue-chip:hover,
+        [data-template="gochit_monster"] .venue-chip:hover { border-color: var(--bb-accent); }
+[data-template="burger_bar"] .venue-chip img,
+        [data-template="gochit_monster"] .venue-chip img {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: block;
+            flex: none;
+        }
+[data-template="burger_bar"] .venue-map,
+        [data-template="gochit_monster"] .venue-map {
+            display: block;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto 22px;
+            padding: 0 16px;
+            box-sizing: border-box;
+        }
+[data-template="burger_bar"] .venue-map[hidden],
+        [data-template="gochit_monster"] .venue-map[hidden] { display: none; }
+[data-template="burger_bar"] .venue-map iframe,
+        [data-template="gochit_monster"] .venue-map iframe {
+            display: block;
+            width: 100%;
+            height: 210px;
+            border: 1px solid var(--bb-border);
+            border-radius: 14px;
+            background: var(--bb-thumb-bg);
+        }
+[data-template="burger_bar"] .menu-item:not(.no-image),
+        [data-template="gochit_monster"] .menu-item:not(.no-image) {
+            grid-template-columns: 108px minmax(0, 1fr);
+            grid-template-areas: "name  name" "left  right";
+            min-width: 0;
+        }
+[data-template="burger_bar"] .item-name,
+        [data-template="gochit_monster"] .item-name {
+            /* anywhere, not break-word: only break a word that cannot fit on a
+               line by itself, rather than mid-word whenever the box is tight */
+            overflow-wrap: anywhere;
+            word-break: normal;
+            white-space: normal;
+            min-width: 0;
+        }
+[data-template="burger_bar"] .venue-map,
+        [data-template="gochit_monster"] .venue-map { position: relative; }
+[data-template="burger_bar"] .venue-map.is-link iframe,
+        [data-template="gochit_monster"] .venue-map.is-link iframe { pointer-events: none; }
+[data-template="burger_bar"] .venue-map-hit,
+        [data-template="gochit_monster"] .venue-map-hit {
+            position: absolute;
+            inset: 0 16px;
+            border-radius: 14px;
+            display: block;
+        }
+@media (min-width: 760px) {
+[data-template="burger_bar"] .bb-feat-head,
+            [data-template="gochit_monster"] .bb-feat-head,
+            [data-template="burger_bar"] .venue-info,
+            [data-template="gochit_monster"] .venue-info,
+            [data-template="burger_bar"] .venue-map,
+            [data-template="gochit_monster"] .venue-map { max-width: 920px; }
+[data-template="burger_bar"] .venue-map iframe,
+            [data-template="gochit_monster"] .venue-map iframe { height: 300px; }
+}

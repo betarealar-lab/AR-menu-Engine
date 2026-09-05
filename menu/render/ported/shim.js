@@ -199,21 +199,34 @@
     if (ar.length && window.XR && window.XR.backgroundPreload) {
       window.idle(function () { window.XR.backgroundPreload(ar); });
     }
-    // A tap anywhere on a 3D card opens the modal. The live thumbnail handles its own
-    // pointerup so a drag rotates instead of opening.
+    // The platform binds the modal to the THUMBNAIL, not the card:
+    //     thumbImg.addEventListener('click', () => openModal(globalIdx, menuItems))
+    // ...and once a poster upgrades to a live <model-viewer>, `_upgradeThumb` puts its
+    // own pointerdown/pointerup pair on the viewer so a DRAG rotates the dish and only a
+    // real tap opens the modal. Binding the card instead - which an earlier version did -
+    // fights that: every rotation ends in a click that bubbles, and the modal opens when
+    // the diner was only turning the plate round.
+    document.querySelectorAll(".thumb-img").forEach(function (img) {
+      const idx = parseInt(img.dataset.globalIdx, 10);
+      if (!(window.menuItems[idx] || {}).is_3d) return;
+      img.addEventListener("click", function () { openModal(idx, window.menuItems); });
+    });
+    // The name and the price are not the plate, so tapping them is unambiguous and opens
+    // the modal directly.
     document.querySelectorAll(".menu-item[data-idx]").forEach(function (el) {
-      el.addEventListener("click", function (e) {
-        if (e.target.closest("model-viewer")) return;
-        if (e.target.closest(".ar-btn")) return;
-        const idx = parseInt(el.dataset.idx, 10);
-        if (window.menuItems[idx] && window.menuItems[idx].is_3d) {
+      const idx = parseInt(el.dataset.idx, 10);
+      if (!(window.menuItems[idx] || {}).is_3d) return;
+      el.querySelectorAll(".item-name, .price").forEach(function (hit) {
+        hit.style.cursor = "pointer";
+        hit.addEventListener("click", function (ev) {
+          ev.stopPropagation();
           openModal(idx, window.menuItems);
-        }
+        });
       });
     });
     document.querySelectorAll(".ar-btn").forEach(function (b) {
-      b.addEventListener("click", function (e) {
-        e.stopPropagation();
+      b.addEventListener("click", function (ev) {
+        ev.stopPropagation();
         openAR(parseInt(b.dataset.idx, 10), window.menuItems);
       });
     });

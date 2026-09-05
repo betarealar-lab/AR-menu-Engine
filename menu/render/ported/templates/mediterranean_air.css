@@ -1,0 +1,9 @@
+/* Extracted from the platform's index.html by extract_css.py - whole rules,
+   selected by selector text. Do NOT edit; re-run the extractor. */
+
+[data-template="mediterranean_air"] .thumb-wrap,
+        [data-template="soft_cafe"] .thumb-wrap {
+            background:
+                radial-gradient(90% 70% at 50% 20%, var(--glow2), transparent 72%),
+                var(--thumb-bg);
+        }

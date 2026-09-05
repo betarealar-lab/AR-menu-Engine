@@ -288,8 +288,8 @@ per-dish optimiser settings, queue depth and dead letters in the header, and a p
 layout.
 
 **Run all six before pushing.** `check.py` 122, `check_webhook.py` 26,
-`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 64 —
-335 in total, all passing as of 2026-09-05. `check_webhook.py` and
+`check_jobs.py` 46, `check_schema.py` 52, `check_publish.py` 25, `check_render.py` 75 —
+346 in total, all passing as of 2026-09-05. `check_webhook.py` and
 `check_jobs.py` use stubs and cost nothing; `check.py` needs a real master GLB, and there
 is one at `C:\Users\temot\Desktop\BetaReal-inspect\chicken-balls-in-shqmeruli-sauce--raw-full\model.glb`.
 
@@ -458,6 +458,11 @@ menu/render/ported/     the platform's 3D + AR code, VERBATIM. Do not edit
                    viewer.css / .html  theirs, unmodified
                    shim.js             the ONLY adapter - ours
 menu/render/build_ported.py  turns those into ported.mjs. Re-run after any change
+menu/render/extract_css.py      re-pulls their CSS as whole rules: viewer, menu,
+                   and one file per template. Never line ranges - see MENU-PLATFORM 8.3
+menu/render/extract_presets.py  re-pulls the 22 theme presets into presets.json
+menu/render/theme.mjs           preset + tenant overrides -> CSS custom properties,
+                   using the platform's own varMap. A template is a PALETTE
 menu/              the self-serve half. See MENU-PLATFORM.md before touching it
 menu/migrations/   numbered SQL, applied once each, checksummed
 menu/migrate.py    applies them. --status, --dry-run

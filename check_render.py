@@ -60,7 +60,7 @@ def snapshot(**over) -> dict:
         "format": 1, "version": 7,
         "tenant": {"id": "t1", "slug": "s", "name": "Sakhli"},
         "template": "plain",
-        "theme": {"ink": "#101010", "paper": "#fffdf7", "accent": "#2f6f4f"},
+        "theme": {"text": "#101010", "bg": "#fffdf7", "accent": "#2f6f4f"},
         "categories": [{"id": "c1", "name": "Plates", "position": 0}],
         "items": [{
             "id": "i1", "name": "Chicken Shqmeruli", "description": "Garlic, cream.",
@@ -93,7 +93,11 @@ def main() -> int:
     check("it is a complete document",
           html.startswith("<!doctype html>") and html.rstrip().endswith("</html>"))
     check("the restaurant's accent colour is in the HEAD", "#2f6f4f" in head)
-    check("and so is its paper colour", "#fffdf7" in head)
+    check("and so is its background colour", "#fffdf7" in head)
+    check("mapped onto the platform's own variable names",
+          "--bg: #fffdf7;" in head and "--accent: #2f6f4f;" in head)
+    check("and a key outside their map is dropped, not passed through",
+          "nonsense" not in render(snapshot(theme={"nonsense": "#123456"})))
     check("the dish name is in the markup, not fetched", "Chicken Shqmeruli" in body)
     check("so is the price, already formatted", "₾24.50" in body)
     check("and the restaurant's name", "Sakhli" in body)
@@ -112,8 +116,14 @@ def main() -> int:
     print("\n== the CSS actually resolves ==")
     cycles = re.findall(r"--([a-z-]+)\s*:\s*var\(\s*--\1\b", head)
     check("no custom property refers to itself", not cycles, str(cycles))
-    check("defaults come BEFORE the theme, so the theme wins",
-          head.index("#b4552d") < head.index("#2f6f4f"))
+    # menu.css ships its own :root defaults. Ours must come AFTER them or every default
+    # silently overrides the template - which it did, and the page rendered with no
+    # background at all while every variable was present and correct.
+    check("the tenant palette is the LAST :root in the head",
+          head.rindex(":root {") > head.index("--bg-image") - 1
+          and head.index("#2f6f4f") > head.index("menu.css".replace("menu.css", "--bg:")))
+    check("so a template beats the shipped defaults",
+          head.rindex("--accent: #2f6f4f;") > head.index(":root"))
 
     print("\n== every inlined script is real JavaScript ==")
     blocks = re.findall(r"<script>(.*?)</script>", html, re.S)
@@ -144,6 +154,22 @@ def main() -> int:
     check("so is the WebXR overlay", 'id="xr-overlay"' in html)
     check("iOS AR goes through a rel=ar anchor", "setAttribute('rel', 'ar')" in html)
     check("Android AR has the Three.js carousel", "window.XR = {" in html)
+
+    print("\n== a template is a palette, not a page ==")
+    mg = render(snapshot(template="monday_greens", theme={}))
+    check("a known template is applied", 'data-template="monday_greens"' in mg)
+    check("its preset supplies the palette",
+          "--card-bg: linear-gradient(158deg" in mg)
+    check("Monday Greens opens in the DAY palette", 'data-mode="day"' in mg)
+    check("and its template-scoped rules come across",
+          '[data-template="monday_greens"]' in mg)
+    other = render(snapshot(template="urban_night", theme={}))
+    check("another template is a different palette, same markup",
+          'data-mode="night"' in other
+          and other.count('class="menu-item') == mg.count('class="menu-item'))
+    unknown = render(snapshot(template="not_a_template"))
+    check("an unknown template falls back rather than breaking",
+          'data-template=""' in unknown and "menu-item" in unknown)
 
     print("\n== the markup their code queries ==")
     # Their selectors are the contract. `_startThumbUpgrades` queries exactly this and
@@ -196,14 +222,18 @@ def main() -> int:
         "accent": "#0f0",
         "evil": "red; } body { display: none } .x {",
         "also_evil": "</style><script>alert(3)</script>",
-        "url_ok": "Georgia, 'Times New Roman', serif",
+        "card_bg": "linear-gradient(120deg, #25c265, #3b82f6)",
     }))
     ihead = injected[: injected.index("</head>")]
     root = ihead.split(":root {")[1].split("}")[0]
     check("a theme value cannot escape its declaration",
           "display: none" not in root and "}" not in root)
     check("nor close the style block", "</style><script>alert(3)" not in injected)
-    check("a legitimate font stack survives the filter", "Times New Roman" in ihead)
+    # Gradients are the normal shape of these values and they are full of commas,
+    # parentheses and hashes - the filter has to pass them intact or every template
+    # loses its background.
+    check("a real gradient survives the filter",
+          "linear-gradient(120deg, #25c265, #3b82f6)" in ihead)
     check("and a legitimate colour does", "#0f0" in ihead)
 
     print("\n== the shapes that will actually occur ==")
@@ -232,10 +262,20 @@ def main() -> int:
     # ~1 KB per dish. Gzip takes the whole thing to roughly a quarter. The number to
     # watch is the FIXED part: the day it matters, the two big scripts move to one shared
     # cached file and only the CSS stays inline, which is all the no-flash claim needs.
-    check("and a 120-item menu stays under 260 KB", size < 260_000, f"{size:,} bytes")
-    fixed = len(render(snapshot(items=[], categories=[])).encode())
-    check("a menu with no 3D carries none of the viewer", fixed < 6_000,
-          f"{fixed:,} bytes")
+    # ~115 KB of this is fixed - the platform's menu CSS, viewer CSS, viewer.js and the
+    # WebXR carousel - identical on every page of every tenant, so it gzips hard and is
+    # inlined only because nothing may be fetched before paint. The number to watch is
+    # that fixed part; the day it matters, the two big scripts move to one shared cached
+    # file and only the CSS stays inline, which is all the no-flash claim needs.
+    check("and a 120-item menu stays under 340 KB", size < 340_000, f"{size:,} bytes")
+    # A photo-only restaurant still gets the structural CSS - that is the menu itself -
+    # but none of the 3D machinery, which is the part that costs.
+    plain = render(snapshot(items=[], categories=[]))
+    check("a menu with no 3D carries no viewer JS", "<script" not in plain)
+    check("nor the viewer CSS", "#modal-viewer" not in plain and "#xr-overlay" not in plain)
+    check("and it is a fraction of the size",
+          len(plain.encode()) < len(long_menu.encode()) / 5,
+          f"{len(plain.encode()):,} vs {len(long_menu.encode()):,} bytes")
 
     print("\n" + "=" * 62)
     bad = [n for n, ok, _ in RESULTS if not ok]

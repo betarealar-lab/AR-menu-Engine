@@ -1,0 +1,72 @@
+/* Extracted from the platform's index.html by extract_css.py - whole rules,
+   selected by selector text. Do NOT edit; re-run the extractor. */
+
+[data-template="social_dining"] .cat-pill {
+            min-height: 44px;
+            border-radius: 0;
+            border: 2px solid var(--border);
+            font-weight: 900;
+            letter-spacing: 0.4px;
+            box-shadow: 3px 3px 0 var(--shadow);
+        }
+[data-template="social_dining"] .cat-pill.active {
+            box-shadow: 3px 3px 0 var(--accent);
+        }
+[data-template="social_dining"] .category-header {
+            padding: 16px 0 6px;
+            border-bottom: 3px solid var(--border);
+            color: var(--text);
+            font-size: 1.7rem;
+            letter-spacing: 0;
+            text-transform: uppercase;
+        }
+[data-template="social_dining"] .menu-item {
+            border: 2px solid var(--border);
+        }
+[data-template="social_dining"] .menu-item::before {
+            width: 5px;
+            background: var(--accent);
+        }
+[data-template="social_dining"] .item-name {
+            color: var(--text);
+            text-transform: uppercase;
+            letter-spacing: 0;
+            font-size: 1.28rem;
+            line-height: 1.04;
+        }
+[data-template="social_dining"] .price {
+            font-family: 'Anton', 'Nunito', sans-serif;
+            font-size: 1.28rem;
+            letter-spacing: 0;
+        }
+[data-template="social_dining"] .ingredients {
+            font-weight: 700;
+            line-height: 1.4;
+        }
+[data-template="social_dining"] .qty-add-btn,
+        [data-template="social_dining"] .qty-stepper {
+            min-height: 44px;
+            border: 2px solid var(--border);
+            border-radius: 0;
+        }
+[data-template="social_dining"] .ar-btn {
+            border-radius: 0;
+            border: 2px solid var(--border);
+            min-height: 48px;
+        }
+@media (min-width: 640px) {
+[data-template="social_dining"] .menu-list { gap: 14px; }
+[data-template="social_dining"] .item-left .thumb-wrap {
+                border-radius: 0;
+                border-bottom: 2px solid var(--border);
+                aspect-ratio: 1.25 / 1;
+                height: auto;
+            }
+}
+@media (min-width: 1100px) {
+[data-template="social_dining"] .menu-list { gap: 16px; }
+}
+[data-template="social_dining"] .mg-hero-brand {
+            text-transform: uppercase;
+            font-weight: 900;
+        }
