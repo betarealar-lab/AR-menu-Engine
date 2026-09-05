@@ -100,6 +100,7 @@ Windows. These have each cost time already:
 | Subprocess output | Read as UTF-8 with `errors="replace"`, or Node's coloured output crashes the reader |
 | Bash heredocs | Large ones silently truncate through the tool. For big files use Write; for patches, Python with exact-match replacement, then **verify the replacement landed** — several silently did not |
 | Paths | Bash sees `/c/Users/...`; Python needs `C:\Users\...`. Passing a `/c/` path to Python fails with FileNotFoundError |
+| Supabase DB | **The direct connection is IPv6-ONLY on the free plan** and this machine is IPv4, so `db.<ref>.supabase.co` does not resolve at all - which reads as a bad credential rather than an unreachable host. Use the **Session pooler** string (`postgres.<ref>@aws-N-eu-central-1.pooler.supabase.com:5432`). Affects only raw SQL tooling: both apps reach Supabase over HTTPS at `https://<ref>.supabase.co`, which is IPv4 and fine. `python preflight.py --supabase` diagnoses it in one line |
 
 ---
 
