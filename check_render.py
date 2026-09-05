@@ -153,8 +153,14 @@ def main() -> int:
     # a page that looked wrong for a reason nobody could see.
     for probe in ("body::before", ".tenant-logo", "max-width: 880px", "#lang-toggle"):
         check(f"and the sheet still contains {probe}", probe in html)
+    # This is the check that catches an edit to ported/shim.js that was never built into
+    # ported.mjs - which is not a stale-file annoyance but a silently missing function in
+    # the page a diner loads. It happened once already: `_parseConfigList` was added for
+    # the hero crossfade and the bundle was not regenerated, so the crossfade shipped
+    # broken and everything else still passed.
     check("the shim is the only adapter",
-          (PORTED / "shim.js").read_text(encoding="utf-8") in html)
+          (PORTED / "shim.js").read_text(encoding="utf-8") in html,
+          "ported/shim.js and ported.mjs disagree - run: python menu/render/build_ported.py")
     check("model-viewer 3.4.0, the version production ships",
           "model-viewer/3.4.0/model-viewer.min.js" in html)
     check("the 3D modal is on the page", 'id="modal-viewer"' in html)

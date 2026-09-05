@@ -1,0 +1,104 @@
+---
+// The 3D library: everything the engine has made for this restaurant, and the owner's
+// verdict on each.
+//
+// DECISIONS §9.4 - the owner approves or rejects, and only approved models can be
+// attached to a dish. Our own fault tags never appear here: "this does not look like my
+// dish" and "this bake is broken" are different sentences, and a panel that mixed them
+// would teach us the wrong thing about the engine.
+import Admin from "../../../layouts/Admin.astro";
+import { requireUser, userClient } from "../../../lib/auth.js";
+
+const gate = await requireUser(Astro);
+if (gate) return gate;
+const { slug } = Astro.params;
+const supa = userClient(Astro.locals.user.token);
+
+const { data: tenant } = await supa
+  .from("tenants").select("id, name").eq("slug", slug).single();
+if (!tenant) return new Response("Not found", { status: 404 });
+
+const [{ data: models }, { data: items }] = await Promise.all([
+  supa.from("models")
+      .select("id, title, dish, variant, poster_key, draco_key, tenant_state, created_utc")
+      .eq("tenant_id", tenant.id).order("created_utc", { ascending: false }),
+  supa.from("items").select("id, name, model_id").eq("tenant_id", tenant.id),
+]);
+
+// Which dish is using which model. The pointer lives on the item, not the model
+// (MENU-PLATFORM §3), so this is the only place that relationship can be read from.
+const usedBy = new Map();
+for (const i of items || []) if (i.model_id) usedBy.set(i.model_id, i);
+
+const asset = (k) => (!k ? null : k.startsWith("http") ? k : `/a/${k}`);
+const groups = [
+  ["draft", "Waiting for you", (models || []).filter((m) => m.tenant_state === "draft")],
+  ["approved", "Approved", (models || []).filter((m) => m.tenant_state === "approved")],
+  ["rejected", "Rejected", (models || []).filter((m) => m.tenant_state === "rejected")],
+];
+---
+<Admin title="3D models" tab="models" slug={slug} back={`/admin/${slug}/menu`}>
+  {(models || []).length === 0 && (
+    <div class="empty">
+      <p>No 3D models yet.</p>
+      <p class="hint">Send us photos of a dish and it appears here for you to approve.</p>
+    </div>
+  )}
+
+  {groups.map(([state, title, list]) => list.length > 0 && (
+    <div class="card">
+      <h2>{title} · {list.length}</h2>
+      <ul class="rows">
+        {list.map((m) => (
+          <li data-id={m.id}>
+            <div class="row" style="align-items:flex-start">
+              {asset(m.poster_key)
+                ? <img src={asset(m.poster_key)} alt="" loading="lazy" />
+                : <div class="thumb"></div>}
+              <div class="body">
+                <b>{m.title || m.dish}</b>
+                <small>
+                  {usedBy.has(m.id)
+                    ? `on ${usedBy.get(m.id).name}`
+                    : m.variant !== "default" ? m.variant : "not on any dish"}
+                </small>
+                <div class="actions" style="margin-top:8px">
+                  {state !== "approved" && (
+                    <button type="button" class="btn verdict" data-state="approved">Approve</button>
+                  )}
+                  {state !== "rejected" && (
+                    <button type="button" class="btn ghost verdict" data-state="rejected">Reject</button>
+                  )}
+                  {asset(m.draco_key) && (
+                    <a class="btn ghost" href={asset(m.draco_key)} target="_blank"
+                       rel="noopener">Open</a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {state === "approved" && (
+        <p class="hint" style="margin:14px 0 0">Approved models are the ones you can pick
+          on a dish. Rejecting one that is already on a dish takes it off the menu.</p>
+      )}
+    </div>
+  ))}
+
+  <script is:inline define:vars={{ slug }}>
+    document.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest(".verdict");
+      if (!btn) return;
+      const li = btn.closest("li");
+      btn.disabled = true;
+      try {
+        await BR.post("/api/model", { slug, id: li.dataset.id, tenant_state: btn.dataset.state });
+        location.reload();
+      } catch (err) {
+        btn.disabled = false;
+        BR.flash("Not saved: " + err.message, true);
+      }
+    });
+  </script>
+</Admin>

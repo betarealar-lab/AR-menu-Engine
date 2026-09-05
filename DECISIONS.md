@@ -712,3 +712,66 @@ shrinks the store step with it.
 **Later, if restaurants want it:** an optional *hold changes* mode — build a whole seasonal
 menu over a week, then flip it live in one go. That workflow only exists in the
 publish-time model; request-time has nothing to hold back.
+
+## 11. The admin panel is phone-first
+
+**2026-09-06.** Temo: *"old niko's repo admin panel is made for desktop users mostly make
+new admin panel familiar but still suited for all devices, make it simple and do not
+forget any functionalities from og."*
+
+The platform's admin is a desktop layout — wide tables, columns of inputs, controls sized
+for a mouse. Ours is one column, 44px tap targets, lists instead of tables, and a bottom
+tab bar the thumb reaches; on a wide screen the same bar centres itself into a toolbar, so
+it is one component rather than two.
+
+The reason is not fashion. **The work happens on a phone.** An owner changes a price
+standing in their kitchen with one hand on a tray, not sitting at a desk. A panel that is
+merely *usable* on a phone gets used once a week from a laptop; a panel that is *good* on a
+phone gets used the moment the thing changes, which is the difference between a menu that
+is right and a menu that is nearly right.
+
+**"Do not forget any functionalities from og" is the harder half**, and it is a real
+constraint, not a slogan. The dish editor carries every field the platform's has, including
+the ones that are easy to drop because they are not obviously fields: `is_3d`, `thumb_3d`,
+`text_only`, `visible`, `featured`, the struck-through old price, `price_text` for a dish
+priced two ways, and the second language. `app/src/lib/fields.js` is the single list, read
+by both the form and the endpoint, and every key in it was read out of the live
+restaurants' own settings rather than invented — the ported CSS looks for exactly these
+names, so a renamed key silently blanks a piece of a real menu.
+
+### 11.1 · No Publish button, and therefore an honest status line
+
+§10 already decided that a save publishes. The consequence for the panel is that there is
+**no Publish button anywhere** — every field saves itself as the owner types, debounced,
+and the rebuild follows behind them.
+
+That removes the worst failure an owner can have (closing the tab having lost an edit) and
+creates exactly one new one: believing a change saved when it did not. So the single status
+line reports failure at least as loudly as success, and stays up four times longer when it
+does. **An owner who thinks a price changed and it did not is worse off than one who knows
+it did not.**
+
+### 11.2 · Creating a restaurant goes through a function, not the service key
+
+`0002_grants.sql` withheld `INSERT` on `tenants` from `authenticated` with a note that
+creating a restaurant "runs server-side with the secret key and has to create the tenant
+and its first membership together or neither".
+
+The atomicity requirement is right; the service key is not. **A key that bypasses RLS
+entirely should not be one route's mistake away from every restaurant's data** — it is the
+exact move `check_schema.py` exists to make impossible. `0006_create_tenant.sql` gives the
+requirement properly: a `security definer` function with a pinned `search_path` that
+inserts the tenant and the membership in one statement, callable only by a signed-in user,
+creating only a restaurant that user will immediately own.
+
+`authenticated` still has no `INSERT` on `tenants`.
+
+### 11.3 · Photos are resized before they leave the phone
+
+The card draws a dish photo at 430px. The live data has 1200×675 photos at 116–278 KB. So
+the uploader re-encodes to 860px WebP in the browser, before the bytes ever leave, and
+stores under a content-addressed key: re-uploading the same photo makes no second copy, and
+renaming a dish rots no URL.
+
+Roughly three times less on every diner's page, on the images that outweigh everything
+except the models themselves.

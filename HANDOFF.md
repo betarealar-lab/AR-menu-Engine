@@ -449,15 +449,32 @@ check_schema.py    52 checks of the menu platform's tenancy against the REAL
                    as the other. Free; cleans up after itself
 check_publish.py   25 checks of the publish path on a throwaway tenant: hidden
                    items absent, unapproved models unattached, snapshots immutable
-check_render.py    64 checks of the rendered HTML: XSS and CSS injection from a
+check_render.py    100 checks of the rendered HTML: XSS and CSS injection from a
                    restaurant's own typing, the no-flash properties, `node --check`
                    on every inlined script, and that the ported viewer is present
                    BYTE FOR BYTE. Needs node
+check_admin.py     30 checks of the ADMIN over HTTP, as a real signed-in user:
+                   creates a throwaway account, signs in through the real form,
+                   opens every screen, saves a dish, a category and a colour, and
+                   reads them back. Then the negative - a signed-in stranger must
+                   not be able to open or edit someone else's restaurant. Needs a
+                   server: cd app && npm run dev. Cleans up after itself
+app/               the Astro app. Diner menus AND the admin panel, one renderer
+app/src/pages/admin/    the panel. Phone-first: one column, 44px targets, a bottom
+                   bar, lists not tables. No Publish button - saving publishes
+app/src/lib/fields.js   the ONLY list of settings keys the admin may write. The
+                   form and the endpoint both read it, so a field cannot exist in
+                   one and not the other. The names are the live restaurants' own
+menu/make_admin.py      creates an account and prints a one-time set-password
+                   link. No password is ever chosen, printed or stored by us
 menu/render/ported/     the platform's 3D + AR code, VERBATIM. Do not edit
                    xr.js / viewer.js   theirs, unmodified
                    viewer.css / .html  theirs, unmodified
                    shim.js             the ONLY adapter - ours
-menu/render/build_ported.py  turns those into ported.mjs. Re-run after any change
+menu/render/build_ported.py  turns those into ported.mjs. RE-RUN AFTER ANY CHANGE
+                   to ported/ - editing shim.js without this ships a page missing
+                   the function you just added, and everything else still passes.
+                   check_render.py is the gate that catches it
 menu/render/extract_css.py      re-pulls their CSS as whole rules: viewer, menu,
                    and one file per template. Never line ranges - see MENU-PLATFORM 8.3
 menu/render/extract_presets.py  re-pulls the 22 theme presets into presets.json

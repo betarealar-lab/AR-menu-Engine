@@ -1,0 +1,104 @@
+---
+// A new restaurant. Three fields, because everything else has a sensible default and an
+// owner staring at forty empty inputs on day one is an owner who does not finish.
+//
+// The slug is the address diners reach, and it is deliberately not derived silently: it
+// ends up on printed QR codes, so it is shown, editable, and checked before the row
+// exists rather than after.
+import Admin from "../../layouts/Admin.astro";
+import { requireUser, userClient } from "../../lib/auth.js";
+
+const gate = await requireUser(Astro);
+if (gate) return gate;
+const supa = userClient(Astro.locals.user.token);
+
+const { data: templates } = await supa.from("templates")
+  .select("id, name, listed").eq("listed", true).order("name");
+
+let error = null;
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const name = String(form.get("name") || "").trim();
+  const slug = String(form.get("slug") || "").trim().toLowerCase();
+  const template = String(form.get("template_id") || "monday_greens");
+
+  if (!name) {
+    error = "The restaurant needs a name.";
+  } else if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(slug)) {
+    error = "The address can only use lowercase letters, numbers and hyphens.";
+  } else {
+    const { data: taken } = await supa
+      .from("tenants").select("id").eq("slug", slug).maybeSingle();
+    if (taken) {
+      error = `Something already lives at /${slug}.`;
+    } else {
+      // Through a function, not an insert. `authenticated` deliberately has no INSERT on
+      // tenants (0002_grants): a restaurant and its first membership have to be created
+      // together or neither, and the alternative - reaching for the service key in a
+      // request handler - is the exact move check_schema.py exists to make impossible.
+      const { data: id, error: rpcErr } = await supa.rpc("create_tenant", {
+        p_name: name, p_slug: slug, p_template_id: template,
+      });
+      if (rpcErr) {
+        // A slug taken by a restaurant this account cannot see reaches the database as a
+        // unique violation, because the check above can only see its own restaurants.
+        // The owner does not need to know any of that - they need to know to pick again.
+        error = rpcErr.code === "23505"
+          ? `Something already lives at /${slug}.`
+          : rpcErr.message;
+      } else if (id) {
+        return Astro.redirect(`/admin/${slug}/menu`);
+      }
+    }
+  }
+}
+---
+<Admin title="New restaurant" back="/admin">
+  <form method="POST">
+    {error && <p class="error">{error}</p>}
+
+    <div class="card">
+      <label>
+        <span>Name</span>
+        <input type="text" name="name" required autofocus placeholder="Monday Greens" />
+      </label>
+
+      <label>
+        <span>Address</span>
+        <input type="text" name="slug" required placeholder="monday-greens"
+               inputmode="url" autocapitalize="none" pattern="[a-z0-9-]+" />
+      </label>
+      <p class="hint">Diners reach the menu here. Pick it carefully: it goes on the QR
+        codes, and changing it later breaks every one already printed.</p>
+
+      <label>
+        <span>Design</span>
+        <select name="template_id">
+          {(templates || []).map((t) => <option value={t.id}>{t.name}</option>)}
+        </select>
+      </label>
+      <p class="hint">Changeable at any time. Colours and pictures carry across.</p>
+    </div>
+
+    <div class="card">
+      <button type="submit" class="btn" style="width:100%">Create</button>
+    </div>
+  </form>
+
+  <script is:inline>
+    (function () {
+      // Suggest the address from the name, but stop the moment the owner touches it. A
+      // field that keeps rewriting itself under someone else's cursor is worse than an
+      // empty one.
+      const name = document.querySelector('input[name="name"]');
+      const slug = document.querySelector('input[name="slug"]');
+      let touched = false;
+      slug.addEventListener("input", () => { touched = true; });
+      name.addEventListener("input", () => {
+        if (touched) return;
+        slug.value = name.value.toLowerCase().trim()
+          .replace(/[^a-z0-9]+/g, "-").replace(/^-+/, "").replace(/-+$/, "").slice(0, 63);
+      });
+    })();
+  </script>
+</Admin>

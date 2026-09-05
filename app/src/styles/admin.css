@@ -179,3 +179,59 @@ button[disabled] { opacity: .55; cursor: default; }
         background: var(--sunk); color: var(--dim); font-size: .72rem; font-weight: 600; }
 .pill.on { background: #ecfdf3; color: var(--ok); }
 .pill.off { background: #fef3f2; color: var(--danger); }
+
+/* ── categories ────────────────────────────────────────────────────── */
+
+/* Arrows, not drag-and-drop. Dragging a row inside a scrolling page on a phone fights the
+   scroll; a button is a target a thumb can hit without being taught the gesture. */
+.ord { display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
+.ord .mini { width: 34px; height: 21px; padding: 0; font-size: .6rem; }
+
+.mini {
+  min-height: 34px; padding: 0 10px; border: 1px solid var(--line);
+  background: var(--paper); color: var(--dim); border-radius: 8px;
+  font: inherit; font-size: .8rem; cursor: pointer;
+}
+.mini:active { background: var(--sunk); }
+.mini[aria-pressed="true"] { color: var(--danger); border-color: #fecdca; }
+.mini.del { color: var(--danger); font-size: 1.1rem; line-height: 1; }
+
+/* Renaming happens in the row itself - opening a screen to change one word is a screen
+   too many. It only looks like a field once it has focus. */
+.rename {
+  width: 100%; border: 1px solid transparent; background: transparent;
+  font: inherit; font-weight: 600; color: var(--ink);
+  padding: 4px 6px; margin: -4px 0 0 -6px; border-radius: 8px; min-height: 0;
+}
+.rename:focus { border-color: var(--brand); background: var(--paper); outline: none; }
+
+/* ── the look ──────────────────────────────────────────────────────── */
+
+.modes { display: flex; gap: 6px; background: var(--sunk); padding: 4px;
+         border-radius: 10px; margin-bottom: 16px; }
+.mode { flex: 1; min-height: 36px; border: 0; border-radius: 8px; background: transparent;
+        color: var(--dim); font: inherit; font-weight: 600; cursor: pointer; }
+.mode.on { background: var(--paper); color: var(--ink);
+           box-shadow: 0 1px 2px rgba(16, 22, 28, .12); }
+
+.colour { display: flex; align-items: center; gap: 12px; padding: 8px 0;
+          border-bottom: 1px solid var(--line); }
+.colour:last-child { border-bottom: 0; }
+.colour .body { flex: 1; min-width: 0; }
+.colour .body b { display: block; font-size: .82rem; font-weight: 600; }
+.colour .body input { min-height: 36px; margin: 4px 0 0; font-size: .85rem;
+                      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* A big enough swatch to hit, with the browser's own picker behind it. */
+.colour input[type="color"] {
+  flex: 0 0 44px; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line);
+  border-radius: 10px; background: none; cursor: pointer; -webkit-appearance: none;
+  appearance: none;
+}
+.colour input[type="color"]::-webkit-color-swatch-wrapper { padding: 3px; }
+.colour input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 7px; }
+.colour input[type="color"]::-moz-color-swatch { border: 0; border-radius: 7px; }
+
+details { margin-top: 14px; }
+summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer;
+          font-weight: 600; color: var(--brand); font-size: .9rem; }
