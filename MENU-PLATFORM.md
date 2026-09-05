@@ -79,7 +79,44 @@ What it buys, in order of how much it matters:
 The rule to hold: **if a diner-facing page ever needs a query, the answer is to put the
 data in the snapshot, not to add an index.**
 
-### 2.2 · One Astro app. Templates are a registry, not per-tenant branches
+### 2.1a · The menu is RENDERED with its template. It is never re-skinned in the browser
+
+Temo, 2026-09-05, on the current platform: *"templates overlay over the og build and that
+shit takes time to load, we want template and unique menu to be the og custom build for
+them where users dont have to wait for a website to load and then reload."*
+
+That is a correct diagnosis of what exists today. One generic `index.html` loads, then
+JavaScript fetches the tenant's theme and re-skins the page. The diner therefore sees
+three states: blank, generic, then branded. The second state is the bug, and no amount of
+optimising the payload removes it, because it is architectural.
+
+**A snapshot read client-side would reproduce exactly the same bug** — load a shell, fetch
+the data, render. So it is not read client-side.
+
+**The Worker renders the complete HTML at the edge**, with the template's critical CSS and
+the tenant's theme variables inlined in `<head>` and the menu items already in the markup.
+The first bytes the browser receives are already that restaurant's menu. There is no
+second state to flash to. Then the rendered HTML is cached at the edge, keyed by tenant
+and snapshot version, so every diner after the first is a pure CDN hit with no compute at
+all — and a publish changes the key, so the next request re-renders.
+
+**This is what "the og custom build for them" means without building 400 sites.** Each
+tenant genuinely has their own fully-rendered page; it is produced on publish instead of
+on `git push`, which is the only difference and it is the one that matters — a price
+change is live in seconds, not a rebuild.
+
+Three ways to lose this, all of them easy:
+
+- **Any theme applied by JavaScript brings the flash straight back.** Theme is CSS custom
+  properties in an inline `<style>` in the head. Never a class the client adds, never a
+  stylesheet fetched after paint.
+- **Web fonts flash on their own.** Preload, `font-display: swap` with a real fallback
+  stack chosen to match metrics, or the branded page still visibly changes shape.
+- **3D thumbnails are heavy and must not block first paint.** Live thumbnails spawn one
+  WebGL context per card, which is the real reason for the 5-item cap (DECISIONS §7). They
+  load after the menu is readable, never before it.
+
+### 2.2 · One Astro app, admin included. Templates are a registry, not per-tenant branches
 
 Today the customer app is a single ~619 KB `index.html` with fourteen hardcoded
 `data-template="..."` branches, and adding a restaurant's look means a developer editing
@@ -91,6 +128,23 @@ database.** Adding one touches no tenant. Choosing one is a column.
 
 Temo asked for "easy ability to add custom templates to the catalog" — that is exactly
 this, and it is only possible if templates are data.
+
+**The admin app is the same Astro app, not a separate Next.js one.** The reason is not
+taste, it is one specific failure: with two frameworks, a template exists twice — once as
+the component that renders the live menu, and once as whatever the admin uses to preview
+it. Those two implementations drift, and the day they do, the owner approves a preview
+that is not what diners get. One codebase makes the preview *literally the same component*
+as the page, so "what you see" and "what ships" cannot disagree.
+
+Secondary, and real but smaller: one deploy, one auth session, one build. Astro islands
+handle the interactive parts of an admin (forms, the library grid, drag-to-reorder) without
+turning the whole thing into a single-page app.
+
+**The honest counter-argument:** Next has the richer ecosystem if the admin ever grows into
+a heavy dashboard, and Astro is the less natural fit for that. It is not a trap — Astro
+hosts React islands, so a heavy page can be a React island inside it — but if the admin
+ever becomes the majority of the work, revisit this. It is not the case today and is not
+close.
 
 ### 2.3 · Every row carries a tenant id, and RLS is on from the first migration
 
@@ -128,6 +182,34 @@ and is nearly free at that volume; a rollup table in Postgres also works. **That
 be made later** — what cannot be made later is having written raw events into the same
 tables the product queries.
 
+### 2.6 · Four buckets, no public ones, and no custom domains on any of them
+
+R2 is the right store for all four, but for four different reasons, and it is worth being
+precise because "R2 for everything" is otherwise just a habit.
+
+| Bucket | Why R2 specifically |
+|---|---|
+| `betareal-catalog` | **This is the whole argument.** ~500 GB a month of models to diners at 400 tenants. R2 egress is $0; on S3 the same traffic is ~$45 a month and grows linearly with success. Nothing else in the decision is close to this in value |
+| `betareal-models` | Masters, ~96% of stored bytes, written once and read almost never. This wants the cheapest durable byte available and nothing else. Candidate for the Infrequent Access storage class later — verify the current retrieval price before switching, do not assume it |
+| `betareal-photos` | Small, irreplaceable, cold. Any object store would do; R2 wins on **already having the credentials, the code and the mental model**. A second storage vendor for 7 GB would be a whole new failure mode bought for nothing |
+| `betareal-menus` | Published snapshots. Cloudflare KV is arguably the better technical fit — globally replicated, built for small read-heavy values — where R2 has one primary region. But the Worker caches the *rendered HTML* at the edge, so a snapshot is read roughly once per tenant per publish per edge location, which is nothing. **R2 now; revisit KV only if a measurement ever shows the cache miss mattering** |
+
+**All four stay private, and none of them gets a custom domain.** The Worker binds them
+directly (`env.CATALOG.get(key)`), which is better than a public bucket in three separate
+ways:
+
+- **It sidesteps the DNS problem entirely** — see §7. An R2 custom domain requires the
+  zone to live in the same Cloudflare account as the bucket, and `betareal.ge` does not.
+- **We control the response headers.** A signed R2 URL answers with the bytes and **no
+  `Access-Control-Allow-Origin`**, so the browser fetches the model, applies the same-origin
+  rule and silently discards it. That exact bug made the Studio's 3D viewer show an empty
+  panel for days (HANDOFF §6). Serving through the Worker cannot fail that way.
+- **A private bucket cannot be enumerated.** A public bucket's contents are a URL away.
+
+The cost is Worker invocations, and it is not a real cost: cached responses never reach the
+Worker at all, and the misses are ~600,000 a month at 400 tenants against the 10,000,000
+included in the $5 Workers plan.
+
 ---
 
 ## 3. The data model, in one page
@@ -159,33 +241,69 @@ diner never waits" — every keystroke would either be live or require a build.
 
 ## 4. What the numbers actually are
 
-Storage is measured per dish (`DECISIONS.md` §5, `HANDOFF.md` §5). Tenant and traffic
-counts are **projections**, marked as such. R2 storage is $0.015/GB-month with zero egress.
+**Measured on the real buckets, 2026-09-05**, not projected. An earlier draft of this file
+put photos at ~100 MB a dish and made them the largest line item. That was ROADMAP Part 1's
+figure for raw pro-camera files, and it is wrong for anything actually in the system: the
+browser downscales every upload before it is sent (HANDOFF §6), so nothing raw ever arrives.
+Temo caught it. The real shape is almost the inverse.
 
-At **400 tenants × 30 dishes = 12,000 dishes** (projection):
+Per object, from the live buckets:
 
-| | per dish | at 12,000 dishes | cost/month |
+```
+photos      145 kB average per frame          (6 real frames, 0.87 MB total)
+master glb   68-99 MB                          (raw meshy-7)
+master usdz  73 MB                             Meshy's own - SEE BELOW
+master png  ~100 kB                            thumbnail
+catalog     draco 2.4-5.7 MB + usdz 3.1-8.5 MB + opt 3.2-8.9 MB
+```
+
+At **400 tenants x 30 dishes = 12,000 dishes** (the tenant count is a projection and is
+the only projection here). R2 storage is $0.015/GB-month, egress zero:
+
+| | per dish | at 12,000 dishes | $/month |
 |---|---|---|---|
-| Catalogue — what diners load | ~5 MB (measured: 1.6–3.1 draco + 3.1–4.1 usdz) | 60 GB | **$0.90** |
-| Masters — regenerable, cold | ~85 MB (measured: 73–99 MB) | 1.0 TB | **$15** |
-| Photos — irreplaceable, cold | ~100 MB | 1.2 TB | **$18** |
-| Menu data in Postgres | — | ~40,000 rows | **$0** |
-| Diner egress | — | ~500 GB/month | **$0** (R2) |
+| Photos, 4 frames | ~0.6 MB | 7 GB | **0.10** |
+| Masters, as archived today | ~160 MB | 1.9 TB | **29** |
+| Masters, without the dead USDZ | ~85 MB | 1.0 TB | **15** |
+| Catalogue (what diners load) | ~11 MB | 129 GB | **2** |
+| Menu data in Postgres | — | ~40,000 rows | **0** |
+| Diner egress | — | ~500 GB/month | **0** — R2 |
 
-**~$35–50 a month at 400 tenants.** Against ₾300/month per tenant, infrastructure is not
-the constraint and never becomes one. Say this plainly whenever someone proposes buying
-scale: the scaling problem here is *sales*, and the engineering job is only to not build
-something that falls over.
+**~$31 a month at 400 tenants, or ~$17 with the finding below applied.** Against ₾300 a
+month per tenant, infrastructure is not the constraint and never becomes one. The scaling
+problem here is sales; the engineering job is only to not build something that falls over.
 
-The one number that does need watching is **R2 Class A operations** (listings, writes),
-1,000,000 free a month. The job queue's share is measured and asserted in `check_jobs.py`
-at ~400,000/month across both hosts. A publish is a handful of writes. Neither is close,
-but neither should be allowed to grow carelessly either.
+**Masters are ~96% of storage and photos are ~0.4%.** Any argument about storage is an
+argument about masters, and nothing else is worth the breath.
 
-**What is NOT projected, because it would be a guess:** conversion, sessions per tenant,
-and how many dishes a self-serve restaurant actually models. The only funnel we have
-(74% past hero, ~13% open 3D, ~5% AR) is one coffee-led café that Temo has correctly said
-was never the ICP. Do not build a capacity plan on it.
+### 4.1 · A 73 MB file per dish that nothing has ever read
+
+Generation archives everything Meshy returns, including **Meshy's own USDZ built from the
+raw master** — 72.8 MB and 72.3 MB for the two dishes that have one. `master_keys` is read
+in exactly two places in the codebase, and both want `png`, the thumbnail. Nothing reads
+that USDZ. Not the viewer (`_model_key` returns the GLB for the master stage), not the
+download bundle, not the optimiser, which correctly builds its own USDZ from the
+*optimised* GLB — carrying Meshy's over is the iOS bug in HANDOFF §6 and must never happen.
+
+Right now it is **37% of everything in `betareal-models`** (145 MB of 388 MB). At 12,000
+dishes it is 0.9 TB and $14 a month to keep a file with no reader.
+
+It is also safe to stop keeping: the master GLB is the reproducible source, and a USDZ can
+always be rebuilt from it. What cannot be recovered is the master GLB itself — Meshy
+deletes its copy after 3 days.
+
+**Recommendation, not yet done** (deleting is Temo's call): stop archiving `master.usdz`
+at generation, and drop the existing two. One line in `pipeline.store_result`.
+
+### 4.2 · What we are storing is not the training corpus
+
+ROADMAP calls the photos "irreplaceable — the training corpus" for a future self-hosted
+engine. At 145 kB a frame, what is stored is a browser-downscaled JPEG, not the pro-camera
+original. That is the right call for generation — Meshy takes downscaled input happily and
+a 24 MB camera JPEG base64s to a ~32 MB request body — but it means **the archive is not
+what anyone would want to train on.** If the Hunyuan plan (DECISIONS §2) is real, the
+originals have to be kept deliberately somewhere, and they currently are not kept at all.
+Flagged, not solved.
 
 ---
 
@@ -230,5 +348,37 @@ Skeleton, then muscles, then organs, then hair, then lipstick — DECISIONS §9.
 8. Onboarding, menu import, the statistics dashboard, billing.
 
 **Step 3 is the one that proves the architecture.** If a snapshot can be published and
-read without a database in the path, everything after it is filling in. If it cannot, we
-find out in week one rather than at tenant #200.
+rendered without a database in the path, everything after it is filling in. If it cannot,
+we find out in week one rather than at tenant #200.
+
+**None of steps 1-7 needs DNS.** A Worker gets a free `*.workers.dev` hostname, so the
+whole system can be built and tested on real infrastructure before the blocker below is
+touched. DNS is the last step before real tenants, not the first.
+
+---
+
+## 7. The one real blocker, and it is not technical
+
+**`betareal.ge` is a zone on Niko's personal Cloudflare account, not BetaReal's.**
+
+That is the same fact behind the Error 1014 that broke per-tenant subdomains in July: a
+CNAME pointing at a Pages project in a *different* Cloudflare account is refused, and only
+the two subdomains added by hand as Custom Domains ever worked.
+
+It applies here unchanged. An R2 custom domain — and a Worker route on `*.betareal.ge` —
+both require the zone to be on the same account as the resource. Buckets created in the
+BetaReal account cannot be given a `betareal.ge` hostname while the zone lives elsewhere.
+**§2.6 routes around it for storage** by keeping every bucket private behind a Worker, so
+this blocks nothing until real tenants need branded URLs.
+
+But it does have to be fixed, and it is on the decentralisation critical path rather than
+the engineering one. The route recommended in July still stands: recover the **.ge
+registrar** account (registrar.ge / Proservice / Grena — company-owned and independent of
+anyone's Cloudflare), repoint the nameservers at BetaReal's Cloudflare account, and then a
+single Worker route `*.betareal.ge/*` gives every tenant slug a working branded hostname
+with SSL and no per-tenant setup at all. Cloudflare Pages cannot do wildcard custom domains
+and caps at ~100 per project; Workers has no such limit, which is another reason the menu
+is a Worker and not a Pages site.
+
+Until then, `*.workers.dev` is a real, working, SSL-terminated hostname and is enough for
+everything up to the first paying self-serve tenant.
