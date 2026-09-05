@@ -1,0 +1,16 @@
+{
+  "name": "betareal-menu",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev --port 4321",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.4.3",
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "astro": "^5.14.1",
+    "postgres": "^3.4.5"
+  }
+}

@@ -1,0 +1,92 @@
+---
+// The menu, rendered on the server.
+//
+// This is the whole point of the rebuild, and it is one idea: **the dishes are in the
+// HTML.** Measured on the live page, a diner today waits ~1,010 ms for 646 KB of inline
+// CSS and JS to parse, and then another ~890 ms for the menu to arrive over the network -
+// about 2.1 seconds before anything readable exists. Here the browser receives a finished
+// menu and paints it with no JavaScript at all.
+//
+// What is deferred, and why nothing important is:
+//   the viewer + XR (106 KB)  one cached file, shared by every tenant, loaded after
+//                             paint. A diner reads the menu while it arrives.
+//   model-viewer (~250 KB)    from the CDN, on demand, exactly as the platform does it.
+//   the models themselves     as thumbnails scroll into view, throttled.
+//
+// The CSS is still the platform's complete stylesheet. That is deliberate for now:
+// 75% of it is measurably unused by any one tenant, but a filtered stylesheet is a
+// DIFFERENT stylesheet - four separate "renders but looks wrong" bugs came from trimming
+// it by hand. It gets trimmed per template once there is a computed-style diff against
+// the live page to prove each cut is safe.
+import { loadMenu, themeMode } from "../lib/menu.js";
+import { themeCss, settingsCss, fontLinks } from "../lib/theme.js";
+import { hero, header, catBar, menuList, toggles } from "../lib/markup.js";
+import fullCss from "../lib/full.css?raw";
+
+const { slug } = Astro.params;
+const started = Date.now();
+
+let menu = null;
+let error = null;
+try {
+  menu = await loadMenu(slug, { assetBase: "/a" });
+} catch (err) {
+  error = err.message;
+}
+
+if (!menu && !error) return new Response(`No menu for "${slug}"`, { status: 404 });
+if (error) return new Response(`Menu unavailable: ${error}`, { status: 503 });
+
+const cfg = menu.config;
+const mode = themeMode(cfg);
+const lang = (menu.tenant.languages || ["en"])[0];
+const template = menu.tenant.template || "";
+const title = cfg.site_name || menu.tenant.name;
+const vars = [themeCss(cfg, mode), settingsCss(cfg)].filter(Boolean).join(";");
+const buildMs = Date.now() - started;
+---
+<!doctype html>
+<html
+  lang={lang}
+  data-template={template}
+  data-theme={mode}
+  data-tenant={menu.tenant.slug}
+  data-brand-slug={menu.tenant.slug}
+  data-phone-layout={cfg.phone_layout || "list"}
+  data-hero-image={cfg.hero_image_url ? "true" : undefined}
+  data-generic-hero={cfg.hero_image_url ? "true" : undefined}
+>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title} · Menu</title>
+    <meta name="description" content={`${title} menu`} />
+    {cfg.hero_image_url && (
+      <link rel="preload" as="image" href={cfg.hero_image_url} fetchpriority="high" />
+    )}
+    {/* The restaurant's palette, before a single pixel is painted. The platform sets
+        these at runtime after fetching theme_config, which is the re-skin a diner
+        watches happen; resolved here, there is no second state to flash to. */}
+    <style set:html={`:root{${vars}}`} />
+    <style set:html={fullCss} />
+    <Fragment set:html={fontLinks(cfg)} />
+  </head>
+  <body>
+    <Fragment set:html={toggles(menu)} />
+    <Fragment set:html={hero(cfg)} />
+    <Fragment set:html={header(menu, cfg, lang)} />
+    <Fragment set:html={catBar(menu, lang)} />
+    <Fragment set:html={menuList(menu, lang)} />
+
+    {/* Everything interactive - the category filter, the 3D modal, AR, the WebXR
+        carousel - in one cached file that every tenant shares, loaded after the menu is
+        already readable. `defer` keeps it off the parser's critical path entirely. */}
+    <script
+      is:inline
+      defer
+      src="/viewer.js"
+      data-lang={lang}
+      data-build-ms={String(buildMs)}
+    />
+  </body>
+</html>

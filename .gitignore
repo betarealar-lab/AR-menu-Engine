@@ -5,3 +5,7 @@ __pycache__/
 dataset/
 store/
 deploy/env.yaml
+app/node_modules/
+app/.astro/
+app/dist/
+app/.env
