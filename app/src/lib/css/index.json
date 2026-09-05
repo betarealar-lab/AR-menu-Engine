@@ -1,0 +1,10 @@
+{
+ "templates": [
+  "monday_greens",
+  "elegant_black"
+ ],
+ "sizes": {
+  "monday_greens": 114564,
+  "elegant_black": 110682
+ }
+}

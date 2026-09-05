@@ -1,0 +1,3054 @@
+/* Trimmed from the platform's full stylesheet by trim_css.py.
+   Only rules scoped to ANOTHER template or tenant are removed - those
+   provably cannot match this page. Generic rules are all kept.
+   Do not edit; re-run the trimmer. */
+/* The platform's complete stylesheet, taken verbatim by extract_css.py.
+   Every <style> block from index.html, in document order, unmodified.
+   DO NOT EDIT and do not trim by hand - the module docstring lists the four
+   separate ways that went wrong. Re-run the extractor instead. */
+
+
+        :root { --t: 0.22s ease; }
+[data-theme="night"] {
+            --bg:          #14100b;
+            --bg2:         #1e1711;
+            --glow:        rgba(231,177,90,0.22);
+            --glow2:       rgba(201,138,60,0.13);
+            --shadow:      rgba(0,0,0,0.55);
+            --card:        #211a12;
+            --card2:       #2b2218;
+            --border:      rgba(231,177,90,0.20);
+            --text:        #f1e7d4;
+            --dim:         #9a8a70;
+            --accent:      #e7b15a;
+            --accent2:     #c98a3c;
+            --accent-text: #14100b;
+            --thumb-bg:    #0d0a07;
+            --modal-bg:    #14100b;
+            --modal-rgb:   20,16,11;
+            --bg-image:
+                url("./img/grain.png"),
+                radial-gradient(95% 55% at 50% -8%, var(--glow) 0%, transparent 60%),
+                radial-gradient(70% 50% at 85% 35%, var(--glow2) 0%, transparent 72%),
+                radial-gradient(140% 120% at 50% 40%, transparent 58%, var(--shadow) 130%),
+                linear-gradient(175deg, var(--bg) 0%, var(--bg2) 60%, var(--bg) 100%);
+            --bg-size: 64px 64px, auto, auto, auto, auto;
+            --bg-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+            --card-bg: linear-gradient(158deg, var(--card) 0%, var(--card2) 100%);
+            --card-blur: 0px;
+            --card-radius: 20px;
+            --item-shadow: 0 3px 10px var(--shadow);
+            --item-hover-shadow: 0 10px 22px var(--shadow);
+            --accent-edge: linear-gradient(180deg, var(--accent), var(--accent2));
+            --stage-bg: var(--thumb-bg);
+            --thumb-vignette: radial-gradient(ellipse at center, transparent 32%, var(--card) 100%);
+            --pill-bg: var(--card);
+            --pill-active-bg: linear-gradient(120deg, var(--accent), var(--accent2));
+            --cta-bg: linear-gradient(120deg, var(--accent), var(--accent2));
+            --cta-shadow: 0 4px 14px var(--glow);
+            --hero-color: var(--accent);
+            --hero-shadow: 0 2px 16px var(--glow);
+            --divider-bg: linear-gradient(90deg, transparent, var(--accent2), transparent);
+            --modal-bg-image:
+                radial-gradient(70% 48% at 50% 36%, var(--glow) 0%, transparent 62%),
+                radial-gradient(130% 100% at 50% 50%, var(--bg2) 0%, var(--modal-bg) 72%);
+        }
+[data-theme="day"] {
+            --bg:          #f3e9d6;
+            --bg2:         #ead9bd;
+            --glow:        rgba(176,122,30,0.18);
+            --glow2:       rgba(154,100,24,0.11);
+            --shadow:      rgba(120,80,10,0.18);
+            --card:        #fbf4e4;
+            --card2:       #ecdcc0;
+            --border:      rgba(176,122,30,0.22);
+            --text:        #221a0e;
+            --dim:         #6b5a3c;
+            --accent:      #8c6014;
+            --accent2:     #86560f;
+            --accent-text: #ffffff;
+            --thumb-bg:    #c8b898;
+            --modal-bg:    #f3e9d6;
+            --modal-rgb:   243,233,214;
+            --bg-image:
+                url("./img/grain.png"),
+                radial-gradient(95% 55% at 50% -8%, var(--glow) 0%, transparent 60%),
+                radial-gradient(70% 50% at 85% 35%, var(--glow2) 0%, transparent 72%),
+                radial-gradient(140% 120% at 50% 40%, transparent 58%, var(--shadow) 130%),
+                linear-gradient(175deg, var(--bg) 0%, var(--bg2) 60%, var(--bg) 100%);
+            --bg-size: 64px 64px, auto, auto, auto, auto;
+            --bg-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+            --card-bg: linear-gradient(158deg, var(--card) 0%, var(--card2) 100%);
+            --card-blur: 0px;
+            --card-radius: 20px;
+            --item-shadow: 0 3px 10px var(--shadow);
+            --item-hover-shadow: 0 10px 22px var(--shadow);
+            --accent-edge: linear-gradient(180deg, var(--accent), var(--accent2));
+            --stage-bg: var(--thumb-bg);
+            --thumb-vignette: radial-gradient(ellipse at center, transparent 32%, var(--card) 100%);
+            --pill-bg: var(--card);
+            --pill-active-bg: linear-gradient(120deg, var(--accent), var(--accent2));
+            --cta-bg: linear-gradient(120deg, var(--accent), var(--accent2));
+            --cta-shadow: 0 4px 14px var(--glow);
+            --hero-color: var(--accent);
+            --hero-shadow: 0 2px 16px var(--glow);
+            --divider-bg: linear-gradient(90deg, transparent, var(--accent2), transparent);
+            --modal-bg-image:
+                radial-gradient(70% 48% at 50% 36%, var(--glow) 0%, transparent 62%),
+                radial-gradient(130% 100% at 50% 50%, var(--bg2) 0%, var(--modal-bg) 72%);
+        }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+button { touch-action: manipulation; }
+body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Nunito', sans-serif;
+            min-height: 100vh;
+            padding: 0 16px 48px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: color var(--t);
+            /* clip (not hidden) prevents horizontal scroll WITHOUT creating a
+               scroll container, so position:sticky descendants keep working. */
+            overflow-x: clip;
+        }
+html:not([data-template]) body {
+            opacity: 0;
+        }
+html[data-template] body {
+            opacity: 1;
+            transition: color var(--t), opacity 0.12s ease;
+        }
+/* Fixed background layer — painted once, never repaints on scroll.
+           A single layer holds the warm gradient + glow + framing vignette
+           + a tiny pre-baked grain tile (no live SVG filter, no extra
+           full-screen compositing layer). Kept lightweight for mobile paint. */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background-color: var(--bg);
+            background-image: var(--bg-image);
+            background-repeat: var(--bg-repeat);
+            background-size: var(--bg-size);
+            background-position: center;
+        }
+.header {
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+            padding: 56px 0 22px;
+            position: relative;
+        }
+.header h1 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(2.8rem, 10vw, 3.8rem);
+            letter-spacing: 8px;
+            color: var(--hero-color);
+            line-height: 1;
+            text-shadow: var(--hero-shadow);
+            transition: color var(--t);
+        }
+.tenant-logo {
+            display: none;
+            max-width: min(210px, 58vw);
+            max-height: 120px;
+            width: auto;
+            height: auto;
+            margin: 0 auto 18px;
+            object-fit: contain;
+            filter: drop-shadow(0 10px 24px var(--shadow));
+        }
+/* Glowing divider under the hero title */
+        .header::after {
+            content: '';
+            display: block;
+            width: 72px;
+            height: 3px;
+            margin: 18px auto 0;
+            border-radius: 3px;
+            background: var(--divider-bg);
+            box-shadow: 0 0 14px var(--glow);
+        }
+.tagline {
+            font-size: 0.68rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--dim);
+            margin-top: 6px;
+            font-weight: 700;
+            transition: color var(--t);
+        }
+/* ── Announcement banner ── */
+        .mg-announcement { display: none; }
+.mg-announcement:not([hidden]) {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto 22px;
+            border-radius: var(--card-radius);
+            overflow: hidden;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            box-shadow: var(--item-shadow);
+        }
+.mg-announcement-photo {
+            width: 100%;
+            height: 160px;
+            background-color: var(--stage-bg);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+.mg-announcement-photo[hidden] { display: none; }
+.mg-announcement-body {
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+.mg-announcement-when {
+            display: inline-flex;
+            align-self: flex-start;
+            padding: 5px 12px;
+            border-radius: 999px;
+            background: var(--cta-bg);
+            color: var(--accent-text, #fff);
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 0.82rem;
+            letter-spacing: 1.2px;
+            box-shadow: var(--cta-shadow);
+        }
+.mg-announcement-when[hidden] { display: none; }
+.mg-announcement-text {
+            margin: 0;
+            font-size: 0.85rem;
+            line-height: 1.55;
+            color: var(--text);
+            white-space: pre-line;
+        }
+@media (min-width: 640px) {
+.mg-announcement:not([hidden]) { max-width: 1160px; flex-direction: row; }
+.mg-announcement-photo { width: 260px; height: auto; flex: 0 0 260px; }
+.mg-announcement-body { flex: 1; justify-content: center; padding: 20px 26px; }
+}
+#theme-toggle, #lang-toggle {
+            position: fixed;
+            top: 14px;
+            z-index: 1000;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 8px 16px;
+            cursor: pointer;
+            color: var(--text);
+            font-family: 'Nunito', sans-serif;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            transition: background var(--t), color var(--t), border-color var(--t);
+        }
+#theme-toggle { right: 14px; }
+#lang-toggle { left: 14px; }
+#theme-toggle:active, #lang-toggle:active { opacity: 0.65; }
+.menu-list {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            z-index: 1;
+        }
+.menu-item {
+            position: relative;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius);
+            box-shadow: var(--item-shadow);
+            display: grid;
+            grid-template-columns: 108px 1fr;
+            grid-template-rows: auto 1fr;
+            grid-template-areas: "name  right" "left  right";
+            padding: 12px;
+            column-gap: 12px;
+            row-gap: 6px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color var(--t);
+            contain: content;
+            touch-action: manipulation;
+            backdrop-filter: blur(var(--card-blur));
+            -webkit-backdrop-filter: blur(var(--card-blur));
+        }
+/* Glowing accent edge on every card */
+        .menu-item::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            background: var(--accent-edge);
+        }
+.menu-item:active { transform: scale(0.985); box-shadow: 0 2px 6px var(--shadow); }
+@media (hover: hover) {
+.menu-item:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--item-hover-shadow);
+                border-color: var(--accent);
+            }
+}
+.menu-item.no-image {
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-rows: auto;
+            grid-template-areas: "name right"
+                                 "desc right";
+            align-items: start;
+            column-gap: 12px;
+            row-gap: 3px;
+            padding: 12px;
+            background:
+                linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 46%),
+                var(--card-bg);
+        }
+.menu-item.no-image .item-left { display: none; }
+.menu-item.no-image .item-name {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: normal;
+        }
+.menu-item.no-image .item-right {
+            grid-area: right;
+            display: block;
+            min-width: max-content;
+            padding: 0;
+            align-self: center;
+        }
+/* Pictureless dishes keep the cart button and their variant/add-on pills:
+           on a drinks-heavy menu most items have no photo, and hiding these made
+           the majority of the menu unorderable (and hid the Bottle price of every
+           Glass/Bottle drink). Only the AR button is dropped — there is no model. */
+        .menu-item.no-image .ar-btn {
+            display: none;
+        }
+.menu-item.no-image .ingredients {
+            grid-area: desc;
+            min-width: 0;
+            margin: 0;
+            min-height: 0;
+            overflow-wrap: anywhere;
+            word-break: normal;
+        }
+/* Price stacks over the cart button in the narrow right column, keeping the
+           name/description column as wide as possible for long Georgian names. */
+        .menu-item.no-image .item-actions {
+            margin-top: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+        }
+/* Variants/add-ons span the full card width on the row below — they are far
+           too wide for the max-content price column. Auto-placed, so no empty row
+           (and no row-gap) is reserved on the dishes that have neither. */
+        .menu-item.no-image .no-image-extra {
+            grid-column: 1 / -1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px;
+        }
+.thumb-wrap {
+            position: relative;
+            width: 108px;
+            height: 100%;
+            min-height: 108px;
+            flex: 0 0 108px;
+            border-radius: 14px;
+            overflow: hidden;
+            contain: paint;
+            isolation: isolate;
+            background: var(--stage-bg);
+            border: 1px solid var(--border);
+            transition: background var(--t), border-color var(--t);
+        }
+.thumb-vignette {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            background: var(--thumb-vignette);
+            opacity: 0.6;
+        }
+.thumb-wrap model-viewer {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            min-height: 108px;
+            background: transparent;
+            display: block;
+            border-radius: inherit;
+            overflow: hidden;
+            contain: paint;
+            touch-action: pan-y;
+            opacity: 0;
+            visibility: hidden;
+        }
+.thumb-wrap.thumb-model-ready model-viewer {
+            opacity: 1;
+            visibility: visible;
+        }
+.thumb-wrap .thumb-img {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            height: 100%;
+            min-height: 108px;
+            object-fit: cover;
+            object-position: center center;
+            display: block;
+            cursor: pointer;
+        }
+.thumb-wrap.thumb-model-ready .thumb-img {
+            visibility: hidden;
+        }
+/* ── Fullscreen image lightbox (photo-only items) ── */
+        #img-lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.9);
+            -webkit-backdrop-filter: blur(4px);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            cursor: zoom-out;
+            animation: lightbox-fade 0.18s ease;
+        }
+#img-lightbox.open { display: flex; }
+@keyframes lightbox-fade {
+from { opacity: 0; }
+to { opacity: 1; }
+}
+#lightbox-img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            border-radius: 14px;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+        }
+#img-lightbox .close-btn {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            z-index: 1001;
+        }
+/* ── Rich photo popup (twin view) ──
+           Same visual language as the 3D modal, but for plain photo items:
+           name on top, the full photo, then description + price + add-to-cart.
+           Opened via openLightbox(src, alt, item, idx); the plain image lightbox
+           (no name/panel) still works when called with just (src, alt). */
+        #lightbox-name, #lightbox-panel { display: none; }
+#img-lightbox.has-panel {
+            flex-direction: column;
+            padding: 0;
+            cursor: default;
+            background: rgba(0, 0, 0, 0.94);
+        }
+#img-lightbox.has-panel #lightbox-name {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            padding: max(16px, env(safe-area-inset-top)) 46px 6px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(1.6rem, 6vw, 2.2rem);
+            letter-spacing: 2px;
+            line-height: 1.1;
+            background: linear-gradient(100deg, var(--accent), var(--accent2), var(--accent));
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: var(--accent);
+            text-shadow: 0 2px 18px var(--glow);
+        }
+html[lang="ka"] #img-lightbox.has-panel #lightbox-name,
+        html[lang="ru"] #img-lightbox.has-panel #lightbox-name {
+            font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+            font-weight: 800; letter-spacing: 0.5px;
+            -webkit-text-fill-color: initial;
+        }
+#img-lightbox.has-panel #lightbox-img {
+            flex: 1 1 auto;
+            min-height: 0;
+            width: 100%;
+            max-width: 100%;
+            max-height: none;
+            object-fit: contain;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 4px 16px;
+            box-sizing: border-box;
+        }
+#img-lightbox.has-panel #lightbox-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 12px 20px calc(16px + env(safe-area-inset-bottom));
+        }
+#lightbox-desc {
+            font-size: 0.82rem;
+            color: var(--dim);
+            line-height: 1.5;
+            text-align: center;
+            max-width: 460px;
+            margin: 0;
+            max-height: 22vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+#lightbox-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+#lightbox-price {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(1.4rem, 5vw, 2rem);
+            letter-spacing: 2px;
+            background: linear-gradient(100deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: var(--accent);
+        }
+/* Monday Greens product detail surfaces sit on dark photo/model backdrops;
+           pin their content text to white for dependable contrast without changing
+           menu cards or other tenants' theme colours. */
+        [data-template="monday_greens"] #img-lightbox.has-panel #lightbox-name,
+        [data-template="monday_greens"] #img-lightbox.has-panel #lightbox-desc,
+        [data-template="monday_greens"] #img-lightbox.has-panel #lightbox-price,
+        [data-template="monday_greens"] #modal-title,
+        [data-template="monday_greens"] #modal-title-d,
+        [data-template="monday_greens"] #modal-description,
+        [data-template="monday_greens"] #modal-price {
+            background: none;
+            -webkit-background-clip: initial;
+            background-clip: initial;
+            -webkit-text-fill-color: #ffffff;
+            color: #ffffff;
+        }
+[data-template="monday_greens"] #basket-panel .basket-item-name,
+        [data-template="monday_greens"] #basket-panel .basket-item-addons,
+        [data-template="monday_greens"] #basket-panel .basket-item-price,
+        [data-template="monday_greens"] #basket-total-label,
+        [data-template="monday_greens"] #basket-total,
+        [data-template="monday_greens"] #basket-waiter-btn {
+            -webkit-text-fill-color: var(--panel-ink, #ffffff);
+            color: var(--panel-ink, #ffffff);
+        }
+[data-template="monday_greens"] #basket-waiter-btn {
+            border: 2px solid var(--panel-ink, #ffffff);
+        }
+[data-template="monday_greens"] #basket-clear {
+            -webkit-text-fill-color: var(--panel-ink, #ffffff);
+            color: var(--panel-ink, #ffffff);
+            border-color: transparent;
+        }
+[data-template="monday_greens"] #basket-panel .basket-qty {
+            background: transparent;
+            border: 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.32);
+            border-radius: 0;
+        }
+.badge-3d {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background: var(--badge-bg, var(--cta-bg));
+            color: var(--accent-text);
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 0.9rem;
+            letter-spacing: 1.5px;
+            padding: 2px 7px 3px;
+            line-height: 1.4;
+            border-radius: 10px 0 13px 0;
+            box-shadow: 0 0 14px var(--glow);
+            pointer-events: none;
+            z-index: 3;
+            transition: background var(--t), color var(--t);
+        }
+.item-left {
+            grid-area: left;
+        }
+.item-right {
+            grid-area: right;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            user-select: none;
+        }
+.item-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 8px;
+            flex-shrink: 0;
+            min-height: 34px;
+        }
+.item-name {
+            grid-area: name;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.15rem;
+            letter-spacing: 1px;
+            color: var(--accent);
+            line-height: 1.2;
+            transition: color var(--t);
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+/* Photo-only items: tap the image to expand it (see lightbox JS). */
+        [data-template="monday_greens"] .thumb-img {
+            cursor: zoom-in;
+        }
+.ar-btn {
+            background: var(--cta-bg);
+            color: var(--accent-text);
+            border: none;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 0.63rem;
+            font-weight: 800;
+            font-family: 'Nunito', sans-serif;
+            letter-spacing: 0.8px;
+            cursor: pointer;
+            white-space: nowrap;
+            text-transform: uppercase;
+            display: block;
+            width: 100%;
+            min-height: 44px;
+            margin-top: 6px;
+            box-shadow: var(--cta-shadow);
+            transition: background var(--t), opacity 0.15s, box-shadow 0.15s;
+        }
+.ar-btn:active { opacity: 0.7; transition: opacity 0.08s; }
+.ar-btn:disabled { opacity: 0.45; cursor: wait; }
+.ingredients {
+            flex: 1;
+            font-size: 0.72rem;
+            color: var(--dim);
+            line-height: 1.3;
+            transition: color var(--t);
+            overflow-wrap: break-word;
+        }
+.price {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.15rem;
+            letter-spacing: 1px;
+            color: var(--price-color, var(--accent));
+            transition: color var(--t);
+        }
+/* Discounted item: the previous price sits struck through before the current
+           one. Rendered only when menu_items.price_old is set, so items — and whole
+           tenants — that never discount are visually untouched. Muted and smaller so
+           the price the guest actually pays stays the loudest thing in the row. */
+        .price-was {
+            color: var(--dim);
+            font-size: 0.78em;
+            margin-right: 0.42em;
+            text-decoration: line-through;
+            text-decoration-thickness: 1px;
+            opacity: 0.75;
+        }
+/* Per-item add-on options ("Make Double  +6.9 ₾") — tap to select; a selected
+           add-on adds to the basket as its own line with the add-on price included. */
+        .addons {
+            margin-top: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+.addon {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            background: transparent;
+            border: none;
+            appearance: none;
+            -webkit-appearance: none;
+            padding: 4px 0;
+            cursor: pointer;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--dim);
+            text-align: left;
+            line-height: 1.25;
+            transition: color 0.15s;
+        }
+.addon-l { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.addon-check {
+            width: 16px; height: 16px; flex: 0 0 auto;
+            border: 1.5px solid var(--border);
+            border-radius: 5px;
+            position: relative;
+            transition: background 0.15s, border-color 0.15s;
+        }
+.addon.selected { color: var(--text); }
+.addon.selected .addon-check {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+.addon.selected .addon-check::after {
+            content: '';
+            position: absolute; left: 4.5px; top: 1px;
+            width: 4px; height: 8px;
+            border: solid #fff; border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+.addon-price {
+            color: var(--accent);
+            font-weight: 800;
+            white-space: nowrap;
+        }
+/* Per-item size/price variants (e.g. Glass / Bottle) — single-select pills.
+           Exactly one is always chosen; the chosen one sets the price and the basket
+           line. Distinct from add-ons (multi-select, additive). */
+        .variants {
+            margin-top: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+.variant {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 6px;
+            background: var(--pill-bg);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 6px 12px;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--dim);
+            line-height: 1.1;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+.variant-price { font-weight: 800; color: var(--accent); white-space: nowrap; }
+.variant.selected {
+            background: var(--pill-active-bg, var(--accent));
+            border-color: transparent;
+            color: var(--accent-text, #fff);
+        }
+.variant.selected .variant-price { color: var(--accent-text, #fff); }
+.qty-add-btn.just-added { animation: br-pop 0.32s ease; }
+@keyframes br-pop {
+0% { transform: scale(1); }
+45% { transform: scale(1.28); }
+100% { transform: scale(1); }
+}
+.category-header {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 5px;
+            color: var(--accent);
+            padding: 20px 4px 8px;
+            border-bottom: 1px solid var(--border);
+            width: 100%;
+            max-width: 450px;
+            transition: color var(--t), border-color var(--t);
+        }
+/* Georgian and Russian text should feel clean, not forced through the
+           condensed Latin display font (Bebas Neue / Cormorant, neither of
+           which ships Cyrillic or Georgian glyphs) or its huge tracking. */
+        html[lang="ka"] .category-header, html[lang="ru"] .category-header,
+        html[lang="ka"] .cat-pill,        html[lang="ru"] .cat-pill,
+        html[lang="ka"] .tagline,         html[lang="ru"] .tagline,
+        html[lang="ka"] .item-name,       html[lang="ru"] .item-name,
+        html[lang="ka"] #modal-title,     html[lang="ru"] #modal-title,
+        html[lang="ka"] #modal-title-d,   html[lang="ru"] #modal-title-d {
+            font-family: 'Nunito', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            letter-spacing: 0.7px;
+        }
+html[lang="ka"] .category-header, html[lang="ru"] .category-header {
+            font-size: 1.08rem;
+            font-weight: 900;
+            padding-top: 22px;
+        }
+/* Monday Greens: its accent teal sits too close to the page background for
+           the category headings (color: var(--accent)) to read, and the admin panel
+           exposes no separate control for them. Pin them to white — legible on both
+           the teal day bg and the dark night bg. Scoped to monday_greens so every
+           other tenant keeps accent-coloured headings. */
+        [data-template="monday_greens"] .category-header { color: var(--cat-color, #ffffff); }
+/* ── Footer ── */
+        .site-footer {
+            width: 100%;
+            max-width: 450px;
+            margin-top: 48px;
+            padding: 28px 16px 8px;
+            border-top: 1px solid var(--border);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            text-align: center;
+        }
+.site-footer.show { display: flex; }
+.footer-logo {
+            height: 34px;
+            width: auto;
+            opacity: 0.92;
+        }
+/* Show the logo variant that matches the active theme */
+        .footer-logo-light { display: none; }
+.footer-logo-white { display: none; }
+[data-theme="day"] .footer-logo-dark { display: none; }
+[data-theme="day"] .footer-logo-light { display: block; }
+.footer-email {
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--accent);
+            text-decoration: none;
+            transition: color var(--t), opacity 0.15s;
+        }
+.footer-email:active { opacity: 0.6; }
+@media (hover: hover) {
+.footer-email:hover { opacity: 0.75; }
+}
+.footer-copy {
+            font-size: 0.66rem;
+            letter-spacing: 1px;
+            color: var(--dim);
+            transition: color var(--t);
+        }
+/* ── Hero tagline (theme_config.site_tagline / site_tagline_ka) ──
+           Sits inside .mg-hero under the brand mark/logo, so it only ever
+           renders where that hero already renders. --hero-color assumes a
+           flat brand-colour background (which is what a tenant with no hero
+           photo gets) -- against an actual photo it disappears into whichever
+           patch of the photo happens to sit behind it. A permanent white +
+           translucent chip, the same trick the logo artwork and the "Menu"
+           scroll cue already lean on, stays legible over both. */
+        .mg-hero-tagline {
+            position: relative; z-index: 2;
+            display: inline-block;
+            margin: 12px 0 0;
+            max-width: min(480px, calc(100% - 48px));
+            padding: 8px 18px;
+            border-radius: 999px;
+            background: rgba(0,0,0,0.28);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            font-family: 'Nunito', sans-serif;
+            font-weight: 600;
+            font-size: clamp(0.85rem, 2.4vw, 1.05rem);
+            line-height: 1.4;
+            text-align: center;
+            color: rgba(255,255,255,0.95);
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        }
+.mg-hero-tagline[hidden] { display: none; }
+/* ── Reviews (theme_config.reviews_json) ──
+           A JSON array of {name, stars, text}
+. Horizontal scroll-snap row —
+           no carousel library, so it costs nothing on tenants that skip it. */
+        .mg-reviews {
+            width: 100%;
+            max-width: 450px;
+            margin: 44px auto 0;
+            padding: 0 16px;
+            box-sizing: border-box;
+        }
+.mg-reviews[hidden] { display: none; }
+.mg-reviews-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 4px;
+            color: var(--accent);
+            margin: 0 0 14px;
+        }
+html[lang="ka"] .mg-reviews-title, html[lang="ru"] .mg-reviews-title { font-family: inherit; font-weight: 900; font-size: 1.1rem; letter-spacing: 0; }
+.mg-reviews-track {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            padding-bottom: 6px;
+            margin: 0 -16px;
+            padding-left: 16px;
+            padding-right: 16px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+.mg-reviews-track::-webkit-scrollbar { display: none; }
+.mg-review-card {
+            flex: 0 0 auto;
+            scroll-snap-align: start;
+            width: min(78vw, 300px);
+            background: var(--card-bg, var(--card));
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius, 14px);
+            padding: 16px 16px 14px;
+            box-shadow: var(--item-shadow);
+        }
+.mg-review-stars {
+            color: var(--accent);
+            font-size: 0.82rem;
+            letter-spacing: 2px;
+            margin: 0 0 8px;
+        }
+.mg-review-text {
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.86rem;
+            line-height: 1.5;
+            color: var(--text);
+            margin: 0 0 10px;
+            display: -webkit-box;
+            -webkit-line-clamp: 6;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+.mg-review-name {
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: var(--dim);
+        }
+/* ── Restaurant-info footer (hours / address / phone / delivery / social) ── */
+        .mg-info-footer {
+            width: 100%;
+            max-width: 450px;
+            margin: 40px auto 0;
+            padding: 22px 16px 6px;
+            border-top: 1px solid var(--border);
+            box-sizing: border-box;
+            font-family: 'Nunito', sans-serif;
+        }
+.mg-info-footer[hidden] { display: none; }
+.mg-info-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+.mg-info-hours[hidden], .mg-info-line[hidden], .mg-info-delivery[hidden],
+        .mg-info-review[hidden], .mg-info-map-link[hidden],
+        .mg-info-social[hidden], [data-info-fb][hidden], [data-info-ig][hidden] { display: none; }
+.mg-info-map-link {
+            display: inline-flex;
+            vertical-align: middle;
+            margin-left: 6px;
+            color: var(--accent);
+            opacity: 0.85;
+        }
+@media (hover: hover) {
+.mg-info-map-link:hover { opacity: 1; }
+}
+.mg-info-label {
+            display: block;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 2px;
+        }
+.mg-info-hours { font-size: 0.86rem; color: var(--text); }
+.mg-info-hours-range { display: block; font-weight: 700; }
+.mg-info-hours-note { display: block; color: var(--dim); font-size: 0.78rem; margin-top: 2px; }
+.mg-info-contact { display: flex; flex-direction: column; gap: 8px; }
+.mg-info-line { margin: 0; font-size: 0.86rem; color: var(--text); }
+.mg-info-line a { color: var(--text); text-decoration: none; }
+@media (hover: hover) {
+.mg-info-line a:hover { color: var(--accent); }
+}
+.mg-info-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+.mg-info-delivery {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            padding: 10px 18px;
+            border-radius: 999px;
+            background: var(--cta-bg);
+            color: var(--accent-text, #fff);
+            font-weight: 800;
+            font-size: 0.82rem;
+            text-decoration: none;
+            box-shadow: var(--cta-shadow);
+            transition: transform 0.15s;
+        }
+.mg-info-delivery:active { transform: scale(0.97); }
+.mg-info-delivery-icon { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; }
+.mg-info-delivery-icon[hidden] { display: none; }
+.mg-info-review {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            justify-content: center;
+            padding: 9px 16px;
+            border-radius: 999px;
+            background: none;
+            border: 1.5px solid var(--accent);
+            color: var(--accent);
+            font-weight: 800;
+            font-size: 0.8rem;
+            text-decoration: none;
+            transition: transform 0.15s, background 0.15s, color 0.15s;
+        }
+.mg-info-review:active { transform: scale(0.97); }
+@media (hover: hover) {
+.mg-info-review:hover { background: var(--accent); color: var(--accent-text, #fff); }
+}
+.mg-info-social { display: flex; gap: 10px; }
+.mg-info-social a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: var(--pill-bg);
+            color: var(--dim);
+            transition: color 0.15s, background 0.15s;
+        }
+@media (hover: hover) {
+.mg-info-social a:hover { color: var(--accent); }
+}
+.mg-info-note {
+            margin: 18px 0 0;
+            font-size: 0.72rem;
+            line-height: 1.5;
+            color: var(--dim);
+            white-space: pre-line;
+        }
+.mg-info-note[hidden] { display: none; }
+@media (min-width: 1100px) {
+.mg-reviews, .mg-info-footer { max-width: 1160px; }
+.mg-reviews-track {
+                flex-wrap: wrap;
+                overflow-x: visible;
+                scroll-snap-type: none;
+                margin: 0;
+                padding-left: 0;
+                padding-right: 0;
+            }
+.mg-review-card {
+                flex: 1 1 300px;
+                width: auto;
+                max-width: 360px;
+            }
+.mg-info-grid {
+                flex-direction: row;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 40px;
+            }
+.mg-info-hours, .mg-info-contact { flex: 0 0 auto; }
+.mg-info-actions {
+                flex: 0 0 auto;
+                justify-content: flex-start;
+                gap: 20px;
+                margin-left: auto;
+            }
+}
+/* ── Modal (3D view page) — a lit stage ── */
+        #modal {
+            position: fixed;
+            inset: 0;
+            background-color: var(--modal-bg);
+            background: var(--modal-bg-image);
+            z-index: 9999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            overflow: hidden;
+            transition: opacity 0.2s, background var(--t);
+        }
+#modal.active { opacity: 1; }
+/* Mobile: title above viewer */
+        #modal-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(2.2rem, 8vw, 3.2rem);
+            letter-spacing: 4px;
+            background: linear-gradient(100deg, var(--accent), var(--accent2), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: var(--accent);
+            text-shadow: 0 2px 18px var(--glow);
+            text-align: center;
+            width: 100%;
+            padding: 0 24px;
+            margin-top: 56px;
+            line-height: 1.1;
+        }
+/* Viewer wrapper */
+        #modal-viewer-wrap {
+            position: relative;
+            display: inline-block;
+            width: 95vw;
+            margin-top: 8px;
+            overflow: hidden;
+            contain: paint;
+            border-radius: 18px;
+        }
+#modal-viewer {
+            width: 100%;
+            height: 62vh;
+            background: transparent;
+            display: block;
+            position: relative;
+            z-index: 1;
+            border-radius: inherit;
+            overflow: hidden;
+            contain: paint;
+        }
+/* Stage floor glow — grounds the model on a pool of light */
+        #modal-viewer-wrap::before {
+            content: '';
+            position: absolute;
+            left: 50%; bottom: 7%;
+            transform: translateX(-50%);
+            width: 66%; height: 16%;
+            background: radial-gradient(ellipse at center, var(--glow) 0%, transparent 72%);
+            pointer-events: none;
+            z-index: 0;
+        }
+.modal-vignette {
+            position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+            background: radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,0.55) 100%);
+        }
+/* Mobile: drawer is a flat always-open block */
+        #modal-drawer { width: 100%; text-align: center; padding: 0; background: none; }
+#modal-drawer-handle { display: none; }
+#modal-title-d { display: none; }
+#modal-price {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(1.6rem, 6vw, 2.3rem);
+            letter-spacing: 3px;
+            background: linear-gradient(100deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            color: var(--accent);
+            text-align: center;
+            margin-top: 8px;
+        }
+#modal-description {
+            font-size: 0.75rem;
+            color: var(--dim);
+            line-height: 1.5;
+            text-align: center;
+            padding: 0 28px;
+            margin-top: 6px;
+            max-width: 380px;
+            transition: color var(--t);
+        }
+#modal-qty-wrap { display: flex; justify-content: center; margin-top: 10px; }
+.close-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(var(--modal-rgb), 0.6);
+            color: var(--text);
+            border: 1px solid var(--accent);
+            border-radius: 50%;
+            padding: 0;
+            cursor: pointer;
+            font-size: 1.05rem;
+            font-family: 'Nunito', sans-serif;
+            font-weight: 800;
+            line-height: 1;
+            box-shadow: 0 4px 16px var(--glow);
+            transition: background var(--t), color var(--t), transform 0.12s;
+        }
+/* Auto-spin toggle: mirrors the close button on the top-left. */
+        .spin-btn {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 3;
+            width: 52px;
+            height: 52px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1px;
+            background: rgba(var(--modal-rgb), 0.6);
+            color: var(--text);
+            border: 1px solid var(--accent);
+            border-radius: 50%;
+            padding: 0;
+            cursor: pointer;
+            font-family: 'Nunito', system-ui, sans-serif;
+            box-shadow: 0 4px 16px var(--glow);
+            transition: background var(--t), color var(--t), transform 0.12s;
+        }
+.spin-360 { font-size: 13px; font-weight: 900; line-height: 1; letter-spacing: -0.5px; }
+.spin-label { font-size: 8.5px; font-weight: 800; line-height: 1; letter-spacing: 1.5px; }
+.spin-btn:active { transform: scale(0.9); }
+.spin-btn.active {
+            background: var(--accent);
+            color: var(--accent-text);
+            border-color: transparent;
+        }
+.close-btn:active { transform: scale(0.92); }
+@media (min-width: 640px) {
+#modal { overflow: hidden; }
+#modal-title { display: none; }
+#modal-viewer-wrap {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 88px;
+                width: 100%; display: block; margin-top: 0;
+                transition: bottom 0.32s cubic-bezier(0.4,0,0.2,1);
+            }
+#modal.drawer-expanded #modal-viewer-wrap { bottom: var(--drawer-full-h, 300px); }
+#modal-viewer { width: 100%; height: 100%; }
+#modal-drawer {
+                position: absolute;
+                bottom: 0; left: 0; right: 0; z-index: 2;
+                padding: 12px 32px max(36px, env(safe-area-inset-bottom, 36px));
+                background: linear-gradient(to bottom,
+                    rgba(var(--modal-rgb),0) 0%,
+                    rgba(var(--modal-rgb),0.9) 22%,
+                    rgba(var(--modal-rgb),0.98) 100%
+                );
+                cursor: pointer; user-select: none; text-align: center;
+                transition: background var(--t);
+            }
+#modal-drawer.expanded { cursor: default; }
+#modal-drawer-handle {
+                display: block; width: 36px; height: 4px;
+                background: rgba(255,255,255,0.2); border-radius: 2px;
+                margin: 0 auto 14px;
+            }
+#modal-title-d {
+                display: block;
+                font-family: 'Bebas Neue', sans-serif;
+                font-size: clamp(1.6rem, 3vw, 2.2rem);
+                letter-spacing: 3px; color: var(--accent); line-height: 1.1;
+                transition: color var(--t);
+            }
+#modal-price { font-size: 1rem; letter-spacing: 2px; opacity: 0.6; margin-top: 2px; }
+#modal-drawer-body {
+                display: grid; grid-template-rows: 0fr;
+                transition: grid-template-rows 0.32s cubic-bezier(0.4,0,0.2,1);
+            }
+#modal-drawer.expanded #modal-drawer-body { grid-template-rows: 1fr; }
+#modal-drawer-body > div { overflow: hidden; min-height: 0; padding-bottom: 4px; }
+#modal-description { text-align: center; padding: 0; margin: 14px auto 0; font-size: 0.88rem; max-width: 560px; width: 100%; }
+#modal-qty-wrap { justify-content: center; margin-top: 16px; }
+#modal-ar-btn { width: auto; min-width: 220px; margin: 14px auto 0; }
+.close-btn { z-index: 3; }
+}
+.tip {
+            margin-top: 4px;
+            color: var(--dim);
+            font-size: 0.82rem;
+            letter-spacing: 1px;
+            transition: color var(--t);
+        }
+/* Monday Greens · day theme · 3D modal:
+           the product-detail text is pinned white for the dark NIGHT backdrop,
+           but in the light day theme the modal sits on a pale aqua background,
+           so white washes out. In day mode use the theme's own dark text colours
+           instead — deep teal (var(--text)) for the title/price/description and a
+           slightly softer teal for the tip. Crisp, on-brand, no outline/scrim.
+           Scoped to day + monday_greens only — night mode is untouched. */
+        [data-theme="day"][data-template="monday_greens"] #modal-title,
+        [data-theme="day"][data-template="monday_greens"] #modal-title-d,
+        [data-theme="day"][data-template="monday_greens"] #modal-price,
+        [data-theme="day"][data-template="monday_greens"] #modal-description {
+            color: var(--modal-ink, #0d7b98);
+            -webkit-text-fill-color: var(--modal-ink, #0d7b98);
+        }
+[data-theme="day"][data-template="monday_greens"] .tip {
+            color: var(--modal-ink, #0d7b98);
+            -webkit-text-fill-color: var(--modal-ink, #0d7b98);
+            opacity: 0.8;
+        }
+#modal-message {
+            display: none;
+            max-width: 340px;
+            margin: 10px auto 0;
+            color: var(--accent);
+            font-size: 0.82rem;
+            font-weight: 800;
+            line-height: 1.35;
+            letter-spacing: 0.5px;
+        }
+.nav-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            border: 1px solid var(--accent);
+            background: rgba(var(--modal-rgb), 0.6);
+            color: var(--accent);
+            font-size: 1.5rem;
+            line-height: 1;
+            padding: 0;
+            cursor: pointer;
+            z-index: 10000;
+            box-shadow: 0 4px 18px var(--glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.12s;
+        }
+.nav-arrow:active { transform: translateY(-50%) scale(0.9); }
+.left-arrow { left: 10px; }
+.right-arrow { right: 10px; }
+/* ── WebXR overlay ── */
+        #xr-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 51;
+            pointer-events: none;
+        }
+#xr-gesture-layer {
+            display: none;
+            position: absolute;
+            inset: 0;
+            pointer-events: all;
+            z-index: 1;
+        }
+#xr-place-hint {
+    position: absolute;
+    bottom: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-family: 'Nunito', sans-serif;
+    font-size: 14px;
+    background: rgba(0,0,0,0.65);
+    padding: 10px 20px;
+    border-radius: 20px;
+    white-space: normal;
+    text-align: center;
+    width: 80%;
+    max-width: 320px;
+}
+#xr-nav-row {
+            display: none;
+            position: absolute;
+            z-index: 2;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            pointer-events: all;
+            align-items: center;
+            gap: 16px;
+            background: rgba(0,0,0,0.65);
+            padding: 8px 20px;
+            border-radius: 30px;
+        }
+#xr-nav-row button {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.35);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            pointer-events: all;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+#xr-move-hint {
+            display: none;
+            position: absolute;
+            bottom: 36px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.5);
+            font-family: 'Nunito', sans-serif;
+            font-size: 12px;
+            white-space: normal;
+            text-align: center;
+            max-width: 80%;
+        }
+#xr-exit, #xr-carousel-toggle, #xr-label-toggle, #xr-place-again, #xr-hide-ui {
+            pointer-events: all;
+            position: absolute;
+            z-index: 2;
+            background: rgba(0,0,0,0.65);
+            color: #ccc;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+        }
+#xr-exit { top: 18px; right: 18px; }
+#xr-place-again { top: 62px; right: 18px; display: none; }
+#xr-hide-ui { top: 18px; left: 18px; display: block; transition: opacity 0.25s; }
+#xr-carousel-toggle { top: 62px; left: 18px; display: none; }
+#xr-label-toggle { top: 106px; left: 18px; display: none; }
+#xr-hide-ui.ui-hidden { opacity: 0.35; }
+#xr-add-btn {
+            display: none;
+            pointer-events: all;
+            position: absolute;
+            z-index: 2;
+            bottom: 55px;
+            right: 18px;
+            background: rgba(0,0,0,0.45);
+            color: rgba(255,255,255,0.55);
+            border: 1.5px solid rgba(255,255,255,0.25);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+        }
+#xr-add-btn.visible { display: flex; }
+#xr-add-btn.in-basket { background: rgba(240,192,64,0.92); color: #0d0d0d; border-color: transparent; }
+#xr-hint-step {
+            font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+            color: rgba(255,255,255,.5); margin-bottom: 3px;
+        }
+#xr-hint-main { font-size: 14px; color: #fff; }
+#xr-scale-gauge {
+            display: none;
+            position: absolute;
+            bottom: 180px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.65);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 8px 16px;
+            pointer-events: none;
+            min-width: 130px;
+            text-align: center;
+        }
+#xr-scale-track {
+            height: 4px;
+            background: rgba(255,255,255,0.18);
+            border-radius: 2px;
+            position: relative;
+            margin-bottom: 5px;
+        }
+#xr-scale-fill {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            background: #f0c040;
+            border-radius: 2px;
+        }
+#xr-scale-mark {
+            position: absolute;
+            top: -3px;
+            width: 2px;
+            height: 10px;
+            background: rgba(255,255,255,0.55);
+            border-radius: 1px;
+            left: calc(53.7% - 1px);
+        }
+#xr-scale-pct {
+            font-family: 'Nunito', sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+        }
+/* ── Category filter bar ── */
+        /* Wrapper holds the optional FOOD|DRINKS switch above the category pills so
+           the whole bar sticks together. Centers like .header / .menu-list. */
+        .cat-bar {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+.cat-filter {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 0 0 8px;
+            margin-bottom: 2px;
+            scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
+        }
+.cat-filter::-webkit-scrollbar { display: none; }
+/* Holds the pill scroller + the desktop scroll arrows. */
+        .cat-scroll { position: relative; width: 100%; }
+/* ‹ › arrows: hidden on mobile (swipe works); on desktop they fade in only
+           when there is more of the pill row to scroll in that direction. */
+        .cat-nav {
+            position: absolute;
+            top: 0;
+            height: 40px;
+            width: 46px;
+            display: none;
+            align-items: center;
+            border: none;
+            cursor: pointer;
+            z-index: 3;
+            padding: 0;
+            font-size: 1.7rem;
+            line-height: 1;
+            font-weight: 700;
+            color: var(--accent, var(--text));
+            background: var(--bg);
+        }
+.cat-nav-l { left: 0;  justify-content: flex-start; padding-left: 6px;
+            background: linear-gradient(to right, var(--bg) 58%, transparent); }
+.cat-nav-r { right: 0; justify-content: flex-end;   padding-right: 6px;
+            background: linear-gradient(to left,  var(--bg) 58%, transparent); }
+.cat-nav:active { opacity: 0.6; }
+@media (min-width: 640px) {
+.cat-nav:not([hidden]) { display: flex; }
+}
+/* ── Food / Drinks group switch (opt-in via theme_config.drink_categories) ── */
+        .menu-groups {
+            display: flex;
+            gap: 6px;
+            width: 100%;
+            max-width: 360px;
+            background: var(--pill-bg);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 4px;
+            box-sizing: border-box;
+        }
+.menu-groups[hidden] { display: none; }
+.group-btn {
+            flex: 1 1 0;
+            border: none;
+            background: transparent;
+            color: var(--text);
+            font-family: inherit;
+            font-weight: 800;
+            font-size: 0.95rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            padding: 10px 8px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: background var(--t), color var(--t);
+        }
+.group-btn.active {
+            background: var(--pill-active-bg, var(--accent));
+            color: var(--accent-text, #fff);
+            box-shadow: 0 4px 12px -4px var(--shadow, rgba(0,0,0,0.4));
+        }
+html[lang="ka"] .group-btn {
+            text-transform: none;
+            letter-spacing: 0.3px;
+            font-size: 0.9rem;
+        }
+/* Sticky category bar — after you scroll past the hero it stays pinned to
+           the top so diners can switch categories at any point. Scoped to the
+           monday_greens skin so other templates are unchanged. */
+        [data-template="monday_greens"] .cat-bar {
+            position: sticky;
+            top: 0;
+            z-index: 30;
+            background: var(--bg);
+            padding-top: 10px;
+            box-shadow: 0 8px 18px -10px var(--shadow, rgba(0,0,0,0.45));
+        }
+@media (max-width: 640px) {
+[data-template="monday_greens"] .cat-bar { padding-top: 54px; }
+}
+.cat-pill {
+            background: var(--pill-bg);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+            padding: 8px 14px;
+            min-height: 40px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--dim);
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: background var(--t), border-color var(--t), color var(--t);
+            touch-action: manipulation;
+        }
+.cat-pill[hidden] { display: none; }
+.cat-pill:active { opacity: 0.7; transition: opacity 0.08s; }
+.cat-pill.active {
+            background: var(--pill-active-bg);
+            color: var(--accent-text);
+            border-color: transparent;
+            box-shadow: var(--cta-shadow);
+        }
+.cat-section { display: contents; }
+.ar-featured-banner {
+            grid-column: 1 / -1;
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 10px 12px;
+            background:
+                linear-gradient(135deg, var(--glow2), transparent 58%),
+                var(--card-bg);
+            box-shadow: var(--item-shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            overflow: hidden;
+        }
+.ar-featured-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.15rem;
+            letter-spacing: 1.8px;
+            color: var(--accent);
+            line-height: 1;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+.ar-featured-copy {
+            color: var(--dim);
+            font-size: 0.7rem;
+            font-weight: 800;
+            line-height: 1.25;
+            text-align: right;
+        }
+.menu-item.ar-featured {
+            border-color: var(--accent);
+            box-shadow: var(--item-hover-shadow);
+        }
+.menu-item.ar-featured::before {
+            width: 5px;
+            background: var(--cta-bg);
+        }
+[data-template="monday_greens"] {
+            --bg-image: linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
+            --bg-size: auto;
+            --bg-repeat: no-repeat;
+        }
+@keyframes eb-hero-rise {
+from { opacity: 0; transform: translateY(16px); }
+to { opacity: 1; transform: none; }
+}
+/* Every template accepts the same hero media. Templates below only change
+           its art direction; a configured image reveals this shared fallback hero. */
+        .mg-hero { display: none; }
+html[data-generic-hero="true"] .mg-hero {
+            position: relative;
+            width: 100vw;
+            margin-left: calc(50% - 50vw);
+            margin-right: calc(50% - 50vw);
+            min-height: var(--mg-hero-h, min(52svh, 520px));
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
+        }
+html[data-generic-hero="true"] .mg-hero-photo,
+        html[data-generic-hero="true"] .mg-hero-next {
+            position: absolute; inset: 0; z-index: 0;
+            background-image: var(--hero-image, none);
+            background-position: center;
+            background-size: cover;
+            background-repeat: no-repeat;
+        }
+html[data-generic-hero="true"] .mg-hero-next { opacity: 0; pointer-events: none; }
+html[data-generic-hero="true"] .mg-hero-veil {
+            position: absolute; inset: 0; z-index: 1;
+            background: linear-gradient(180deg, rgba(0,0,0,0.16), rgba(0,0,0,0.62));
+        }
+html[data-generic-hero="true"] .mg-hero-logo,
+        html[data-generic-hero="true"] .mg-hero-brand,
+        html[data-generic-hero="true"] .mg-hero-tagline { position: relative; z-index: 2; }
+html[data-generic-hero="true"] .mg-hero-logo { max-width: min(58vw, 360px); max-height: 180px; object-fit: contain; }
+html[data-generic-hero="true"] .mg-hero-brand { color: #fff; font-size: clamp(2.25rem, 9vw, 4.5rem); text-shadow: 0 3px 18px rgba(0,0,0,0.62); }
+html[data-generic-hero="true"] .mg-hero-tagline { color: rgba(255,255,255,0.9); max-width: min(88vw, 560px); }
+html[data-generic-hero="true"] .mg-hero-scroll { position: absolute; z-index: 2; bottom: 22px; color: #fff; }
+/* ── Hero video ──────────────────────────────────────────────────────
+           Sits in the same stacking slot as .mg-hero-photo, so every template
+           that art-directs the photo hero (height, veil, breakout width) gets
+           the video for free — no per-template rules needed. It stays out of
+           the layout until a clip is actually attached and decoding, and fades
+           in over the poster photo rather than cutting to it, so a slow clip
+           just means the band stays a still photo a moment longer. */
+        .mg-hero-video {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+            opacity: 0;
+            transition: opacity 600ms ease-in-out;
+            pointer-events: none;
+            background: transparent;
+        }
+html[data-hero-video="loading"] .mg-hero-video,
+        html[data-hero-video="true"] .mg-hero-video { display: block; }
+html[data-hero-video="true"] .mg-hero-video { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+.mg-hero-video { transition: none; }
+}
+/* ── Monday Greens template: full-bleed hero photo + logo ── */
+        [data-template="monday_greens"] .mg-hero {
+            position: relative;
+            width: 100vw;
+            margin-left: calc(50% - 50vw);
+            margin-right: calc(50% - 50vw);
+            min-height: 100svh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            overflow: hidden;
+        }
+/* Hero height. Default = full screen (100svh). A tenant can set theme_config
+           `hero_min_h` (e.g. 56.25vw = true 16:9) so a landscape hero photo shows in
+           full instead of being cropped on tall phone screens. */
+        [data-template="monday_greens"] .mg-hero {
+            min-height: var(--mg-hero-h, 100svh);
+        }
+/* The default text title is replaced by branded Monday Greens logos. */
+        [data-template="monday_greens"] .header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: none;
+            padding: 34px 18px 10px;
+            margin: 0 auto 8px;
+        }
+[data-template="monday_greens"] .header::after { display: none; }
+[data-template="monday_greens"] .header h1 { display: none; }
+[data-template="monday_greens"] .tenant-logo {
+            display: block;
+            max-width: min(450px, 96vw);
+            margin: 0 auto;
+            filter: drop-shadow(0 8px 18px rgba(0,0,0,0.08));
+        }
+[data-template="monday_greens"] .mg-hero-photo {
+            position: absolute; inset: 0; z-index: 0;
+            /* Fallback while the photo loads, and the whole hero for a tenant with
+               no hero photo yet. #063236 is Monday Greens' own teal, so every other
+               tenant on this template was showing a competitor's brand colour behind
+               its logo; theme_config `day_hero_bg` / `night_hero_bg` overrides it.
+               Tenants that set neither keep the exact previous colour. */
+            background-color: var(--hero-bg, #063236);
+            background-image: var(--hero-image, none);
+            background-size: cover; background-position: center; background-repeat: no-repeat;
+        }
+/* Hero gallery: when theme_config.hero_images holds more than one photo, this
+           layer sits directly on top of .mg-hero-photo and fades the NEXT photo in.
+           Once the fade finishes the base layer adopts that photo and this one resets
+           to transparent — so two elements crossfade any number of images. */
+        [data-template="monday_greens"] .mg-hero-next {
+            position: absolute; inset: 0; z-index: 0;
+            background-size: cover; background-position: center; background-repeat: no-repeat;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity var(--mg-hero-fade, 1200ms) ease-in-out;
+        }
+[data-template="monday_greens"] .mg-hero-veil {
+            position: absolute; inset: 0; z-index: 1;
+            background:
+                radial-gradient(66% 40% at 50% 46%, rgba(0,0,0,0.40) 0%, transparent 70%),
+                linear-gradient(to bottom, rgba(0,0,0,0.16) 0%, transparent 20%, transparent 68%, var(--bg) 100%);
+        }
+[data-theme="day"] [data-template="monday_greens"] .mg-hero-veil,
+        [data-template="monday_greens"][data-theme="day"] .mg-hero-veil {
+            background:
+                radial-gradient(62% 36% at 50% 46%, rgba(0,0,0,0.28) 0%, transparent 72%),
+                linear-gradient(to bottom, transparent 90%, var(--bg) 100%);
+        }
+[data-template="monday_greens"] .mg-hero-logo {
+            position: relative; z-index: 2;
+            width: clamp(240px, 74vw, 540px);
+            max-width: calc(100% - 48px);
+            height: auto;
+            filter: drop-shadow(0 2px 9px rgba(0,0,0,0.6)) drop-shadow(0 10px 40px rgba(0,0,0,0.45));
+            animation: mg-hero-rise 0.9s cubic-bezier(0.2,0.7,0.2,1) both;
+        }
+/* No logo set → hide the <img> (its alt text would otherwise show). */
+        [data-template="monday_greens"] .mg-hero-logo:not([src]) { display: none; }
+@keyframes mg-hero-rise {
+from { opacity: 0; transform: translateY(16px); }
+to { opacity: 1; transform: translateY(0); }
+}
+[data-template="monday_greens"] .mg-hero-scroll {
+            position: absolute; z-index: 2;
+            bottom: max(26px, env(safe-area-inset-bottom, 26px));
+            left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            color: rgba(255,255,255,0.82);
+            font-size: 0.62rem; font-weight: 800; letter-spacing: 3px;
+            text-transform: uppercase; text-decoration: none;
+        }
+[data-template="monday_greens"] .mg-hero-scroll svg {
+            width: 22px; height: 22px; animation: mg-nudge 1.8s ease-in-out infinite;
+        }
+@keyframes mg-nudge {
+0%, 100% { transform: translateY(0); opacity: 0.7; }
+50% { transform: translateY(5px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+[data-template="monday_greens"] .mg-hero-logo,
+            [data-template="monday_greens"] .mg-hero-scroll svg { animation: none; }
+}
+.baoma-shell,
+        .baoma-info { display: none; }
+@keyframes bl-hero-rise {
+from { opacity: 0; transform: translateY(16px); }
+to { opacity: 1; transform: none; }
+}
+@keyframes rg-hero-rise {
+from { opacity: 0; transform: translateY(18px) scale(0.97); }
+to { opacity: 1; transform: none; }
+}
+@keyframes ig-hero-rise {
+from { opacity: 0; transform: translateY(16px); }
+to { opacity: 1; transform: none; }
+}
+/* ── Signature strip: promoted dishes as large photo-led cards ──── */
+        .bb-featured { display: none; }
+/* ── Visit / contact block ──────────────────────────────────────
+           Entirely theme_config-driven and hidden when unset, so no venue's
+           address can appear on another venue's menu. */
+        .venue-info { display: none; }
+.mugsy-shell,
+        .mugsy-locations,
+        .mugsy-delivery-rail { display: none; }
+.mugsy-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 1220;
+            min-height: calc(58px + env(safe-area-inset-top, 0px));
+            padding: calc(8px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px)) 8px calc(12px + env(safe-area-inset-left, 0px));
+            display: grid;
+            grid-template-columns: minmax(58px, 128px) 44px 44px minmax(58px, auto) 44px;
+            align-items: center;
+            gap: 10px;
+            justify-content: start;
+            background: var(--mugsy-topbar-bg);
+            border-bottom: 1px solid var(--mugsy-border);
+            backdrop-filter: blur(14px) saturate(140%);
+        }
+.mugsy-topbar-logo {
+            height: 38px;
+            max-width: 128px;
+            object-fit: contain;
+        }
+.mugsy-menu-jump,
+        .mugsy-order-main,
+        .mugsy-link {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            border: 1px solid var(--mugsy-border);
+            text-decoration: none;
+            font-weight: 900;
+            color: var(--mugsy-text);
+            background: var(--mugsy-surface);
+        }
+.mugsy-menu-jump {
+            width: 44px;
+            font-size: 1.25rem;
+        }
+.mugsy-order-main {
+            grid-column: 4;
+            padding: 0 14px;
+            background: var(--mugsy-red);
+            border-color: transparent;
+            color: var(--mugsy-accent-text);
+            font-size: 0.78rem;
+            white-space: nowrap;
+        }
+.mugsy-hero {
+            position: relative;
+            min-height: clamp(320px, 52svh, 500px);
+            display: flex;
+            align-items: flex-end;
+            overflow: hidden;
+            border-bottom: 1px solid var(--mugsy-border);
+        }
+.mugsy-hero-img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+        }
+.mugsy-hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(180deg, rgba(29,29,29,0.10) 0%, rgba(29,29,29,0.12) 38%, rgba(29,29,29,0.76) 100%),
+                linear-gradient(135deg, rgba(217,46,39,0.22), transparent 46%);
+        }
+.mugsy-hero-copy {
+            position: relative;
+            z-index: 1;
+            width: min(100%, 1120px);
+            margin: 0 auto;
+            padding: 86px 18px 28px;
+            color: #FFFDF7;
+        }
+.mugsy-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0 0 10px;
+            font-size: 0.72rem;
+            font-weight: 900;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #FFC84A;
+        }
+.mugsy-kicker::before {
+            content: "";
+            width: 18px;
+            height: 18px;
+            border: 3px solid currentColor;
+            border-radius: 50%;
+            box-shadow: inset 0 0 0 3px rgba(29,29,29,0.34);
+        }
+.mugsy-title {
+            max-width: 780px;
+            font-family: 'Bebas Neue', 'Nunito', sans-serif;
+            font-size: clamp(3.2rem, 14vw, 6.4rem);
+            line-height: 0.88;
+            letter-spacing: 0;
+            text-transform: uppercase;
+            margin: 0;
+            text-shadow: 0 8px 24px rgba(0,0,0,0.34);
+        }
+.mugsy-copy {
+            max-width: 560px;
+            margin: 12px 0 0;
+            font-size: clamp(0.92rem, 2.5vw, 1.06rem);
+            line-height: 1.45;
+            font-weight: 800;
+        }
+.mugsy-actions,
+        .mugsy-footer-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+        }
+.mugsy-link.primary {
+            background: var(--mugsy-mustard);
+            border-color: transparent;
+            color: #2D1B14;
+            padding: 0 18px;
+        }
+.mugsy-order-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+.mugsy-link {
+            padding: 0 16px;
+            font-size: 0.82rem;
+        }
+.mugsy-delivery-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--mugsy-surface);
+            border: 1px solid var(--mugsy-border);
+            box-shadow: var(--mugsy-shadow-card);
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+.mugsy-delivery-btn:focus-visible {
+            outline: 3px solid var(--mugsy-focus);
+            outline-offset: 3px;
+        }
+.mugsy-delivery-icon {
+            width: 25px;
+            height: 25px;
+            display: block;
+            object-fit: contain;
+            border-radius: 7px;
+        }
+.mugsy-location-head {
+            margin: 0 0 12px;
+            font-size: 0.82rem;
+            font-weight: 900;
+            color: var(--mugsy-red-deep);
+            text-transform: uppercase;
+        }
+.mugsy-location-list {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 10px;
+        }
+.mugsy-location {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            min-height: 58px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: var(--mugsy-surface);
+            border: 1px solid var(--mugsy-border);
+            color: var(--mugsy-text);
+            text-decoration: none;
+            font-weight: 900;
+            min-width: 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+.mugsy-location span:first-child {
+            min-width: 0;
+            overflow-wrap: anywhere;
+        }
+.mugsy-location span:last-child {
+            color: var(--mugsy-red);
+            white-space: nowrap;
+        }
+.mugsy-empty {
+            grid-column: 1 / -1;
+            padding: 26px 18px;
+            border-radius: 16px;
+            background: var(--mugsy-empty-bg);
+            border: 1px solid var(--mugsy-border);
+        }
+.mugsy-empty-title {
+            margin: 0 0 8px;
+            color: var(--mugsy-red-deep);
+            font-size: 1.25rem;
+            font-weight: 900;
+        }
+.mugsy-empty-copy {
+            margin: 0;
+            color: var(--mugsy-dim);
+            line-height: 1.5;
+            font-weight: 700;
+        }
+@media (min-width: 1040px) {
+.mugsy-delivery-btn {
+                width: 50px;
+                height: 50px;
+            }
+.mugsy-delivery-icon {
+                width: 30px;
+                height: 30px;
+            }
+}
+@media (max-width: 380px) {
+.mugsy-topbar {
+                gap: 6px;
+                padding-left: calc(8px + env(safe-area-inset-left, 0px));
+                padding-right: calc(8px + env(safe-area-inset-right, 0px));
+                grid-template-columns: minmax(58px, 1fr) 44px 44px minmax(58px, auto) 44px;
+            }
+.mugsy-topbar-logo {
+                max-width: 86px;
+            }
+.mugsy-order-main {
+                padding: 0 8px;
+                font-size: 0.72rem;
+            }
+.mugsy-delivery-btn {
+                width: 38px;
+                height: 38px;
+            }
+.mugsy-delivery-icon {
+                width: 23px;
+                height: 23px;
+            }
+}
+@media (max-height: 560px) {
+.mugsy-hero {
+                min-height: 300px;
+            }
+}
+/* ── PIPES Fabrika shell — exact restaurant + brand gate ─────── */
+        .pipes-shell,
+        .pipes-signature,
+        .pipes-location,
+        .pipes-footer { display: none; }
+.pipes-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 1220;
+            min-height: calc(58px + env(safe-area-inset-top, 0px));
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: 12px;
+            padding: calc(8px + env(safe-area-inset-top, 0px)) calc(max(12px, env(safe-area-inset-right)) + 58px) 8px max(12px, env(safe-area-inset-left));
+            background: rgba(245,240,230,0.94);
+            border-bottom: 2px solid #171717;
+            backdrop-filter: blur(10px);
+        }
+.pipes-brand,
+        .pipes-links a,
+        .pipes-cta,
+        .pipes-map-link,
+        .pipes-footer a,
+        .pipes-footer button {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: inherit;
+            text-decoration: none;
+        }
+.pipes-brand { gap: 8px; font-weight: 900; }
+.pipes-mark,
+        .pipes-title,
+        .pipes-section-head h2,
+        .pipes-signature-name,
+        .pipes-location h2,
+        .pipes-footer-brand {
+            font-family: 'Anton', 'Nunito', sans-serif;
+            letter-spacing: 0;
+            text-transform: uppercase;
+        }
+.pipes-mark { font-size: 1.42rem; line-height: 1; }
+.pipes-branch {
+            padding: 4px 7px;
+            background: #F4C542;
+            border: 2px solid #171717;
+            transform: rotate(-2deg);
+            font-size: 0.7rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+.pipes-links { display: none; justify-content: center; gap: 4px; }
+.pipes-links a { padding: 0 12px; font-size: 0.76rem; font-weight: 900; text-transform: uppercase; }
+.pipes-tools { display: flex; align-items: center; justify-content: flex-end; min-width: 0; gap: 6px; }
+.pipes-search {
+            width: min(42vw, 250px);
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0 48px 0 10px;
+            border: 2px solid #171717;
+            background: #FFFDF7;
+            box-shadow: 3px 3px 0 rgba(23,23,23,0.14);
+        }
+.pipes-search input {
+            width: 100%;
+            min-height: 44px;
+            min-width: 0;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            color: #171717;
+            font: inherit;
+            font-size: 16px;
+            font-weight: 800;
+        }
+.pipes-search-icon { font-size: 1.2rem; font-weight: 900; }
+.pipes-search-clear {
+            position: absolute;
+            right: calc(max(12px, env(safe-area-inset-right)) + 51px);
+            width: 34px;
+            height: 34px;
+            border: 0;
+            background: transparent;
+            color: #171717;
+            font-size: 1.6rem;
+            font-weight: 900;
+        }
+.pipes-hero {
+            min-height: clamp(400px, 72svh, 620px);
+            display: grid;
+            grid-template-rows: minmax(190px, 1fr) auto;
+            align-items: end;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 16px max(14px, env(safe-area-inset-right)) 28px max(14px, env(safe-area-inset-left));
+            position: relative;
+            overflow: hidden;
+        }
+.pipes-hero-art { position: relative; min-height: 210px; isolation: isolate; }
+.pipes-hero-img {
+            position: absolute;
+            right: -22px;
+            bottom: -6px;
+            width: min(84vw, 520px);
+            max-height: 330px;
+            object-fit: contain;
+            filter: drop-shadow(12px 14px 0 rgba(23,23,23,0.18));
+            z-index: 2;
+        }
+.pipes-poster {
+            position: absolute;
+            z-index: 1;
+            border: 2px solid #171717;
+            background: #F4C542;
+            color: #171717;
+            font-weight: 900;
+            text-transform: uppercase;
+            box-shadow: 5px 5px 0 rgba(23,23,23,0.18);
+        }
+.poster-one { left: 4px; top: 16px; padding: 12px 16px; transform: rotate(-4deg); }
+.poster-two { left: 58px; bottom: 28px; padding: 8px 12px; background: #B7D936; transform: rotate(3deg); font-size: 0.74rem; }
+.pipes-hero-copy { position: relative; z-index: 3; max-width: 720px; }
+.pipes-kicker,
+        .pipes-section-head p,
+        .pipes-location-kicker {
+            margin: 0 0 8px;
+            color: #C7431C;
+            font-size: 0.74rem;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+.pipes-title {
+            margin: 0;
+            max-width: 12ch;
+            font-size: clamp(3rem, 13vw, 7rem);
+            line-height: 0.9;
+        }
+.pipes-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.pipes-cta,
+        .pipes-map-link {
+            padding: 0 18px;
+            border: 2px solid #171717;
+            background: #F05A28;
+            color: #FFFDF7;
+            box-shadow: 4px 4px 0 #171717;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+.pipes-cta.secondary { background: #FFFDF7; color: #171717; }
+.pipes-signature { max-width: 1180px; margin: 24px auto 0; padding: 0 max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); }
+.pipes-section-head { margin-bottom: 10px; }
+.pipes-section-head h2 { margin: 0; }
+.pipes-signature-card {
+            display: grid;
+            grid-template-columns: 42% minmax(0, 1fr);
+            gap: 14px;
+            align-items: stretch;
+            border: 2px solid #171717;
+            background: #171717;
+            color: #FFFDF7;
+            box-shadow: 6px 6px 0 #F05A28;
+            overflow: hidden;
+        }
+.pipes-signature-card img { width: 100%; height: 100%; min-height: 180px; object-fit: cover; background: #E9E3D7; }
+.pipes-signature-body { padding: 16px 16px 16px 0; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+.pipes-signature-name { margin: 0; font-size: clamp(1.7rem, 7vw, 3rem); line-height: 1; }
+.pipes-signature-desc { margin: 0; color: #F8F4EA; line-height: 1.45; font-weight: 700; }
+.pipes-signature-price { margin: 0; color: #F4C542; font-family: 'Anton', 'Nunito', sans-serif; font-size: 1.35rem; }
+.pipes-empty {
+            grid-column: 1 / -1;
+            padding: 24px 16px;
+            border: 2px solid #171717;
+            background: #FFFDF7;
+            box-shadow: 5px 5px 0 rgba(23,23,23,0.18);
+            font-weight: 800;
+        }
+.pipes-location { background: #171717; color: #F8F4EA; margin-top: 28px; border-top: 4px solid #F05A28; }
+.pipes-location-inner { max-width: 1180px; margin: 0 auto; padding: 28px max(14px, env(safe-area-inset-right)) 30px max(14px, env(safe-area-inset-left)); }
+.pipes-location-kicker { color: #F4C542; }
+.pipes-location h2 { margin: 0 0 8px; }
+.pipes-location-address { margin: 0 0 16px; color: #E9E3D7; font-weight: 800; }
+.pipes-footer {
+            background: #171717;
+            color: #F8F4EA;
+            border-top: 2px solid #F05A28;
+            padding: 16px max(14px, env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left));
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px 14px;
+            font-size: 0.8rem;
+            font-weight: 800;
+        }
+.pipes-footer-brand { color: #F4C542; font-size: 1.2rem; }
+.pipes-footer-sep { width: 36px; height: 4px; background: #F05A28; }
+.pipes-footer a,
+        .pipes-footer button { min-width: 44px; border: 0; padding: 0; background: transparent; color: #F4C542; font: inherit; text-transform: uppercase; }
+@media (min-width: 700px) {
+.pipes-links { display: flex; }
+.pipes-search { width: min(24vw, 280px); }
+.pipes-hero {
+                grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
+                grid-template-rows: 1fr;
+                min-height: clamp(480px, 64svh, 620px);
+            }
+.pipes-hero-copy { grid-column: 1; grid-row: 1; align-self: end; }
+.pipes-hero-art { grid-column: 2; grid-row: 1; align-self: stretch; }
+.pipes-hero-img { right: 0; bottom: 26px; width: min(44vw, 580px); max-height: 440px; }
+}
+@media (max-width: 520px) {
+.pipes-topbar { grid-template-columns: auto minmax(0, 1fr) 44px; gap: 8px; }
+.pipes-tools { grid-column: 1 / 4; grid-row: 2; justify-content: stretch; }
+.pipes-search { width: 100%; }
+.pipes-search-clear { right: calc(max(12px, env(safe-area-inset-right)) + 6px); bottom: 13px; }
+.pipes-signature-card { grid-template-columns: 1fr; }
+.pipes-signature-body { padding: 0 14px 16px; }
+}
+/* ── Order / social links ───────────────────────────────────────
+           A row of pills, each carrying the platform's own mark. Icon plus
+           label rather than icon-only: five unlabelled marks are a guessing
+           game for anyone who does not already use all five apps, and the
+           label is what a screen reader announces. */
+        .venue-links { display: none; }
+/* ── Map ────────────────────────────────────────────────────────
+           Rendered only when the tenant sets a map URL, and the iframe is not
+           created until then, so no tenant pays for Google's payload by
+           default. */
+        .venue-map { display: none; }
+/* Burger Planet only: delivery-app CTA row. Lives inside the sticky
+           #cat-bar (see modern_cafe's `.cat-bar { position: sticky; top: 0 }
+`
+           above) so it travels with the nav and stays reachable the whole time
+           someone is browsing -- this kitchen has very limited seating and
+           depends on Wolt/Glovo/Bolt orders, so the whole point of the menu is
+           getting people to one of those apps, not just showing dishes. Kept to
+           one slim row (not the full item-card treatment) since it's permanent
+           screen real estate on every scroll, not a one-time banner. */
+        .bp-delivery-row { display: none; }
+/* ── Quantity stepper (add-to-basket control) ── */
+        .qty-ctrl { flex-shrink: 0; }
+.qty-add-btn {
+            background: transparent;
+            color: var(--add-btn-color, var(--accent));
+            border: 1.5px solid var(--add-btn-color, var(--accent));
+            border-radius: 9px;
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background var(--t), color var(--t), border-color var(--t), opacity 0.15s;
+            touch-action: manipulation;
+        }
+.qty-add-btn:active { opacity: 0.7; transition: opacity 0.08s; }
+.qty-stepper {
+            display: none;
+            align-items: stretch;
+            border: 1.5px solid var(--accent);
+            border-radius: 9px;
+            overflow: hidden;
+            height: 34px;
+            box-sizing: border-box;
+            transition: border-color var(--t);
+        }
+.qty-stepper.visible { display: flex; }
+.qty-dec, .qty-inc {
+            background: transparent;
+            border: none;
+            color: var(--accent);
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 0 10px;
+            cursor: pointer;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            touch-action: manipulation;
+            transition: background var(--t), color var(--t);
+            user-select: none;
+        }
+.qty-dec { border-right: 1px solid var(--accent); }
+.qty-inc { border-left:  1px solid var(--accent); }
+.qty-dec:active, .qty-inc:active {
+            background: var(--accent);
+            color: var(--accent-text);
+            transition: none;
+        }
+.qty-num {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            color: var(--accent);
+            min-width: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 2px;
+            user-select: none;
+            transition: color var(--t);
+        }
+/* ── Basket bar (fixed bottom) ── */
+        #basket-bar {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: var(--cta-bg);
+            color: var(--accent-text);
+            padding: 15px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 5000;
+            cursor: pointer;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), background var(--t);
+            touch-action: manipulation;
+            font-family: 'Nunito', sans-serif;
+        }
+#basket-bar.visible { transform: translateY(0); }
+body.basket-bar-visible { padding-bottom: 80px; }
+#basket-bar-count { font-size: 0.82rem; font-weight: 700; }
+#basket-bar-delete {
+            background: transparent;
+            border: 1.5px solid var(--accent-text);
+            border-radius: 8px;
+            padding: 6px 10px;
+            cursor: pointer;
+            color: var(--accent-text);
+            display: flex;
+            align-items: center;
+            opacity: 0.75;
+            touch-action: manipulation;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
+        }
+#basket-bar-delete:active { opacity: 1; transition: none; }
+#basket-bar-total {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 2px;
+        }
+/* ── Basket panel ── */
+        #basket-panel {
+            position: fixed;
+            inset: 0;
+            z-index: 9000;
+            display: none;
+            flex-direction: column;
+            background: var(--bg);
+            color: var(--text);
+            opacity: 0;
+            transition: opacity 0.22s ease, background var(--t), color var(--t);
+        }
+#basket-panel.active { opacity: 1; }
+.basket-header {
+            display: flex;
+            align-items: center;
+            padding: 20px 20px 14px;
+            border-bottom: 1px solid var(--border);
+            gap: 10px;
+            transition: border-color var(--t);
+        }
+#basket-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            letter-spacing: 4px;
+            color: var(--text);
+            flex: 1;
+            transition: color var(--t);
+        }
+#basket-clear {
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--dim);
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: border-color var(--t), color var(--t);
+        }
+#basket-close {
+            background: var(--card2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 8px 14px;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text);
+            cursor: pointer;
+            touch-action: manipulation;
+            transition: background var(--t), color var(--t), border-color var(--t);
+        }
+#basket-items {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 20px;
+        }
+.basket-empty {
+            color: var(--dim);
+            text-align: center;
+            padding: 48px 0;
+            font-size: 0.9rem;
+            transition: color var(--t);
+        }
+.basket-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 13px 0;
+            border-bottom: 1px solid var(--border);
+            transition: border-color var(--t);
+        }
+.basket-item-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.basket-item-name {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            color: var(--text);
+            transition: color var(--t);
+        }
+.basket-item-addons {
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.66rem;
+            font-weight: 700;
+            color: var(--dim);
+            transition: color var(--t);
+        }
+.basket-qty {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--card2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 3px 8px;
+            transition: background var(--t), border-color var(--t);
+        }
+.qty-btn {
+            background: transparent;
+            border: none;
+            color: var(--text);
+            font-size: 1.1rem;
+            width: 26px;
+            height: 26px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+            transition: color var(--t);
+        }
+.qty-count {
+            font-weight: 700;
+            font-size: 0.88rem;
+            min-width: 18px;
+            text-align: center;
+            color: var(--text);
+            transition: color var(--t);
+        }
+.basket-item-price {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1rem;
+            letter-spacing: 1px;
+            color: var(--text);
+            min-width: 56px;
+            text-align: right;
+            transition: color var(--t);
+        }
+.basket-footer {
+            padding: 16px 20px;
+            border-top: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: border-color var(--t);
+        }
+#basket-total-label {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.2rem;
+            letter-spacing: 3px;
+            color: var(--text);
+            transition: color var(--t);
+        }
+#basket-total {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2rem;
+            letter-spacing: 3px;
+            color: var(--text);
+            transition: color var(--t);
+        }
+/* ── Show-to-staff button (in basket footer) ── */
+        .basket-footer { flex-direction: column; gap: 12px; }
+.basket-total-row {
+            display: flex; align-items: center; justify-content: space-between;
+            width: 100%;
+        }
+#basket-waiter-btn {
+            width: 100%;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            padding: 13px 18px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.15rem; letter-spacing: 2px;
+            color: var(--accent-text); background: var(--cta-bg);
+            border: none; border-radius: 12px; cursor: pointer;
+            transition: opacity 0.15s ease, transform 0.1s ease;
+        }
+#basket-waiter-btn:active { transform: scale(0.98); }
+#basket-waiter-btn:disabled { opacity: 0.55; cursor: default; }
+/* Burger Planet only: no waiters, so "Show to staff" is demoted to a
+           small secondary option below the actual checkout path (the delivery
+           buttons). Kept, not removed -- pending a decision with the owner. */
+        .bp-basket-delivery { display: none; }
+/* ── Show-to-staff QR overlay ── */
+        #waiter-overlay {
+            position: fixed; inset: 0; z-index: 100000; /* above basket-panel (9000) — it opens from within the basket */
+            display: none; align-items: center; justify-content: center;
+            padding: 24px;
+            background: rgba(0,0,0,0.74);
+            -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+        }
+#waiter-overlay.active { display: flex; }
+#waiter-card {
+            position: relative;
+            background: #fff; color: #111;
+            border-radius: 20px;
+            padding: 26px 24px 22px;
+            width: 100%; max-width: 340px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+        }
+#waiter-overlay-close {
+            position: absolute; top: 8px; right: 12px;
+            width: 34px; height: 34px;
+            border: none; background: transparent;
+            font-size: 1.7rem; line-height: 1; color: #999; cursor: pointer;
+        }
+#waiter-overlay-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.5rem; letter-spacing: 2px; color: #111;
+            margin-bottom: 16px;
+        }
+#waiter-qr {
+            width: 240px; height: 240px; margin: 0 auto;
+            display: flex; align-items: center; justify-content: center;
+        }
+#waiter-qr svg { width: 100%; height: 100%; display: block; }
+#waiter-qr img { width: 100%; height: 100%; image-rendering: pixelated; }
+#waiter-overlay-hint {
+            margin-top: 16px; font-size: 0.85rem; color: #555; line-height: 1.4;
+        }
+@media (max-width: 639px) {
+[data-phone-layout="twin"] .menu-list {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 12px;
+                max-width: 520px;
+                /* stretch (not start): two dishes with different name lengths must not
+                   leave the price/cart row sitting at two different heights across a
+                   row -- see .item-right below, which is what actually claims the
+                   extra space this creates. */
+                align-items: stretch;
+            }
+[data-phone-layout="twin"] .category-header { grid-column: 1 / -1; }
+[data-phone-layout="twin"] .menu-item {
+                display: flex;
+                flex-direction: column;
+                padding: 0;
+                overflow: hidden;
+            }
+[data-phone-layout="twin"] .item-left { order: 1; width: 100%; }
+[data-phone-layout="twin"] .item-left { min-width: 0; overflow: hidden; }
+[data-phone-layout="twin"] .item-left .thumb-wrap,
+            [data-phone-layout="twin"] .thumb-wrap {
+                width: 100%;
+                max-width: 100%;
+                flex-basis: auto;
+                height: auto;
+                aspect-ratio: 1 / 1;      /* big square photo ≈ 60–70% of the card */
+                min-height: unset;
+                border-radius: 14px 14px 0 0;
+                border-bottom: none;
+            }
+[data-phone-layout="twin"] .thumb-wrap .thumb-img,
+            [data-phone-layout="twin"] .thumb-wrap model-viewer {
+                height: 100%;
+                min-height: unset;
+            }
+[data-phone-layout="twin"] .badge-3d {
+                top: 8px; left: 8px; right: auto; bottom: auto;
+                border-radius: 7px;
+                font-size: 0.8rem;
+                padding: 2px 6px 3px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.35), 0 0 14px var(--glow);
+            }
+[data-phone-layout="twin"] .item-name {
+                order: 2;
+                padding: 7px 10px 0;
+                font-size: 0.98rem;
+                line-height: 1.12;
+                overflow-wrap: anywhere;
+            }
+[data-phone-layout="twin"] .item-right {
+                order: 3;
+                padding: 6px 10px 9px;
+                gap: 6px;
+                /* .menu-item is now stretched to match its row-mate's height (see
+                   .menu-list above); .item-right must claim that extra space itself
+                   -- it doesn't happen automatically just because the outer card grew.
+                   Its only child here is .item-actions (ingredients is hidden in twin
+                   mode), so the base rule's `justify-content: space-between` has
+                   nothing to space between and would leave it stuck at the top --
+                   flex-end pins it to the bottom of the now-taller card instead. */
+                flex: 1;
+                justify-content: flex-end;
+            }
+[data-phone-layout="twin"] .item-right .ingredients { display: none; }
+[data-phone-layout="twin"] .item-actions { margin-top: 0; min-height: 0; }
+[data-phone-layout="twin"] .price { font-size: 0.92rem; }
+[data-phone-layout="twin"] .qty-add-btn,
+            [data-phone-layout="twin"] .qty-stepper { height: 28px; border-radius: 8px; }
+[data-phone-layout="twin"] .qty-add-btn { width: 28px; }
+[data-phone-layout="twin"] .qty-add-btn svg { width: 14px; height: 14px; }
+[data-phone-layout="twin"] .qty-dec,
+            [data-phone-layout="twin"] .qty-inc { padding: 0 8px; font-size: 0.9rem; }
+[data-phone-layout="twin"] .qty-num { font-size: 0.9rem; min-width: 18px; }
+[data-phone-layout="twin"] .ar-btn {
+                width: 100%;
+                padding: 6px;
+                font-size: 0.6rem;
+                border-radius: 8px;
+            }
+/* Twin layout was built for photo cards (square image, name,
+               price/cart) and never accounted for text-only items -- a
+               no-image card fell back to the generic
+               [data-phone-layout="twin"] .menu-item { display:flex; padding:0 }
+rule, which strips the card's padding (description text touches
+               the card edge / overflows above it) and leaves every child at
+               its default flex order (0) except .item-name/.item-right, which
+               that same generic rule pins to order 2/3 -- so the description
+               (still order 0) sorted BEFORE the name instead of after it.
+               Higher specificity here ((0,3,0) vs the generic rule's (0,2,0))
+               guarantees this wins regardless of source order. Unlike photo
+               cards, the description stays visible: a photo already shows
+               what a dish is, but a no-image card has nothing else to. */
+            [data-phone-layout="twin"] .menu-item.no-image {
+                display: flex;
+                flex-direction: column;
+                padding: 10px 12px 9px;
+            }
+[data-phone-layout="twin"] .menu-item.no-image .item-name {
+                order: 1;
+                padding: 0 0 4px;
+            }
+[data-phone-layout="twin"] .menu-item.no-image .ingredients {
+                order: 2;
+                display: block;
+                font-size: 0.66rem;
+                margin: 0 0 8px;
+            }
+[data-phone-layout="twin"] .menu-item.no-image .item-right {
+                /* .menu-item.no-image .item-right sets display:block elsewhere (built
+                   for the grid-based no-image layout, where block is correct for a
+                   grid-area). That rule is still higher-specificity than the generic
+                   twin .item-right{display:flex}, and a property this block doesn't
+                   redeclare still falls through to it -- so display/flex-direction
+                   have to be repeated here, or justify-content below is a no-op on a
+                   block box and .item-actions sits at the top instead of the bottom. */
+                display: flex;
+                flex-direction: column;
+                order: 3;
+                flex: 1;
+                justify-content: flex-end;
+                padding: 0;
+            }
+}
+@media (min-width: 640px) {
+body { padding: 0 32px 64px; }
+[data-template="monday_greens"] body { padding-left: 0; padding-right: 0; }
+[data-template="monday_greens"] .cat-bar,
+            [data-template="monday_greens"] .menu-list,
+            [data-template="monday_greens"] .site-footer {
+                width: calc(100% - 64px);
+            }
+.header, .cat-bar { max-width: 880px; }
+.cat-filter { max-width: 100%; justify-content: safe center; }
+.menu-list {
+                max-width: 880px;
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 16px;
+                /* stretch, not start -- see the matching comment on the twin-layout
+                   .menu-list above. This rule is shared by every template that
+                   doesn't override its own .menu-list here (i.e. most of them,
+                   and the >=1100px 3-column grid below, which doesn't redeclare
+                   align-items and so inherits this), so the fix applies platform-
+                   wide, not just to Monday Greens. */
+                align-items: stretch;
+            }
+.category-header {
+                max-width: none;
+                grid-column: 1 / -1;
+                padding: 24px 2px 10px;
+            }
+.menu-item {
+                display: flex;
+                flex-direction: column;
+                padding: 0;
+                overflow: hidden;
+            }
+.menu-item.no-image {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-areas: "name right"
+                                     "desc right";
+                padding: 12px 14px;
+            }
+.menu-item.no-image .item-name,
+            .menu-item.no-image .item-right {
+                padding: 0;
+            }
+.item-left { order: 1; width: 100%; }
+.item-name { order: 2; padding: 10px 14px 4px; }
+.item-right { order: 3; padding: 4px 14px 14px; flex: 1; }
+.item-left .thumb-wrap {
+                width: 100%;
+                height: 220px;
+                min-height: unset;
+                border-radius: 16px 16px 0 0;
+                border-bottom: none;
+            }
+}
+@media (min-width: 1100px) {
+.header, .cat-bar { max-width: 1160px; }
+.menu-list {
+                max-width: 1160px;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 20px;
+            }
+.item-left .thumb-wrap { height: 240px; }
+}
+/* ── Modal AR button ── */
+        #modal-ar-btn {
+            display: none;
+            background: var(--cta-bg);
+            color: var(--accent-text);
+            border: none;
+            border-radius: 14px;
+            padding: 15px 0;
+            width: 100%;
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 16px;
+            box-shadow: var(--cta-shadow);
+            transition: background var(--t), opacity 0.15s, transform 0.12s;
+            touch-action: manipulation;
+        }
+#modal-ar-btn:active { transform: scale(0.97); }
+#modal-ar-btn:active { opacity: 0.7; transition: opacity 0.08s; }
+#modal-ar-btn:disabled { opacity: 0.45; cursor: wait; }
+@media (max-width: 639px) {
+#modal {
+                justify-content: flex-start;
+                padding:
+                    max(68px, calc(env(safe-area-inset-top, 0px) + 58px))
+                    14px
+                    max(12px, env(safe-area-inset-bottom, 0px));
+                gap: 6px;
+            }
+#modal-title {
+                flex: 0 0 auto;
+                margin: 0;
+                padding: 0 58px;
+                font-size: clamp(1.55rem, 7vw, 2.2rem);
+                line-height: 1.02;
+                /* Room for a long name. Deliberately NOT in `em`: _fitModalTitle()
+                   shrinks the font to make the text fit, and an em cap would shrink
+                   the box just as fast, so it could never catch up. The viewer below
+                   is `flex: 1 1 auto` with its own min-height, so it absorbs whatever
+                   the title doesn't use. overflow stays as a last-resort guard. */
+                max-height: min(19vh, 152px);
+                overflow: hidden;
+            }
+#modal-viewer-wrap {
+                flex: 1 1 auto;
+                width: min(100%, 520px);
+                min-height: 160px;
+                height: auto;
+                margin-top: 0;
+            }
+#modal-viewer {
+                height: 100%;
+                min-height: 160px;
+            }
+#modal-drawer {
+                flex: 0 0 auto;
+                max-height: min(42svh, 270px);
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+                padding: 0 2px;
+            }
+#modal-price {
+                margin-top: 2px;
+                font-size: clamp(1.3rem, 5.8vw, 1.85rem);
+                line-height: 1;
+            }
+#modal-drawer-body > div {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                min-height: 0;
+                padding-bottom: 2px;
+            }
+.nav-arrow {
+                top: calc(max(68px, calc(env(safe-area-inset-top, 0px) + 58px)) + 34svh);
+                width: 42px;
+                height: 42px;
+                font-size: 1.25rem;
+            }
+.left-arrow { left: max(8px, env(safe-area-inset-left, 0px)); }
+.right-arrow { right: max(8px, env(safe-area-inset-right, 0px)); }
+#modal-ar-btn {
+                order: 1;
+                max-width: 340px;
+                margin: 8px auto 0;
+                padding: 13px 12px;
+            }
+#modal-qty-wrap {
+                order: 2;
+                margin-top: 8px;
+            }
+#modal-description {
+                order: 3;
+                width: 100%;
+                max-width: 360px;
+                padding: 0 8px;
+                margin-top: 8px;
+                font-size: 0.76rem;
+                line-height: 1.35;
+            }
+#modal-message {
+                order: 4;
+                margin-top: 8px;
+            }
+#modal-tip {
+                order: 5;
+                margin-top: 6px;
+            }
+.close-btn {
+                top: max(12px, env(safe-area-inset-top, 0px));
+                right: max(12px, env(safe-area-inset-right, 0px));
+                z-index: 10002;
+            }
+.spin-btn {
+                top: max(10px, env(safe-area-inset-top, 0px));
+                left: max(10px, env(safe-area-inset-left, 0px));
+                z-index: 10002;
+            }
+}
+@media (min-width: 640px) and (max-height: 680px) {
+#modal-viewer-wrap {
+                bottom: min(var(--drawer-full-h, 300px), 48svh);
+            }
+#modal-drawer {
+                max-height: min(48svh, 320px);
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+            }
+#modal-drawer-body {
+                grid-template-rows: 1fr;
+            }
+#modal-drawer-body > div {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                overflow: visible;
+            }
+#modal-ar-btn {
+                order: 1;
+                margin-top: 10px;
+            }
+#modal-qty-wrap {
+                order: 2;
+                margin-top: 10px;
+            }
+#modal-description {
+                order: 3;
+                margin-top: 10px;
+            }
+#modal-message { order: 4; }
+#modal-tip { order: 5; }
+}
+/* ── AUREVANE / MINGLEYARD showcase finish ────────────────────────
+           Both fictional showcase templates reuse the tenant-driven shared
+           hero and generic venue markup. No source-tenant shell or facts are
+           borrowed here. */
+        .mg-hero-brand { display: none; }
+/* Hero with no photo. The headline is white and the kicker gold because
+           both are drawn over a dark photograph; with the photo removed they sit
+           on pale sand and all but vanish. This puts the dark surface back so the
+           type keeps the contrast it was designed for. Hand-written and placed
+           ABOVE the generated block on purpose — dupcss.js rewrites everything
+           from the marker below to the end of the stylesheet. */
+        .mugsy-hero.mugsy-hero-nophoto {
+            background: linear-gradient(180deg, #4a2f22 0%, #2D1B14 100%);
+        }
+#br-splash {position:fixed;inset:0;z-index:99999;background:var(--bg,#14100b);
+            display:flex;align-items:center;justify-content:center;
+            transition:opacity .45s ease, background .3s ease;}
+#br-splash.br-hide {opacity:0;pointer-events:none;}
+#br-splash .br-spin {width:38px;height:38px;border-radius:50%;
+            border:3px solid rgba(231,177,90,.25);border-top-color:var(--accent,#e7b15a);
+            animation:br-spin .8s linear infinite;}
+@keyframes br-spin {
+to {transform:rotate(360deg)}
+}
+#br-splash {display:none!important}

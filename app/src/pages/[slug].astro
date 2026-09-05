@@ -13,15 +13,31 @@
 //   model-viewer (~250 KB)    from the CDN, on demand, exactly as the platform does it.
 //   the models themselves     as thumbnails scroll into view, throttled.
 //
-// The CSS is still the platform's complete stylesheet. That is deliberate for now:
-// 75% of it is measurably unused by any one tenant, but a filtered stylesheet is a
-// DIFFERENT stylesheet - four separate "renders but looks wrong" bugs came from trimming
-// it by hand. It gets trimmed per template once there is a computed-style diff against
-// the live page to prove each cut is safe.
+// The CSS is trimmed per template - 347 KB down to ~114 KB - and the cut is a PROOF, not
+// a guess: only rules scoped to another template or tenant are removed, and those cannot
+// match this page. Hand-picking "unused" rules is what produced four separate "renders
+// but looks wrong" bugs; trimming the generic remainder waits for a computed-style diff
+// against the live page to prove each further cut.
 import { loadMenu, themeMode } from "../lib/menu.js";
 import { themeCss, settingsCss, fontLinks } from "../lib/theme.js";
 import { hero, header, catBar, menuList, toggles } from "../lib/markup.js";
-import fullCss from "../lib/full.css?raw";
+// One sheet per template, trimmed by `menu/render/trim_css.py`. The cut is only ever
+// rules scoped to ANOTHER template or tenant - those provably cannot match this page, so
+// it is a proof rather than the guess that produced four "renders but looks wrong" bugs.
+// 347 KB down to ~114 KB, and the remaining generic rules stay until a computed-style
+// diff against the live page can prove each further cut.
+import mondayGreensCss from "../lib/css/monday_greens.css?raw";
+import elegantBlackCss from "../lib/css/elegant_black.css?raw";
+
+const SHEETS = {
+  monday_greens: mondayGreensCss,
+  elegant_black: elegantBlackCss,
+};
+// Only two templates matter now - Monday Greens, and Corner at Tabidze on elegant_black.
+// Everything else waits for a later generation. A restaurant with no template chosen gets
+// Monday Greens, so a brand-new tenant has something coherent to look at rather than
+// unstyled markup.
+const DEFAULT_TEMPLATE = "monday_greens";
 
 const { slug } = Astro.params;
 const started = Date.now();
@@ -40,7 +56,8 @@ if (error) return new Response(`Menu unavailable: ${error}`, { status: 503 });
 const cfg = menu.config;
 const mode = themeMode(cfg);
 const lang = (menu.tenant.languages || ["en"])[0];
-const template = menu.tenant.template || "";
+const template = SHEETS[menu.tenant.template] ? menu.tenant.template : DEFAULT_TEMPLATE;
+const sheet = SHEETS[template];
 const title = cfg.site_name || menu.tenant.name;
 const vars = [themeCss(cfg, mode), settingsCss(cfg)].filter(Boolean).join(";");
 const buildMs = Date.now() - started;
@@ -68,7 +85,7 @@ const buildMs = Date.now() - started;
         these at runtime after fetching theme_config, which is the re-skin a diner
         watches happen; resolved here, there is no second state to flash to. */}
     <style set:html={`:root{${vars}}`} />
-    <style set:html={fullCss} />
+    <style set:html={sheet} />
     <Fragment set:html={fontLinks(cfg)} />
   </head>
   <body>
