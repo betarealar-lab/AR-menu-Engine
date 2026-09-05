@@ -2,3 +2,4 @@ requests>=2.31
 pillow>=10.0
 boto3>=1.34
 usd-core>=25.5
+psycopg[binary]

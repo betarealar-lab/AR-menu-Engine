@@ -285,8 +285,8 @@ real-world scale, judge with fault tags, rename, archive, the photo shelf, downl
 per-dish optimiser settings, queue depth and dead letters in the header, and a phone
 layout.
 
-**Run all three before pushing.** `check.py` covers 122 paths, `check_webhook.py` 26 and
-`check_jobs.py` 46 — 194 in total, all passing as of 2026-09-05. `check_webhook.py` and
+**Run all four before pushing.** `check.py` covers 122 paths, `check_webhook.py` 26,
+`check_jobs.py` 46 and `check_schema.py` 52 — 246 in total, all passing as of 2026-09-05. `check_webhook.py` and
 `check_jobs.py` use stubs and cost nothing; `check.py` needs a real master GLB, and there
 is one at `C:\Users\temot\Desktop\BetaReal-inspect\chicken-balls-in-shqmeruli-sauce--raw-full\model.glb`.
 
@@ -307,11 +307,31 @@ why the reconciler counts dead jobs — are in DECISIONS §5.1.
 **3 · Postgres** — only when the verdict log has enough in it to be worth querying.
 Deliberately deferred; the queue uses R2 conditional writes and that is enough.
 
-**4 · The self-serve menu (the Astro half).** The delivery half of the product, and the
-next real piece. It lives in **this repo** - confirmed 2026-09-05. **Read
-[MENU-PLATFORM.md](MENU-PLATFORM.md) and DECISIONS §9 before writing a line of it.**
-The one decision everything else hangs off: a diner request never touches the database.
-Publishing compiles the menu to an immutable snapshot on R2 and the menu page reads that.
+**4 · The self-serve menu (the Astro half) — STARTED 2026-09-05.** It lives in **this
+repo**. **Read [MENU-PLATFORM.md](MENU-PLATFORM.md) and DECISIONS §9 before writing a line
+of it.** The one decision everything else hangs off: a diner request never touches the
+database. Publishing compiles the menu to an immutable snapshot on R2, and the Worker
+renders complete HTML from that at the edge — never a shell that re-skins itself.
+
+Done so far — skeleton step 1 of MENU-PLATFORM §6:
+
+- **Supabase project on the BetaReal account** (`fxtsluuoddsmcugizere`, Frankfurt).
+  Automatic RLS on, "expose new tables" off, Data API on.
+- **`0001_skeleton`** — tenants, tenant_members, super_admins, templates, models,
+  categories, items, publications, live_publication. RLS enabled *and forced* on all of
+  them. No billing column anywhere, per DECISIONS §9.3.
+- **`0002_grants`** — `anon` is granted nothing, anywhere. Written because
+  `check_schema.py` failed on first run with every policy correct and every query denied:
+  a GRANT says whether a role may touch a table at all, a POLICY says which rows, and
+  they are not the same mechanism.
+- **`check_schema.py`** proves it rather than asserting it: two throwaway users, two
+  restaurants, then read and write across the boundary. The cross-tenant write is
+  verified to fail with *"new row violates row-level security policy"* specifically —
+  Postgres raises the same SQLSTATE for a missing grant, so catching the exception alone
+  would pass on a schema where tenancy did nothing.
+
+Next: **step 3, the publish path** — edit an item, publish, a snapshot lands on R2, a
+Worker renders it. Even with an ugly template that proves the whole architecture.
 
 **Not a phase:** hosting. It is a slider — 512 MB refuses raw masters, 2 GiB accepts
 them. Choose it, do not build it.
@@ -347,6 +367,12 @@ check.py           122 checks over a real server on a temp store. Never touches 
 check_webhook.py   26 checks of the submit/callback path with a stub engine, no credits
 check_jobs.py      46 checks of the queue, including eight threads racing one claim
                    and what an idle poll costs in R2 listings. Free, no server
+check_schema.py    52 checks of the menu platform's tenancy against the REAL
+                   Supabase project. Makes two restaurants and tries to read one
+                   as the other. Free; cleans up after itself
+menu/              the self-serve half. See MENU-PLATFORM.md before touching it
+menu/migrations/   numbered SQL, applied once each, checksummed
+menu/migrate.py    applies them. --status, --dry-run
 pull.py            pull a dish's files to a folder and compare them, for Blender
 preflight.py       verify key + R2 round-trip before spending anything
 runner.py          batch re-run the dataset against another engine
