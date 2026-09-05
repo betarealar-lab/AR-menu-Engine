@@ -74,8 +74,8 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
     """Everything the page needs, flattened. Pure: reads, returns, writes nothing."""
     with conn.cursor() as cur:
         cur.execute("""
-            select t.id, t.slug, t.name, t.template_id, t.theme,
-                   coalesce(tpl.defaults, '{}'::jsonb)
+            select t.id, t.slug, t.name, t.template_id, t.theme, t.settings,
+                   t.languages, coalesce(tpl.defaults, '{}'::jsonb)
             from tenants t
             left join templates tpl on tpl.id = t.template_id
             where t.id = %s
@@ -83,13 +83,14 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
         row = cur.fetchone()
         if not row:
             raise LookupError(f"no tenant {tenant_id}")
-        tid, slug, name, template_id, theme, defaults = row
+        tid, slug, name, template_id, theme, settings, languages, defaults = row
 
         cur.execute("""
-            select id, name, position from categories
+            select id, name, position, i18n from categories
             where tenant_id = %s and visible order by position, name
         """, (tenant_id,))
-        categories = [{"id": str(c[0]), "name": c[1], "position": c[2]}
+        categories = [{"id": str(c[0]), "name": c[1], "position": c[2],
+                       **_flat(c[3])}
                       for c in cur.fetchall()]
 
         # One query, one pass. The LEFT JOIN is filtered on `approved` rather than the
@@ -99,7 +100,10 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
             select i.id, i.name, i.description, i.price_minor, i.currency,
                    i.category_id, i.position, i.photo_key,
                    m.draco_key, m.usdz_key, m.poster_key, m.scale_cm, m.scale_axis,
-                   m.view_orbit
+                   m.view_orbit,
+                   i.i18n, i.price_text, i.price_old_minor, i.text_only, i.is_3d,
+                   i.thumb_3d, i.featured, i.variants, i.addons,
+                   m.external_glb, m.external_usdz, m.ar_scale
             from items i
             left join models m
                    on m.id = i.model_id
@@ -110,13 +114,23 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
         """, (tenant_id,))
         items = []
         for (iid, iname, desc, price, cur_code, cat, pos, photo,
-             draco, usdz, poster, scale_cm, scale_axis, orbit) in cur.fetchall():
+             draco, usdz, poster, scale_cm, scale_axis, orbit,
+             i18n, price_text, price_old, text_only, is_3d, thumb_3d, featured,
+             variants, addons, ext_glb, ext_usdz, ar_scale) in cur.fetchall():
+            # An imported model has absolute URLs; one of ours has R2 keys. Both travel
+            # in the same field and the renderer tells them apart by the scheme, so a
+            # template never has to care where a dish's files live.
+            draco = draco or ext_glb
+            usdz = usdz or ext_usdz
             model = None
             # A model with no shipping files is not a model. It happens: generation
             # succeeded and the optimiser has not run yet, because worker.py finishes
             # what a 512 MB host cannot. Publishing it would put an empty 3D button on a
             # real menu.
-            if draco or usdz:
+            # `is_3d` off means the dish keeps its model and behaves like a photo
+            # dish - a real case the platform learned the hard way, and one flag could
+            # not express it.
+            if (draco or usdz) and is_3d:
                 model = {
                     "draco": draco, "usdz": usdz, "poster": poster,
                     "scale_cm": float(scale_cm) if scale_cm is not None else None,
@@ -124,12 +138,27 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
                     # How to frame it. The renderer clamps and validates; a bad value
                     # here must render as "the default view", never as no page.
                     "orbit": orbit or None,
+                    # 1 for anything from our pipeline, which bakes real size into the
+                    # file. Only an imported model needs a multiplier.
+                    "ar_scale": float(ar_scale) if ar_scale is not None else 1.0,
+                    # Whether the CARD shows a live model or the photo. Off saves a
+                    # WebGL context and a download.
+                    "live_thumb": bool(thumb_3d),
                 }
             items.append({
                 "id": str(iid), "name": iname, "description": desc,
                 "price_minor": price, "currency": cur_code,
+                # Display override only, for prices no single number can express.
+                # Nothing ever totals it.
+                "price_text": price_text or None,
+                "price_old_minor": price_old or None,
                 "category_id": str(cat) if cat else None,
                 "position": pos, "photo": photo, "model": model,
+                "text_only": bool(text_only), "featured": bool(featured),
+                "variants": variants or [], "addons": addons or [],
+                # Flattened to the platform's own field names - `name_ka`, not a nested
+                # bag - so the ported `t(item, 'name')` works with no change at all.
+                **_flat(i18n),
             })
 
     # Template defaults under the tenant's own settings. A template can gain a setting
@@ -139,12 +168,32 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
 
     return {
         "format": FORMAT_VERSION,
-        "tenant": {"id": str(tid), "slug": slug, "name": name},
+        "tenant": {"id": str(tid), "slug": slug, "name": name,
+                   "languages": list(languages or ["en"])},
         "template": template_id,
         "theme": merged,
+        # Hero, logo, fonts, hours, address, socials. NOT the palette - the platform
+        # keeps both in one bag and a real tenant ends up with 104 keys of two kinds.
+        "settings": settings or {},
         "categories": categories,
         "items": items,
     }
+
+
+def _flat(i18n) -> dict:
+    """{"ka": {"name": "x"}} -> {"name_ka": "x"}.
+
+    Our column is a bag keyed by language so a restaurant in Warsaw needs no migration.
+    The PAGE wants the platform's flat field names, because `t(item, 'name')` is ported
+    verbatim and reads `item['name_' + lang]`. Flattening here means the storage can be
+    general and the renderer can stay unedited.
+    """
+    out = {}
+    for lang, fields in (i18n or {}).items():
+        for field, value in (fields or {}).items():
+            if value:
+                out[f"{field}_{lang}"] = value
+    return out
 
 
 def body_sha(snapshot: dict) -> str:

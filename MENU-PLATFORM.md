@@ -515,3 +515,74 @@ your own call produced.**
   ARCore phone. Never exercised.
 - **Whether iOS Quick Look opens.** Same — it needs an iPhone, and per HANDOFF §9 nobody
   on the team owns one.
+
+---
+
+## 9. The real Monday Greens, measured
+
+Pulled 2026-09-05 through the public read path the diner app already uses, authorised by
+Temo ("*it is niko's in a name but i am active CEO and co CTO i am the decision maker*").
+Read-only; nothing in the platform was touched.
+
+**It is an order of magnitude bigger than the schema assumed.**
+
+| | 0001 assumed | Live |
+|---|---|---|
+| Items | a handful | **170** |
+| Categories | 3 | **26** |
+| Bilingual items | 0 | **170** (en + ka) |
+| Items with variants | — | **30** |
+| Text-only items | — | **37** |
+| theme_config keys | 38 (a preset) | **104** — 68 palette, 30 settings, 6 camera angles |
+
+### 9.1 · Russian is a column, not a language
+
+The platform has `name_ru` and `description_ru`. **Every one of the 170 rows is empty**,
+and no category has a Russian name. Temo said so and the data agreed; an earlier note here
+listed the column as though it were in use, which is a different claim from the one the
+data supports.
+
+So 0004 does **not** copy their fixed `name_en`/`name_ka`/`name_ru` columns. Translations
+are `items.i18n`, a bag keyed by language, and `tenants.languages` says which a restaurant
+publishes. Georgia needs `ka`; the first restaurant in Warsaw needs `pl` and no migration.
+The snapshot compiler flattens the bag back to `name_ka` on the way out, so the ported
+`t(item, 'name')` works unedited.
+
+### 9.2 · A tenant is far more than a palette
+
+Of 104 theme keys, **30 are not colours at all**: `hero_image_url`, `hero_images`,
+`hero_logo_url`, `logo_url`, `font_body`, `font_heading`, `phone_layout`, `default_theme`,
+`drink_categories`, `site_address`, `site_hours_range`, `site_map_url`, `instagram_url`,
+`google_review_url`, and two delivery link pairs.
+
+The platform keeps all of it in one `theme_config` bag. 0004 splits them: `tenants.theme`
+is the palette that `theme.mjs` maps to CSS variables, `tenants.settings` is everything
+else. A theme editor should be a theme editor, not a settings page with colours in it.
+
+### 9.3 · Three display flags, not one
+
+`text_only` (37 items — a compact row, no media), `is_3d` (has a model *and* should offer
+3D/AR; off means the model stays attached and the dish behaves like a photo dish), and
+`thumb_3d` (the card thumbnail is a live model rather than a photo — off saves a WebGL
+context and a download). They mean different things and the platform learned that the hard
+way. All three are in 0004 and the compiler honours `is_3d`, which is why the snapshot
+shows 5 dishes with 3D where 7 models exist.
+
+### 9.4 · Prices: integers stay the truth
+
+The platform stores `price` as free text — `"28 ₾"`, and `"16 / 70 ₾"` where variants
+carry the real numbers. Integer minor units remain the truth here, because 12.30 as a
+float is 12.299999999999999. `price_text` exists as a **display override only**, for the
+cases no single number can express, and nothing ever totals it. On the live data **zero of
+170** prices needed it — the worry was theoretical.
+
+### 9.5 · Two things worth knowing about the live setup
+
+- Models are served from `pub-….r2.dev` — Cloudflare's **development** URL, which is rate
+  limited and documented as not for production. Diners load menus through it today. Not
+  ours to fix; worth someone knowing.
+- `import_live.py` and `import_tenant.py` are the **litmus fixture, not a migration
+  path.** DECISIONS §9.6 is unchanged: new self-serve tenants only, the platform keeps
+  serving its own. The import exists so the rebuild is compared against a real 170-item
+  bilingual menu instead of a screenshot — which is exactly how the first attempt ended up
+  looking wrong.
