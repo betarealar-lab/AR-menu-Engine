@@ -667,3 +667,48 @@ tests of the automatic four-photo pipeline, which is a different workflow and mu
 collapsed into them (see §4a/4b).
 
 **The system gets built first.** Models need real dishes, and the dishes are Temo's to bring.
+
+---
+
+## 10. Auto-publish on save
+
+Settled 2026-09-06. How a menu edit reaches a diner.
+
+**Publish-time, not request-time.** The page is built once when the menu changes and stored
+as a finished file. A diner's request touches no database at all — it is served from the
+edge, near them. Three consequences, in order of how much they matter:
+
+- **Speed.** No database on the request path, and the file can sit on Cloudflare's edge.
+  This is where most of the remaining load time goes.
+- **It does not scale with diners.** Postgres only ever sees owners — a few hundred people
+  — instead of every diner of every restaurant.
+- **A slow or broken database cannot take the menus down.** The thing a restaurant pays
+  for keeps serving.
+
+**And it auto-publishes on save**, so there is no button in the owner's way. They change a
+price, and that restaurant's page rebuilds behind them. To the owner it feels exactly like
+a live database; to a diner it is a static file.
+
+**Measured**, on the real 170-item Monday Greens:
+
+```
+query Postgres + shape the payload   329 ms     3 sequential queries, laptop -> Frankfurt
+assemble the finished page             6 ms     pure CPU - the actual building
+store to R2                          812 ms     827 KB, laptop -> R2
+                                    ~1.1 s      end to end from a laptop
+```
+
+Nearly all of that is a laptop crossing Europe twice. In a Worker beside the database and
+the bucket it is an estimated **~100-150 ms** — and the owner never waits for it either
+way, because it happens after the save is confirmed.
+
+A rebuild touches **one restaurant**. The cost never grows with how many tenants exist,
+only with how often one owner saves.
+
+**Two known wins already visible in those numbers:** the three queries should be one, and
+827 KB is only that large because the page currently inlines the whole app — per-tenant CSS
+shrinks the store step with it.
+
+**Later, if restaurants want it:** an optional *hold changes* mode — build a whole seasonal
+menu over a week, then flip it live in one go. That workflow only exists in the
+publish-time model; request-time has nothing to hold back.
