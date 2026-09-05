@@ -32,7 +32,8 @@ OUT = HERE / "ported.mjs"
 
 # Order matters at runtime: xr defines window.XR, the shim defines what viewer.js expects,
 # viewer.js then wires the modal and AR on top of both.
-FILES = ["viewer.css", "menu.css", "viewer.html", "xr.js", "shim.js", "viewer.js"]
+FILES = ["viewer.css", "menu.css", "viewer.html", "xr.js", "shim.js", "viewer.js",
+         "page.js"]
 
 # Every template's rules and every preset's values. Both are DATA - the point of
 # MENU-PLATFORM 2.2 is that a restaurant look is a row, not a branch - so each is

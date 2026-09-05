@@ -36,45 +36,17 @@
 
 import {
   VIEWER_CSS, MENU_CSS, VIEWER_HTML,
-  XR_JS, SHIM_JS, VIEWER_JS,
+  XR_JS, SHIM_JS, VIEWER_JS, PAGE_JS,
   TEMPLATE_CSS, PRESETS,
 } from "./ported.mjs";
 import { themeVars, themeMode } from "./theme.mjs";
-
-const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-
-/** A menu is a stranger's typing the moment self-serve exists: dish names and
- *  descriptions are written by a restaurant we have never met and land in HTML. */
-const e = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
-
-/** 1250 -> "12.50". Integer minor units to the last possible moment, because 12.30 as a
- *  float is 12.299999999999999 and a menu that disagrees with the till by a tetri is a
- *  menu nobody trusts. */
-const money = (minor, currency) => {
-  const sym = { GEL: "₾", USD: "$", EUR: "€", GBP: "£" }[currency] || "";
-  return `${sym}${(Math.round(minor) / 100).toFixed(2)}`;
-};
-
-/** Grouped for display without a query. The snapshot arrives ordered, so this is a
- *  partition - the ordering decision was made once, at publish time. */
-const group = (snap) => {
-  const cats = snap.categories || [];
-  const byId = new Map(cats.map((c) => [c.id, { ...c, items: [] }]));
-  const loose = { id: null, name: "", items: [] };
-  for (const it of snap.items || []) {
-    (byId.get(it.category_id) || loose).items.push(it);
-  }
-  const out = [...byId.values()].filter((c) => c.items.length);
-  if (loose.items.length) out.push(loose);
-  return out;
-};
+import { e, hero, header, catBar, menuList, langBar } from "./components.mjs";
 
 export function renderMenu(snap, opts = {}) {
   // Keys, never URLs, live in the snapshot (§2.6) - the buckets are private and a baked
   // URL would be one that expires inside an object meant to be immutable.
   const asset = (key) => (key ? `${opts.assetBase || "/a"}/${key}` : null);
   const items = snap.items || [];
-  const sections = group(snap);
   const has3d = items.some((i) => i.model);
   const name = snap.tenant?.name || "Menu";
 
@@ -90,66 +62,25 @@ export function renderMenu(snap, opts = {}) {
   // array shim.js builds, which it reads off these same cards in document order.
   const idxOf = new Map(items.map((it, i) => [it.id, i]));
 
-  // ── the card contract ───────────────────────────────────────────────────────────
-  // This markup is the platform's, element for element and class for class, because
-  // `_startThumbUpgrades` queries `.thumb-img[data-model]`, `_upgradeThumb` reads
-  // `dataset.globalIdx` and closes over `.thumb-wrap`, and the whole of menu.css is
-  // written against `.item-left` / `.item-right` / `.item-actions`. Renaming anything
-  // here is a silent break, not a style choice.
-  const card = (it) => {
-    const m = it.model;
-    const i = idxOf.get(it.id);
-    const poster = asset(it.photo || m?.poster);
-    const glb = m ? asset(m.draco) : null;
-    const usdz = m?.usdz ? asset(m.usdz) : null;
-    const noImage = !m && !poster;
-    const price = money(it.price_minor, it.currency);
+  // Settings that have to reach CSS rather than markup. The platform sets these at
+  // runtime with style.setProperty after fetching theme_config; here they are resolved
+  // at publish time, which is the whole no-flash difference.
+  const s = snap.settings || {};
+  const heroImg = s.hero_image_url
+    ? `    --hero-image: url("${String(s.hero_image_url).replace(/["\\]/g, "")}");`
+    : "";
+  const heroH = /^[\d.]+(svh|vh|px|rem)$/.test(String(s.hero_min_h || ""))
+    ? `    --mg-hero-h: ${s.hero_min_h};`
+    : "";
+  const fonts =
+    (s.font_body ? `    --font-body: ${String(s.font_body).replace(/[;{}]/g, "")};\n` : "") +
+    (s.font_heading ? `    --font-heading: ${String(s.font_heading).replace(/[;{}]/g, "")};` : "");
 
-    // Everything the viewer needs travels on the element: no lookup, no second request,
-    // nothing fetched before a diner can tap a dish.
-    const data =
-      ` data-idx="${i}" data-name="${e(it.name)}"` +
-      ` data-desc="${e(it.description || "")}" data-price="${e(price)}"` +
-      (glb ? ` data-glb="${e(glb)}"` : "") +
-      (usdz ? ` data-usdz="${e(usdz)}"` : "") +
-      (poster ? ` data-poster="${e(poster)}"` : "") +
-      (m?.orbit ? ` data-orbit="${e(m.orbit)}"` : "") +
-      (m?.scale_cm
-        ? ` data-cm="${e(m.scale_cm)}" data-axis="${e(m.scale_axis || "width")}"`
-        : "");
-
-    const left = noImage ? "" : `<div class="item-left">
-              <div class="thumb-wrap">
-                <img class="thumb-img"${poster ? ` src="${e(poster)}"` : ""}${
-                  glb ? ` data-model="${e(glb)}"` : ""
-                } data-global-idx="${i}" alt="${e(it.name)}" loading="lazy" decoding="async">
-                <div class="thumb-vignette"></div>
-                ${m ? '<span class="badge-3d">3D</span>' : ""}
-              </div>
-            </div>`;
-
-    return `
-          <div class="menu-item${noImage ? " no-image" : ""}"${data}>
-            <p class="item-name" data-field="name" data-idx="${i}">${e(it.name)}</p>
-            ${left}
-            <div class="item-right">
-              <p class="ingredients" data-field="description" data-idx="${i}">${
-                e(it.description || "")
-              }</p>
-              <div class="item-actions">
-                <p class="price">${e(price)}</p>
-              </div>
-              ${m ? `<button class="ar-btn" data-idx="${i}">View 3D</button>` : ""}
-            </div>
-          </div>`;
-  };
-
-  const hero = `<div class="mg-hero">
-      <h1 class="hero-title">${e(name)}</h1>
-    </div>`;
+  const primary = (snap.tenant?.languages || ["en"])[0];
 
   return `<!doctype html>
-<html lang="en" data-template="${e(template)}" data-mode="${e(mode)}">
+<html lang="${e(primary)}" data-template="${e(template)}" data-mode="${e(mode)}"
+      data-tenant="${e(snap.tenant?.slug || "")}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -178,6 +109,9 @@ ${has3d ? VIEWER_CSS : ""}
    before the first paint instead of after it. */
 :root {
 ${vars}
+${heroImg}
+${heroH}
+${fonts}
 }
 
 /* ── 5. what this page does NOT have yet ────────────────────────────────────────
@@ -187,17 +121,13 @@ ${vars}
 </style>
 </head>
 <body>
-${hero}
-<main id="menu">
-${sections
-  .map((s) => `  <section class="menu-section">
-    ${s.name ? `<h2 class="section-title">${e(s.name)}</h2>` : ""}
-${s.items.map(card).join("")}
-  </section>`)
-  .join("\n")}
-</main>
-<footer class="menu-footer">${e(name)} &middot; v${e(snap.version ?? "?")}</footer>
+${hero(snap)}
+${header(snap)}
+${langBar(snap)}
+${catBar(snap)}
+${menuList(snap, opts)}
 ${has3d ? VIEWER_HTML : ""}
+${!has3d ? `<script>\n${PAGE_JS}\n</script>` : ""}
 ${
   has3d
     ? `<script>
@@ -208,6 +138,9 @@ ${SHIM_JS}
 </script>
 <script>
 ${VIEWER_JS}
+</script>
+<script>
+${PAGE_JS}
 </script>
 <script>
   /* Boot after first paint. Everything above only DEFINES things - nothing has touched

@@ -46,8 +46,14 @@ VIEWER = re.compile(
 # template that omits a variable must still render, not fall back to nothing.
 BASE = re.compile(
     r"^:root|^body|\.menu-item|\.item-left|\.item-right|\.item-name|\.item-actions"
-    r"|\.ingredients|\.price\b|\.price-was|\.no-image|\.mg-hero|\.hero\b|\.cat-"
-    r"|\.section|\.ar-btn|\.variant|\.addon|\.qty-|#menu\b|\.menu\b")
+    r"|\.ingredients|\.price\b|\.price-was|\.no-image|\.mg-|\.hero\b|\.cat-"
+    r"|\.section|\.ar-btn|\.variant|\.addon|\.qty-|#menu\b|\.menu\b"
+    # Added after the header logo rendered at full screen height: `.header` and
+    # `.tenant-logo` were not in this list, so their rules were dropped and a logo
+    # with no max-height filled the viewport. The lesson generalises - every class the
+    # page emits needs a rule here or it renders unstyled, and unstyled is not
+    # obviously broken, it is just wrong.
+    r"|^\.header|\.tenant-logo|#brand-title|\.lang-|\.brand\b")
 
 TEMPLATE = re.compile(r'\[data-template="([a-z0-9_]+)"\]')
 

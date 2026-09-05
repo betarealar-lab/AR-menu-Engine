@@ -27,6 +27,95 @@ body::before {
             background-size: var(--bg-size);
             background-position: center;
         }
+.header {
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+            padding: 56px 0 22px;
+            position: relative;
+        }
+.header h1 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(2.8rem, 10vw, 3.8rem);
+            letter-spacing: 8px;
+            color: var(--hero-color);
+            line-height: 1;
+            text-shadow: var(--hero-shadow);
+            transition: color var(--t);
+        }
+.tenant-logo {
+            display: none;
+            max-width: min(210px, 58vw);
+            max-height: 120px;
+            width: auto;
+            height: auto;
+            margin: 0 auto 18px;
+            object-fit: contain;
+            filter: drop-shadow(0 10px 24px var(--shadow));
+        }
+.header::after {
+            content: '';
+            display: block;
+            width: 72px;
+            height: 3px;
+            margin: 18px auto 0;
+            border-radius: 3px;
+            background: var(--divider-bg);
+            box-shadow: 0 0 14px var(--glow);
+        }
+.mg-announcement { display: none; }
+.mg-announcement:not([hidden]) {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto 22px;
+            border-radius: var(--card-radius);
+            overflow: hidden;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            box-shadow: var(--item-shadow);
+        }
+.mg-announcement-photo {
+            width: 100%;
+            height: 160px;
+            background-color: var(--stage-bg);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+.mg-announcement-photo[hidden] { display: none; }
+.mg-announcement-body {
+            padding: 16px 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+.mg-announcement-when {
+            display: inline-flex;
+            align-self: flex-start;
+            padding: 5px 12px;
+            border-radius: 999px;
+            background: var(--cta-bg);
+            color: var(--accent-text, #fff);
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 0.82rem;
+            letter-spacing: 1.2px;
+            box-shadow: var(--cta-shadow);
+        }
+.mg-announcement-when[hidden] { display: none; }
+.mg-announcement-text {
+            margin: 0;
+            font-size: 0.85rem;
+            line-height: 1.55;
+            color: var(--text);
+            white-space: pre-line;
+        }
+@media (min-width: 640px) {
+.mg-announcement:not([hidden]) { max-width: 1160px; flex-direction: row; }
+.mg-announcement-photo { width: 260px; height: auto; flex: 0 0 260px; }
+.mg-announcement-body { flex: 1; justify-content: center; padding: 20px 26px; }
+}
 .menu-list {
             width: 100%;
             max-width: 450px;
@@ -309,6 +398,211 @@ body::before {
             transform: translateX(-50%);
             margin: 0;
         }
+. Horizontal scroll-snap row —
+           no carousel library, so it costs nothing on tenants that skip it. */
+        .mg-reviews {
+            width: 100%;
+            max-width: 450px;
+            margin: 44px auto 0;
+            padding: 0 16px;
+            box-sizing: border-box;
+        }
+.mg-reviews[hidden] { display: none; }
+.mg-reviews-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.4rem;
+            letter-spacing: 4px;
+            color: var(--accent);
+            margin: 0 0 14px;
+        }
+html[lang="ka"] .mg-reviews-title, html[lang="ru"] .mg-reviews-title { font-family: inherit; font-weight: 900; font-size: 1.1rem; letter-spacing: 0; }
+.mg-reviews-track {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            padding-bottom: 6px;
+            margin: 0 -16px;
+            padding-left: 16px;
+            padding-right: 16px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+.mg-reviews-track::-webkit-scrollbar { display: none; }
+.mg-review-card {
+            flex: 0 0 auto;
+            scroll-snap-align: start;
+            width: min(78vw, 300px);
+            background: var(--card-bg, var(--card));
+            border: 1px solid var(--border);
+            border-radius: var(--card-radius, 14px);
+            padding: 16px 16px 14px;
+            box-shadow: var(--item-shadow);
+        }
+.mg-review-stars {
+            color: var(--accent);
+            font-size: 0.82rem;
+            letter-spacing: 2px;
+            margin: 0 0 8px;
+        }
+.mg-review-text {
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.86rem;
+            line-height: 1.5;
+            color: var(--text);
+            margin: 0 0 10px;
+            display: -webkit-box;
+            -webkit-line-clamp: 6;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+.mg-review-name {
+            font-family: 'Nunito', sans-serif;
+            font-size: 0.74rem;
+            font-weight: 700;
+            color: var(--dim);
+        }
+.mg-info-footer {
+            width: 100%;
+            max-width: 450px;
+            margin: 40px auto 0;
+            padding: 22px 16px 6px;
+            border-top: 1px solid var(--border);
+            box-sizing: border-box;
+            font-family: 'Nunito', sans-serif;
+        }
+.mg-info-footer[hidden] { display: none; }
+.mg-info-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+.mg-info-hours[hidden], .mg-info-line[hidden], .mg-info-delivery[hidden],
+        .mg-info-review[hidden], .mg-info-map-link[hidden],
+        .mg-info-social[hidden], [data-info-fb][hidden], [data-info-ig][hidden] { display: none; }
+.mg-info-map-link {
+            display: inline-flex;
+            vertical-align: middle;
+            margin-left: 6px;
+            color: var(--accent);
+            opacity: 0.85;
+        }
+@media (hover: hover) {
+.mg-info-map-link:hover { opacity: 1; }
+}
+.mg-info-label {
+            display: block;
+            font-size: 0.68rem;
+            font-weight: 800;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 2px;
+        }
+.mg-info-hours { font-size: 0.86rem; color: var(--text); }
+.mg-info-hours-range { display: block; font-weight: 700; }
+.mg-info-hours-note { display: block; color: var(--dim); font-size: 0.78rem; margin-top: 2px; }
+.mg-info-contact { display: flex; flex-direction: column; gap: 8px; }
+.mg-info-line { margin: 0; font-size: 0.86rem; color: var(--text); }
+.mg-info-line a { color: var(--text); text-decoration: none; }
+@media (hover: hover) {
+.mg-info-line a:hover { color: var(--accent); }
+}
+.mg-info-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+.mg-info-delivery {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            padding: 10px 18px;
+            border-radius: 999px;
+            background: var(--cta-bg);
+            color: var(--accent-text, #fff);
+            font-weight: 800;
+            font-size: 0.82rem;
+            text-decoration: none;
+            box-shadow: var(--cta-shadow);
+            transition: transform 0.15s;
+        }
+.mg-info-delivery:active { transform: scale(0.97); }
+.mg-info-delivery-icon { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; }
+.mg-info-delivery-icon[hidden] { display: none; }
+.mg-info-review {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            justify-content: center;
+            padding: 9px 16px;
+            border-radius: 999px;
+            background: none;
+            border: 1.5px solid var(--accent);
+            color: var(--accent);
+            font-weight: 800;
+            font-size: 0.8rem;
+            text-decoration: none;
+            transition: transform 0.15s, background 0.15s, color 0.15s;
+        }
+.mg-info-review:active { transform: scale(0.97); }
+@media (hover: hover) {
+.mg-info-review:hover { background: var(--accent); color: var(--accent-text, #fff); }
+}
+.mg-info-social { display: flex; gap: 10px; }
+.mg-info-social a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: var(--pill-bg);
+            color: var(--dim);
+            transition: color 0.15s, background 0.15s;
+        }
+@media (hover: hover) {
+.mg-info-social a:hover { color: var(--accent); }
+}
+.mg-info-note {
+            margin: 18px 0 0;
+            font-size: 0.72rem;
+            line-height: 1.5;
+            color: var(--dim);
+            white-space: pre-line;
+        }
+.mg-info-note[hidden] { display: none; }
+@media (min-width: 1100px) {
+.mg-reviews, .mg-info-footer { max-width: 1160px; }
+.mg-reviews-track {
+                flex-wrap: wrap;
+                overflow-x: visible;
+                scroll-snap-type: none;
+                margin: 0;
+                padding-left: 0;
+                padding-right: 0;
+            }
+.mg-review-card {
+                flex: 1 1 300px;
+                width: auto;
+                max-width: 360px;
+            }
+.mg-info-grid {
+                flex-direction: row;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 40px;
+            }
+.mg-info-hours, .mg-info-contact { flex: 0 0 auto; }
+.mg-info-actions {
+                flex: 0 0 auto;
+                justify-content: flex-start;
+                gap: 20px;
+                margin-left: auto;
+            }
+}
 .cat-bar {
             width: 100%;
             max-width: 450px;

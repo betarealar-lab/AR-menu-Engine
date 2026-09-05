@@ -99,7 +99,9 @@ def main() -> int:
     check("and a key outside their map is dropped, not passed through",
           "nonsense" not in render(snapshot(theme={"nonsense": "#123456"})))
     check("the dish name is in the markup, not fetched", "Chicken Shqmeruli" in body)
-    check("so is the price, already formatted", "₾24.50" in body)
+    # Number first, symbol after - the live rows store "28 ₾" as free text and a diner
+    # comparing the two pages should not be able to spot a difference this small.
+    check("so is the price, formatted the way the live data reads", "24.50 ₾" in body)
     check("and the restaurant's name", "Sakhli" in body)
 
     print("\n== nothing loads before the menu does ==")
@@ -127,7 +129,8 @@ def main() -> int:
 
     print("\n== every inlined script is real JavaScript ==")
     blocks = re.findall(r"<script>(.*?)</script>", html, re.S)
-    check("four script blocks: xr, shim, viewer, boot", len(blocks) == 4, f"{len(blocks)}")
+    check("five script blocks: xr, shim, viewer, page, boot", len(blocks) == 5,
+          f"{len(blocks)}")
     for i, b in enumerate(blocks):
         with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False,
                                          encoding="utf-8") as fh:
@@ -170,6 +173,49 @@ def main() -> int:
     unknown = render(snapshot(template="not_a_template"))
     check("an unknown template falls back rather than breaking",
           'data-template=""' in unknown and "menu-item" in unknown)
+
+    print("\n== the platform's page structure ==")
+    # The first replication put their CSS on markup of my own. Their stylesheet is
+    # written against this exact tree, so anything else lands on nothing - which is
+    # precisely how it ended up looking worse than either half alone.
+    full = render(snapshot(
+        settings={"hero_image_url": "https://x/h.jpg", "logo_url": "https://x/l.png"},
+        categories=[{"id": "c1", "name": "Plates", "position": 0}]))
+    for sel, why in (
+        ('class="mg-hero"', "the hero band"),
+        ('class="mg-hero-photo"', "its photo layer"),
+        ('class="mg-hero-veil"', "and its veil - three elements, not one div"),
+        ('class="header"', "the brand block"),
+        ('id="tenant-logo"', "the logo"),
+        ('id="brand-title"', "the title"),
+        ('id="cat-bar"', "the sticky category bar"),
+        ('id="cat-filter"', "its pill rail"),
+        ('class="menu-list" id="menu-list"', "and the list the cards live in"),
+    ):
+        check(f"page has {why}", sel in full, sel)
+    check("the hero image reaches CSS, not markup",
+          "--hero-image: url(" in full)
+    check("a tenant with no hero gets no hero band",
+          'class="mg-hero"' not in render(snapshot(settings={})))
+
+    print("\n== categories and languages ==")
+    cats = render(snapshot(categories=[
+        {"id": f"c{i}", "name": f"Cat {i}", "position": i} for i in range(26)]))
+    check("26 categories become 26 pills plus All and 3D",
+          cats.count('class="cat-pill') == 28, str(cats.count('class="cat-pill')))
+    # A sentinel, not a name, so a restaurant with a category actually called "3D" does
+    # not collide with the virtual one.
+    check("the 3D pill is a sentinel", 'data-cat="__ar3d"' in cats)
+    bi = render(snapshot(
+        tenant={"id": "t", "slug": "s", "name": "Sakhli", "languages": ["en", "ka"]},
+        items=[dict(snapshot()["items"][0], name_ka="ქათამი")]))
+    check("a bilingual tenant gets a language switch", 'class="lang-pill' in bi)
+    check("and the translation is IN the page, not fetched", 'data-name-ka="ქათამი"' in bi)
+    mono = render(snapshot())
+    # The CSS for the switch ships either way (it is part of the base sheet), so this
+    # has to look for the MARKUP. Asserting on the bare class name passes for the wrong
+    # reason the moment a stylesheet mentions it.
+    check("a one-language tenant gets no switch", 'class="lang-pill' not in mono)
 
     print("\n== the markup their code queries ==")
     # Their selectors are the contract. `_startThumbUpgrades` queries exactly this and
@@ -239,12 +285,16 @@ def main() -> int:
     print("\n== the shapes that will actually occur ==")
     empty = render(snapshot(items=[], categories=[]))
     check("a menu with no items still renders", "<html" in empty and "Sakhli" in empty)
-    check("and ships no viewer it does not need", "<script" not in empty)
+    check("and ships no 3D viewer it does not need", "model-viewer" not in empty)
     check("nor the WebXR overlay", "xr-overlay" not in empty)
 
     no3d = render(snapshot(items=[dict(snapshot()["items"][0], model=None)]))
     check("an item with no model has no 3D badge", "badge-3d" not in no3d)
-    check("a photo-only menu ships no viewer either", "<script" not in no3d)
+    check("a photo-only menu ships no 3D viewer either", "model-viewer" not in no3d)
+    # ...but it DOES still get its own page behaviour. The category bar is the menu, not
+    # part of the 3D.
+    check("though it keeps its category and language behaviour",
+          "cat-pill" in no3d or "__ar3d" not in no3d)
 
     loose = render(snapshot(items=[dict(snapshot()["items"][0], category_id=None)]))
     check("an item in no category is still on the menu", "Chicken Shqmeruli" in loose)
@@ -271,7 +321,7 @@ def main() -> int:
     # A photo-only restaurant still gets the structural CSS - that is the menu itself -
     # but none of the 3D machinery, which is the part that costs.
     plain = render(snapshot(items=[], categories=[]))
-    check("a menu with no 3D carries no viewer JS", "<script" not in plain)
+    check("a menu with no 3D carries no viewer JS", "model-viewer" not in plain)
     check("nor the viewer CSS", "#modal-viewer" not in plain and "#xr-overlay" not in plain)
     check("and it is a fraction of the size",
           len(plain.encode()) < len(long_menu.encode()) / 5,
