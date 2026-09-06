@@ -6,6 +6,7 @@
 // disagree about what a bowl is.
 
 import { SHAPES, type Dims } from '@/lib/data/studio'
+import { sizeInWords } from '@/lib/size'
 
 export default function SizeInput({ value, onChange, compact }: {
   value: Dims
@@ -50,10 +51,15 @@ export default function SizeInput({ value, onChange, compact }: {
           </label>
         ))}
       </div>
+      {/* The number, as a thing. This line is the guardrail: an owner who reads "about a
+          tray" for a side dish stops before the credits are spent. */}
+      <p className="text-xs font-semibold" style={{ color: value.width ? 'var(--gold)' : 'var(--dim)' }}>
+        {value.width ? sizeInWords(value.width, value.height) : 'Pick a shape, or type the width'}
+      </p>
       {!compact && (
         <p className="text-[11px] leading-4" style={{ color: 'var(--dim)' }}>
-          Any one is enough; three is better. Width is what the model is built to, and the
-          shape gives the rest. Wrong size is fixable later, for free.
+          Any one is enough; three is better. Wrong size is fixable later, for free — and
+          you can check it on your real table before approving.
         </p>
       )}
     </div>

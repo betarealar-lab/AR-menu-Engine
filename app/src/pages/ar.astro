@@ -1,0 +1,72 @@
+---
+// "Check it on your table." One model, at true size, in AR, on a phone.
+//
+// The size guardrail that actually works. An owner cannot judge 28 cm from a number, and
+// cannot judge it from a model on a laptop either - the only reference that matters is the
+// table it will be served on. So the draft card shows a QR; the phone opens this; the model
+// appears on the table at the size it will ship at. If it is a boat, they see a boat,
+// before approving. It is also, not by accident, the product demo.
+//
+// Public and unauthenticated: a QR code cannot carry a session. What it carries is the
+// model's storage key, which is a uuid path nobody can guess, and this page can do nothing
+// but show it. No menu data is read; nothing is written.
+const g = Astro.url.searchParams.get("g") || "";
+const u = Astro.url.searchParams.get("u") || "";
+const name = (Astro.url.searchParams.get("n") || "Your dish").slice(0, 80);
+const size = (Astro.url.searchParams.get("s") || "").slice(0, 40);
+// Keys only, never URLs: anything else in here would be a way to make this page load
+// somebody else's file.
+const ok = /^catalog\/[\w./-]+\.glb$/.test(g) && (!u || /^catalog\/[\w./-]+\.usdz$/.test(u));
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <title>{name} · on your table</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0c0e; color: #eceef1;
+                   font: 15px/1.5 system-ui, -apple-system, sans-serif; }
+      main { display: flex; flex-direction: column; min-height: 100%; }
+      model-viewer { flex: 1; width: 100%; min-height: 60vh; background: #141619; }
+      .bar { padding: 16px 20px calc(16px + env(safe-area-inset-bottom)); }
+      h1 { font-size: 1.05rem; margin: 0 0 2px; }
+      p { margin: 0; color: #98a1ad; font-size: .85rem; }
+      .cta { display: block; margin-top: 12px; padding: 14px; border-radius: 12px;
+             background: #f5b544; color: #12100b; font-weight: 700; text-align: center;
+             text-decoration: none; }
+      .bad { padding: 40px 20px; text-align: center; color: #98a1ad; }
+    </style>
+    <script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+  </head>
+  <body>
+    <main>
+      {ok ? (
+        <>
+          <model-viewer id="mv" src={`/a/${g}`} ios-src={u ? `/a/${u}` : undefined}
+                        ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed"
+                        camera-controls auto-rotate auto-rotate-delay="0"
+                        shadow-intensity="0.8" touch-action="pan-y"
+                        alt={name}></model-viewer>
+          <div class="bar">
+            <h1>{name}</h1>
+            <p>{size ? `Set to ${size}. ` : ""}Put it on the table and see if that is right.</p>
+            <button class="cta" id="go">View on your table</button>
+          </div>
+          <script is:inline>
+            // ar-scale="fixed" is the whole point: the model appears at the size it was
+            // built to and the diner cannot pinch it bigger, so what the owner sees is
+            // what a diner will see.
+            document.getElementById("go").addEventListener("click", function () {
+              var mv = document.getElementById("mv");
+              if (mv && mv.activateAR) mv.activateAR();
+            });
+          </script>
+        </>
+      ) : (
+        <p class="bad">That link is not complete. Scan the code again from the studio.</p>
+      )}
+    </main>
+  </body>
+</html>

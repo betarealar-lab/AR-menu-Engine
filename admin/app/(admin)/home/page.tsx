@@ -25,16 +25,18 @@ export default function HomePage() {
   const [requests, setRequests] = useState<ModelRequest[]>([])
   const [waiting, setWaiting] = useState<TenantModel[]>([])
   const [opens, setOpens] = useState<{ with3d: number; without: number } | null>(null)
+  const [next3d, setNext3d] = useState<{ item_id: string; name: string; opens: number }[]>([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     if (plan.loading || !plan.restaurantId) { setLoading(plan.loading); return }
     const supabase = createClient()
-    const [{ data: t }, lib, { data: items }, { data: cmp }] = await Promise.all([
+    const [{ data: t }, lib, { data: items }, { data: cmp }, { data: top }] = await Promise.all([
       supabase.from('tenants').select('setup_done').eq('id', plan.restaurantId).single(),
       loadLibrary(plan.restaurantId),
       supabase.from('items').select('id, model_id, is_3d, visible').eq('tenant_id', plan.restaurantId),
       supabase.rpc('event_3d_lift', { p_tenant: plan.restaurantId, p_days: 30 }),
+      supabase.rpc('event_top_items', { p_tenant: plan.restaurantId, p_days: 30, p_limit: 30 }),
     ])
     // Setup not finished and nothing here yet: this is a brand-new restaurant, and the
     // guided flow is a better first screen than four empty cards.
@@ -49,6 +51,11 @@ export default function HomePage() {
     setWaiting(lib.models.filter(m => m.state === 'draft'))
     const row = Array.isArray(cmp) ? cmp[0] : cmp
     setOpens(row ? { with3d: Number(row.with_3d), without: Number(row.without_3d) } : null)
+    // The next action, from their own diners: the most-opened dishes that have no 3D yet.
+    // A dashboard that says what to do next gets opened; one that reports gets ignored.
+    const has3d = new Set((items || []).filter(i => i.model_id && i.is_3d).map(i => i.id))
+    setNext3d(((top || []) as { item_id: string; name: string; opens: number }[])
+      .filter(x => x.item_id && !has3d.has(x.item_id) && x.opens > 0).slice(0, 3))
     setLoading(false)
   }, [plan.loading, plan.restaurantId, plan.restaurantSlug, router])
 
@@ -125,6 +132,23 @@ export default function HomePage() {
           </p>
         </div>
       </div>
+
+      {next3d.length > 0 && (
+        <div className="card p-5 mt-4">
+          <div className="eyebrow mb-2">Build these next</div>
+          <p className="text-sm mb-3">
+            Your most-opened dishes that are not in 3D yet. Diners are already looking at
+            them — this is where a model earns the most.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            {next3d.map(d => (
+              <Link key={d.item_id} href={`/models${q}`} className="btn btn-sm">
+                {d.name} <span style={{ color: 'var(--dim)' }}>· {d.opens} opens</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-3 mt-4">
         <Link href={`/menu${q}`} className="btn">Edit the menu</Link>

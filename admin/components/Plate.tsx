@@ -266,7 +266,9 @@ export default function Plate(props: {
         </div>
 
         <div className="card p-5">
-          <button type="button" onClick={send} disabled={sending || !filled}
+          {/* Disabled without a size. "Huge as a boat" in AR is the single most common way
+              a model gets remade, and the fix costs nothing here and 30 credits later. */}
+          <button type="button" onClick={send} disabled={sending || !filled || !hasDims(dims)}
                   className="btn btn-primary w-full">
             {sending ? 'Sending…' : 'Build the model'}
           </button>

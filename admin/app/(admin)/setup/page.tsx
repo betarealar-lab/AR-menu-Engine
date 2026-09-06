@@ -1,44 +1,60 @@
 'use client'
-// The first ten minutes.
+// The first ten minutes. 3D first; the wait becomes the setup.
 //
-// Three steps, one thing each, and every one after the first can be skipped. An owner who
-// finishes setup in one sitting stays; one who is shown an empty dashboard does not.
+//   1. Your first 3D model     four photos, two minutes. The build starts.
+//   2. Pick a look             while it builds - the real menu page, with their name on it
+//   3. First dishes            while it builds - name, price, category
+//   Done                       the model lands, on their menu, with a QR code
 //
-//   1. Pick a look      the two templates, previewed with THEIR name already on them
-//   2. First dishes     name, price, category - three and you can move on
-//   3. First 3D model   the same plate as the 3D screen, so the first one and the
-//                       fortieth are the same experience
-//   Done                the live address, and the QR code, right there
+// The order is the design. The old flow asked for all the work first and showed the
+// payoff last; nobody quits during a wait they are filling, and the magic arriving as the
+// final step is the thing they remember. Every step after the first can be skipped.
 //
-// The preview in step 1 is the real menu page in a frame, not a mockup. The restaurant
-// already exists by the time this screen loads, so the menu app renders it - which means
-// what the owner is choosing between is exactly what a diner will see.
-//
-// "Import from a file" is a visible button that says it is coming. The slot exists now so
-// the flow does not change when import ships, and so an owner knows typing is a choice.
+// The look preview is the real menu page in a frame - the restaurant exists by then and
+// the menu app renders it - so what they choose between is what a diner will see.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePlan } from '@/lib/usePlan'
 import { createClient } from '@/lib/supabase/client'
-import { loadLibrary } from '@/lib/data/models'
+import { loadLibrary, type ModelRequest, type TenantModel } from '@/lib/data/models'
 import { setTemplate } from '@/lib/data/theme'
 import Plate from '@/components/Plate'
 import QrCode from '@/components/QrCode'
+import SampleDish from '@/components/SampleDish'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
-type Step = 'look' | 'dishes' | 'model' | 'done'
-const ORDER: Step[] = ['look', 'dishes', 'model', 'done']
+type Step = 'model' | 'look' | 'dishes' | 'done'
+const ORDER: Step[] = ['model', 'look', 'dishes', 'done']
+const LABEL: Record<Step, string> = { model: 'First 3D model', look: 'Look', dishes: 'Dishes', done: 'Live' }
 
 export default function SetupPage() {
   const plan = usePlan()
   const router = useRouter()
-  const [step, setStep] = useState<Step>('look')
+  const [step, setStep] = useState<Step>('model')
   const [msg, setMsg] = useState('')
+  const [building, setBuilding] = useState<ModelRequest | null>(null)
+  const [landed, setLanded] = useState<TenantModel | null>(null)
   const say = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 4000) }
-
   const next = () => setStep(ORDER[ORDER.indexOf(step) + 1])
+
+  // The model is building in the background for the whole of steps 2 and 3. Watched here,
+  // at the top, so whichever step they are on the moment it lands is announced.
+  const watch = useCallback(async () => {
+    if (!plan.restaurantId) return
+    const lib = await loadLibrary(plan.restaurantId)
+    const open = lib.requests.find(r => r.kind === 'generate' && ['pending', 'approved', 'running'].includes(r.state)) ?? null
+    setBuilding(open)
+    const fresh = lib.models.find(m => m.state === 'draft')
+    if (fresh) setLanded(fresh)
+  }, [plan.restaurantId])
+
+  useEffect(() => {
+    if (!building) return
+    const id = setInterval(() => { void watch() }, 15_000)
+    return () => clearInterval(id)
+  }, [building, watch])
 
   async function finish() {
     if (plan.restaurantId) {
@@ -51,8 +67,9 @@ export default function SetupPage() {
   if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>Pick a restaurant first.</p>
 
   return (
-    <div className="page-content max-w-4xl">
-      <div className="flex items-center gap-2 mb-6">
+    <div className="page-content max-w-5xl">
+      {/* progress */}
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
         {ORDER.slice(0, 3).map((s, i) => {
           const done = ORDER.indexOf(step) > i
           const here = step === s
@@ -63,27 +80,86 @@ export default function SetupPage() {
                              color: done || here ? 'var(--gold-ink)' : 'var(--dim)' }}>
                 {done ? '✓' : i + 1}
               </span>
-              <span className="text-xs font-semibold"
-                    style={{ color: here ? 'var(--text)' : 'var(--dim)' }}>
-                {s === 'look' ? 'Look' : s === 'dishes' ? 'Dishes' : '3D'}
+              <span className="text-xs font-semibold" style={{ color: here ? 'var(--text)' : 'var(--dim)' }}>
+                {LABEL[s]}
               </span>
               {i < 2 && <span className="w-6 h-px mx-1" style={{ background: 'var(--border)' }} />}
             </div>
           )
         })}
+        {building && step !== 'model' && (
+          <span className="pill pill-wait ml-auto">
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--gold)' }} />
+            your model is building
+          </span>
+        )}
+        {landed && step !== 'done' && (
+          <span className="pill pill-on ml-auto">your model is ready</span>
+        )}
       </div>
 
       {msg && <div className="card px-4 py-3 mb-5 text-sm">{msg}</div>}
 
-      {step === 'look'   && <Look plan={plan} onNext={next} onSay={say} />}
+      {step === 'model' && (
+        <FirstModel plan={plan} onSay={say}
+                    onSent={() => { void watch(); next() }}
+                    onSkip={next} />
+      )}
+      {step === 'look' && <Look plan={plan} onNext={next} onSay={say} />}
       {step === 'dishes' && <Dishes tenantId={plan.restaurantId} onNext={next} onSay={say} />}
-      {step === 'model'  && <FirstModel tenantId={plan.restaurantId} onNext={next} onSay={say} />}
-      {step === 'done'   && <Done plan={plan} onFinish={finish} />}
+      {step === 'done' && <Done plan={plan} landed={landed} building={building} onFinish={finish} />}
     </div>
   )
 }
 
-// ── 1 · look ─────────────────────────────────────────────────────────────────
+// ── 1 · first model ──────────────────────────────────────────────────────────
+
+function FirstModel({ plan, onSay, onSent, onSkip }: {
+  plan: ReturnType<typeof usePlan>
+  onSay: (m: string) => void
+  onSent: () => void
+  onSkip: () => void
+}) {
+  const [quota, setQuota] = useState(3)
+  const [used, setUsed] = useState(0)
+  useEffect(() => {
+    loadLibrary(plan.restaurantId!).then(d => { setQuota(d.quota); setUsed(d.used) })
+  }, [plan.restaurantId])
+
+  return (
+    <div>
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px] items-start mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-2">Start with the part that matters.</h1>
+          <p className="text-sm mb-3" style={{ color: 'var(--dim)' }}>
+            Four photos of one dish, from four sides. A phone is fine. It takes a few
+            minutes to build — you will set up the rest of your menu while it does, and it
+            will be waiting on it when you are done.
+          </p>
+          <ul className="text-sm grid gap-1.5" style={{ color: 'var(--dim)' }}>
+            <li>· Your first {quota} models are free.</li>
+            <li>· You approve every model before a diner sees it. Nothing goes live without you.</li>
+            <li>· Diners open dishes with 3D two to three times more often than dishes without.</li>
+          </ul>
+        </div>
+        <div className="card p-3">
+          <SampleDish height={200} caption="Built from four phone photos" />
+        </div>
+      </div>
+
+      <Plate tenantId={plan.restaurantId!} dishes={[]} left={Math.max(0, quota - used)}
+             quota={quota} compact
+             onError={onSay}
+             onSent={() => { onSay('Building. Let’s set up the menu while it does.'); onSent() }} />
+
+      <div className="mt-5">
+        <button className="btn btn-ghost" onClick={onSkip}>I’ll do this later</button>
+      </div>
+    </div>
+  )
+}
+
+// ── 2 · look ─────────────────────────────────────────────────────────────────
 
 function Look({ plan, onNext, onSay }: {
   plan: ReturnType<typeof usePlan>
@@ -91,7 +167,7 @@ function Look({ plan, onNext, onSay }: {
   onSay: (m: string) => void
 }) {
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([])
-  const [current, setCurrent] = useState<string>('')
+  const [current, setCurrent] = useState('')
   const [nonce, setNonce] = useState(0)
 
   useEffect(() => {
@@ -107,12 +183,9 @@ function Look({ plan, onNext, onSay }: {
 
   async function pick(id: string) {
     setCurrent(id)
-    // Merged, not replaced. The first version of this called saveThemeConfig with one
-    // key, and that function writes both bags whole - picking a look wiped the name,
-    // the address and the hours. check_admin.py now proves it does not.
     const err = await setTemplate(plan.restaurantId!, id)
     if (err) return onSay(err.message)
-    setNonce(n => n + 1)          // reload the frame; it is the real page
+    setNonce(n => n + 1)
   }
 
   return (
@@ -134,11 +207,8 @@ function Look({ plan, onNext, onSay }: {
             </button>
           ))}
         </div>
-        <button className="btn btn-primary w-full mt-5" onClick={onNext}>
-          Use this one
-        </button>
+        <button className="btn btn-primary w-full mt-5" onClick={onNext}>Use this one</button>
       </div>
-
       <div className="card overflow-hidden" style={{ minHeight: 560 }}>
         <iframe key={nonce} title="Your menu"
                 src={`${MENU_ORIGIN}/${plan.restaurantSlug}?preview=${nonce}`}
@@ -148,7 +218,7 @@ function Look({ plan, onNext, onSay }: {
   )
 }
 
-// ── 2 · dishes ───────────────────────────────────────────────────────────────
+// ── 3 · dishes ───────────────────────────────────────────────────────────────
 
 type Row = { name: string; price: string; category: string }
 
@@ -158,23 +228,16 @@ function Dishes({ tenantId, onNext, onSay }: {
   onSay: (m: string) => void
 }) {
   const [rows, setRows] = useState<Row[]>([
-    { name: '', price: '', category: '' },
-    { name: '', price: '', category: '' },
-    { name: '', price: '', category: '' },
+    { name: '', price: '', category: '' }, { name: '', price: '', category: '' }, { name: '', price: '', category: '' },
   ])
   const [saving, setSaving] = useState(false)
   const filled = rows.filter(r => r.name.trim()).length
-
-  function set(i: number, patch: Partial<Row>) {
+  const set = (i: number, patch: Partial<Row>) =>
     setRows(rs => rs.map((r, n) => (n === i ? { ...r, ...patch } : r)))
-  }
 
-  async function save(andNext: boolean) {
+  async function save() {
     const supabase = createClient()
     setSaving(true)
-
-    // Categories are made from whatever was typed, in the order they first appeared. An
-    // owner typing "Starters" three times means one category, not three.
     const names = [...new Set(rows.map(r => r.category.trim()).filter(Boolean))]
     const catId = new Map<string, string>()
     for (let i = 0; i < names.length; i++) {
@@ -182,21 +245,15 @@ function Dishes({ tenantId, onNext, onSay }: {
         .insert({ tenant_id: tenantId, name: names[i], position: i }).select('id').single()
       if (data) catId.set(names[i], data.id)
     }
-
     const items = rows.filter(r => r.name.trim()).map((r, i) => {
-      // Minor units where the price is a plain number; text where it is not ("16 / 70").
       const plain = r.price.replace(/[^\d.,]/g, '').replace(',', '.')
       const simple = /^\d+(\.\d{1,2})?$/.test(plain)
       return {
-        tenant_id: tenantId,
-        name: r.name.trim(),
+        tenant_id: tenantId, name: r.name.trim(),
         price_minor: simple ? Math.round(parseFloat(plain) * 100) : 0,
         price_text: simple ? null : (r.price.trim() || null),
         category_id: catId.get(r.category.trim()) ?? null,
-        position: i,
-        visible: true,
-        // A dish typed in setup has no model yet. It is a photo dish until it has one.
-        is_3d: false,
+        position: i, visible: true, is_3d: false,
       }
     })
     if (items.length) {
@@ -204,92 +261,44 @@ function Dishes({ tenantId, onNext, onSay }: {
       if (error) { setSaving(false); return onSay(error.message) }
     }
     setSaving(false)
-    if (andNext) onNext()
+    onNext()
   }
 
   return (
     <div>
       <h1 className="text-xl font-bold mb-1">Your first dishes</h1>
       <p className="text-sm mb-5" style={{ color: 'var(--dim)' }}>
-        Three is enough to start. The rest can wait — and there is a full editor for it.
+        Three is enough to start. There is a full editor for the rest, with photos, sizes
+        and translations.
       </p>
-
       <div className="card p-4">
         <div className="hidden sm:grid grid-cols-[1fr_120px_160px] gap-2 mb-2 px-1">
-          <span className="eyebrow">Dish</span>
-          <span className="eyebrow">Price</span>
-          <span className="eyebrow">Category</span>
+          <span className="eyebrow">Dish</span><span className="eyebrow">Price</span><span className="eyebrow">Category</span>
         </div>
         <div className="grid gap-2">
           {rows.map((r, i) => (
             <div key={i} className="grid sm:grid-cols-[1fr_120px_160px] gap-2">
-              <input value={r.name} placeholder="Khachapuri" autoFocus={i === 0}
-                     onChange={e => set(i, { name: e.target.value })} />
-              <input value={r.price} placeholder="18" inputMode="decimal"
-                     onChange={e => set(i, { price: e.target.value })} />
-              <input value={r.category} placeholder="Starters" list="cats"
-                     onChange={e => set(i, { category: e.target.value })} />
+              <input value={r.name} placeholder="Khachapuri" autoFocus={i === 0} onChange={e => set(i, { name: e.target.value })} />
+              <input value={r.price} placeholder="18" inputMode="decimal" onChange={e => set(i, { price: e.target.value })} />
+              <input value={r.category} placeholder="Starters" list="cats" onChange={e => set(i, { category: e.target.value })} />
             </div>
           ))}
         </div>
         <datalist id="cats">
-          {[...new Set(rows.map(r => r.category.trim()).filter(Boolean))].map(c =>
-            <option key={c} value={c} />)}
+          {[...new Set(rows.map(r => r.category.trim()).filter(Boolean))].map(c => <option key={c} value={c} />)}
         </datalist>
-        <button className="btn btn-ghost btn-sm mt-3"
-                onClick={() => setRows(rs => [...rs, { name: '', price: '', category: '' }])}>
+        <button className="btn btn-ghost btn-sm mt-3" onClick={() => setRows(rs => [...rs, { name: '', price: '', category: '' }])}>
           + Another dish
         </button>
       </div>
-
       <div className="flex items-center gap-3 mt-5 flex-wrap">
-        <button className="btn btn-primary" onClick={() => save(true)} disabled={saving || !filled}>
-          {saving ? 'Saving…' : `Save ${filled || ''} and continue`}
+        <button className="btn btn-primary" onClick={save} disabled={saving || !filled}>
+          {saving ? 'Saving…' : `Save ${filled || ''} and finish`}
         </button>
         <button className="btn btn-ghost" onClick={onNext}>Skip for now</button>
         <span className="ml-auto text-xs" style={{ color: 'var(--dim)' }}>
-          <button className="underline" disabled title="Coming soon">Import from a file</button>
-          {' '}· coming soon
+          Import from a file · coming soon
         </span>
-      </div>
-    </div>
-  )
-}
-
-// ── 3 · first model ──────────────────────────────────────────────────────────
-
-function FirstModel({ tenantId, onNext, onSay }: {
-  tenantId: string
-  onNext: () => void
-  onSay: (m: string) => void
-}) {
-  const [dishes, setDishes] = useState<{ id: string; name: string }[]>([])
-  const [quota, setQuota] = useState(0)
-  const [used, setUsed] = useState(0)
-
-  const load = useCallback(async () => {
-    const d = await loadLibrary(tenantId)
-    setDishes(d.dishes)
-    setQuota(d.quota)
-    setUsed(d.used)
-  }, [tenantId])
-  useEffect(() => { void load() }, [load])
-
-  return (
-    <div>
-      <h1 className="text-xl font-bold mb-1">Your first 3D model</h1>
-      <p className="text-sm mb-5" style={{ color: 'var(--dim)' }}>
-        Four photos of one dish, from four sides. A phone is fine. It takes a few
-        minutes to build, and you can keep going while it does.
-      </p>
-
-      <Plate tenantId={tenantId} dishes={dishes} left={Math.max(0, quota - used)}
-             quota={quota} compact
-             onError={onSay}
-             onSent={() => { onSay('Building. It will be in your library in a few minutes.'); onNext() }} />
-
-      <div className="mt-5">
-        <button className="btn btn-ghost" onClick={onNext}>Skip for now</button>
       </div>
     </div>
   )
@@ -297,31 +306,54 @@ function FirstModel({ tenantId, onNext, onSay }: {
 
 // ── done ─────────────────────────────────────────────────────────────────────
 
-function Done({ plan, onFinish }: {
+function Done({ plan, landed, building, onFinish }: {
   plan: ReturnType<typeof usePlan>
+  landed: TenantModel | null
+  building: ModelRequest | null
   onFinish: () => void
 }) {
   const url = `${MENU_ORIGIN}/${plan.restaurantSlug}`
+  const q = `?tenant=${plan.restaurantSlug}`
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_260px] items-start">
       <div>
-        <h1 className="text-xl font-bold mb-1">Your menu is live.</h1>
+        <h1 className="text-2xl font-bold mb-1">Your menu is live.</h1>
         <p className="text-sm mb-5" style={{ color: 'var(--dim)' }}>
-          Anyone who scans the code, or opens the address, sees it now. Everything you did
-          here can be changed from the menu.
+          Anyone who scans the code, or opens the address, sees it now.
         </p>
+
+        {landed ? (
+          <div className="card p-5 mb-4 flex items-center gap-4">
+            <span className="pill pill-on">ready</span>
+            <div className="flex-1">
+              <div className="font-semibold">Your first 3D model is ready.</div>
+              <p className="text-xs" style={{ color: 'var(--dim)' }}>
+                Turn it around, check it on your table, and approve it — then it is on the menu.
+              </p>
+            </div>
+            <a href={`/models${q}`} className="btn btn-primary btn-sm">See it</a>
+          </div>
+        ) : building ? (
+          <div className="card p-5 mb-4 grid gap-4 md:grid-cols-[140px_1fr] items-center">
+            <SampleDish height={120} />
+            <div>
+              <div className="font-semibold">Your first model is still building.</div>
+              <p className="text-xs" style={{ color: 'var(--dim)' }}>
+                A few more minutes. It lands in your 3D Studio, waiting for you to approve.
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <div className="card p-4 mb-4">
           <div className="eyebrow mb-1">Address</div>
-          <a href={url} target="_blank" rel="noreferrer" className="text-sm font-semibold break-all"
-             style={{ color: 'var(--gold)' }}>{url}</a>
+          <a href={url} target="_blank" rel="noreferrer" className="text-sm font-semibold break-all" style={{ color: 'var(--gold)' }}>{url}</a>
         </div>
         <button className="btn btn-primary" onClick={onFinish}>Go to my menu</button>
       </div>
       <div className="card p-4 text-center">
-        <QrCode value={url} size={200} />
-        <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>
-          Print-ready sizes are under QR &amp; share.
-        </p>
+        <QrCode value={url} size={200} label={plan.restaurantSlug} />
+        <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>Put it on the tables tonight. Print sizes are under QR &amp; share.</p>
       </div>
     </div>
   )
