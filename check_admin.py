@@ -349,6 +349,53 @@ def main() -> int:
               r.status_code == 200 and "Khachapuri" in r.text,
               f"{r.status_code}, {len(r.text)} bytes")
 
+        # ── the one-time link that is the ONLY way an account gets a password ─
+        # Worth a real test because it is the whole account-creation flow and there is no
+        # other way in: no signup route, no forgot-password button. If this breaks, nobody
+        # can use the product at all, and the failure is invisible until somebody tries.
+        fresh_mail = f"check-new-{uuid.uuid4().hex[:8]}@betareal.test"
+        made = admin_api("POST", "/users", url, secret,
+                         json={"email": fresh_mail, "email_confirm": True})
+        fresh_id = made.json().get("id") if made.ok else None
+        check("an account can be created with no password at all", fresh_id, made.text[:120])
+
+        link = admin_api("POST", "/generate_link", url, secret,
+                         json={"type": "recovery", "email": fresh_mail})
+        otp = link.json().get("email_otp") if link.ok else None
+        check("a one-time token is issued", otp, link.text[:120])
+
+        page = requests.get(f"{BASE}/admin/set-password", timeout=30,
+                            params={"token": otp or "x", "email": fresh_mail})
+        check("the set-password page opens",
+              page.status_code == 200 and fresh_mail in page.text,
+              f"{page.status_code}")
+
+        fresh = requests.Session()
+        chosen = secrets.token_urlsafe(18)
+        r = fresh.post(f"{BASE}/api/set-password", timeout=45,
+                       json={"token": otp, "email": fresh_mail, "password": chosen})
+        check("choosing a password works and signs you straight in",
+              r.ok and "br_session" in fresh.cookies, r.text[:160])
+
+        r = fresh.get(f"{BASE}/admin", timeout=30, allow_redirects=False)
+        check("and the session is real", r.status_code == 200, f"got {r.status_code}")
+
+        # One use only. A recovery token that still works after it has been used is a
+        # password reset anybody who ever saw the link can perform again.
+        again = requests.post(f"{BASE}/api/set-password", timeout=45,
+                              json={"token": otp, "email": fresh_mail,
+                                    "password": secrets.token_urlsafe(18)})
+        check("the link cannot be used twice", not again.ok, f"HTTP {again.status_code}")
+
+        weak = requests.post(f"{BASE}/api/set-password", timeout=45,
+                             json={"token": otp, "email": fresh_mail, "password": "123"})
+        check("a too-short password is refused", not weak.ok, f"HTTP {weak.status_code}")
+
+        # The chosen password is the one that now works.
+        check("the new password signs in through the normal form",
+              sign_in(fresh_mail, chosen) is not None)
+        admin_api("DELETE", f"/users/{fresh_id}", url, secret)
+
         # ── signing out ──────────────────────────────────────────────────────
         s.post(f"{BASE}/admin/logout", timeout=30, allow_redirects=False)
         r = s.get(f"{BASE}/admin", timeout=30, allow_redirects=False)
