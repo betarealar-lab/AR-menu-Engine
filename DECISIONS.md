@@ -775,3 +775,71 @@ renaming a dish rots no URL.
 
 Roughly three times less on every diner's page, on the images that outweigh everything
 except the models themselves.
+
+## 12. The engine and the platform meet at one table
+
+**2026-09-06.** Self-serve needs a photo an owner took to become a model a diner rotates.
+The obvious wiring — the admin calls the engine, or writes into its job queue — is wrong,
+and wrong in the way that costs a year.
+
+**`model_requests` is the entire contract.** The platform writes what a restaurant asked
+for. The engine reads it with the service key, decides how it gets made, and writes back
+what happened. `menu/requests.py` is the only file that has heard of both halves.
+
+The word "Meshy" appears nowhere in the schema and nowhere in `app/`. That is the whole
+point: the engine is going to be replaced — a second one, a self-hosted one at a fraction
+of the credit cost, a re-run of every dish through something better next year. Every one of
+those is a change to the engine and to `engines/`, and to nothing a restaurant touches.
+
+### 12.1 · Three things that are cheap now and impossible to retrofit
+
+**Dish ids must not collide across restaurants.** The engine keys its storage on
+`slug(dish)`, and `slug("Khachapuri")` is the same string for every restaurant in Georgia.
+Two tenants asking for the same dish would silently share one R2 prefix and overwrite each
+other's model — and the first symptom would be a diner seeing another restaurant's food.
+`model_requests.dish` is the **item's UUID**, never its name; the human name travels
+separately as `title`, which `dataset.py` already separates for exactly this reason.
+
+**The photos outlive the model.** `photo_keys` is kept forever, including after the model
+is built and after it is replaced. The model is derived; the photos are the asset. A better
+engine in a year is worth nothing if we cannot find the inputs, and the whole plan is to
+re-run the catalogue when the engine improves.
+
+**Generating costs real money.** 30 credits a go. A self-serve button with no cap is a
+faucet pointed at our own bank account the moment there are fifty restaurants instead of
+two — and a quota added *after* owners have had it free is a fight, not a change. So
+`tenants.model_quota` exists from the first day the button does.
+
+### 12.2 · The quota is enforced where nobody can reach around it
+
+A request's starting state is decided by `model_request_gate()`, a trigger, and not by
+whatever the client sent. Under quota it goes straight to `approved` and runs — a
+restaurant that has to wait for a human is not self-serve, and the cap is what makes
+trusting them safe. Over quota it waits for us.
+
+**An owner cannot approve their own request.** The update policy's `with check` allows only
+`pending` and `cancelled`, and `grant update (state)` means they cannot touch the engine's
+own columns at all. `check_admin.py` proves both against the database through the owner's
+own token — not through a handler that could simply be missing the check.
+
+This is also why `model_quota` is allowed past the no-paywall guard in `check_schema.py`,
+narrowly and by name: **a cost ceiling on us is not a product boundary on them.** Nobody is
+charged, nobody pays to raise it, and removing it would not unlock a feature — it would
+remove the brake. A plan, a tier or a subscription still trips that check.
+
+### 12.3 · Capture frames are not menu photos
+
+A menu photo is 860px WebP, because the card draws it at 430 and a diner pays for every
+byte. **A capture frame is engine input, and the detail thrown away there is the ceiling on
+every model built from it, forever.** So they are separate endpoints — 2048px JPEG at high
+quality, a different prefix, a different lifetime — rather than one function with a flag.
+Feeding menu-sized photos to a generator would make every model quietly slightly worse than
+it should be, with no error anywhere.
+
+### 12.4 · Storage keys carry the tenant id, not the slug
+
+`upload.js` keyed photos on the slug while quoting the rule (§2.4) that says a slug is an
+address and never part of a storage key. Rename a restaurant once and its files are spread
+across two prefixes, so "delete everything this restaurant owns" stops having one answer.
+New keys are `t/<tenant uuid>/…`; keys already written keep resolving, because they are
+stored per row and never recomputed.

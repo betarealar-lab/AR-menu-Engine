@@ -206,6 +206,92 @@ def main() -> int:
             check("the dish is still what its owner typed",
                   cur.fetchone()[0] == "Khachapuri")
 
+        # ── asking for a 3D model, which is the only thing here that costs ──
+        # No credits are spent by any of this: a request is a row, and nothing reads it
+        # until `menu/requests.py` runs. That separation is the reason this is testable.
+        r = s.post(f"{BASE}/api/model-request", timeout=45, json={
+            "slug": slug, "item_id": item_id,
+            "photo_keys": [f"t/x/capture/aaaa-{a}.jpg"
+                           for a in ("front", "right", "back", "left")],
+        })
+        req = r.json() if r.ok else {}
+        check("a 3D model can be asked for", r.ok, r.text[:120])
+        check("and it is approved automatically while under quota",
+              req.get("state") == "approved", str(req.get("state")))
+
+        # The partial unique index. A double-tap on a slow connection must not be two
+        # generations and sixty credits for one plate of food.
+        again = s.post(f"{BASE}/api/model-request", timeout=45, json={
+            "slug": slug, "item_id": item_id, "photo_keys": ["t/x/capture/bbbb-front.jpg"],
+        })
+        check("asking twice for the same dish is refused", again.status_code == 409,
+              f"HTTP {again.status_code}")
+
+        # THE one that matters. An owner may withdraw a request; they may not approve
+        # one, because approving is what spends our money. RLS is the enforcement, so
+        # this goes at the database through the user's own token - not through a handler
+        # that could simply be missing the check.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select id from model_requests where item_id = %s", (item_id,))
+            req_id = cur.fetchone()[0]
+
+            def as_user(uid, sql, args=()):
+                """Run a statement the way the app runs it: as `authenticated`, with this
+                user's id in the JWT claims, which is what auth.uid() reads.
+
+                Inside a savepoint that is ALWAYS rolled back. A denied statement poisons
+                the transaction so even `reset role` fails afterwards, and a permitted one
+                must not actually change anything - the point is to find out whether it is
+                allowed, not to do it.
+                """
+                cur.execute("savepoint probe")
+                cur.execute("select set_config('request.jwt.claims', %s, true)",
+                            ('{"sub": "%s", "role": "authenticated"}' % uid,))
+                cur.execute("set local role authenticated")
+                try:
+                    cur.execute(sql, args)
+                    out, err = (cur.fetchall() if cur.description else []), None
+                except Exception as exc:                      # noqa: BLE001
+                    out, err = None, str(exc).splitlines()[0]
+                cur.execute("rollback to savepoint probe")
+                cur.execute("reset role")
+                return out, err
+
+            _, err = as_user(owner_id,
+                             "update model_requests set state = 'approved' "
+                             "where id = %s returning id", (req_id,))
+            check("an owner CANNOT approve their own request", err is not None,
+                  "an owner could set off a 30-credit generation at will")
+
+            _, err = as_user(owner_id,
+                             "update model_requests set credits = 0, engine = 'x' "
+                             "where id = %s returning id", (req_id,))
+            check("an owner cannot rewrite what an engine reported", err is not None,
+                  "the column grants should allow only `state`")
+
+            rows, err = as_user(owner_id,
+                                "update model_requests set state = 'cancelled' "
+                                "where id = %s returning id", (req_id,))
+            check("an owner CAN withdraw their own request", err is None, str(err))
+
+            # A stranger must not even be able to see that it exists.
+            rows, err = as_user(outsider_id,
+                                "select id from model_requests where id = %s", (req_id,))
+            check("a stranger cannot see someone else's request", not rows, str(rows))
+
+            # The quota, which is the only thing standing between self-serve and an
+            # unbounded bill. Drop it to what has already been used and the next request
+            # must land as pending rather than approved.
+            cur.execute("update tenants set model_quota = 0 where id = %s", (tenant_id,))
+            conn.commit()
+
+        r = s.post(f"{BASE}/api/model-request", timeout=45, json={
+            "slug": slug, "photo_keys": ["t/x/capture/cccc-front.jpg"], "title": "Over",
+        })
+        over = r.json() if r.ok else {}
+        check("over quota, a request waits for us instead of running",
+              over.get("state") == "pending", str(over))
+
         # ── the published page reflects the edit ─────────────────────────────
         r = requests.get(f"{BASE}/{slug}", timeout=60)
         check("the restaurant's own page renders the new dish",

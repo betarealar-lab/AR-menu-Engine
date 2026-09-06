@@ -235,3 +235,12 @@ button[disabled] { opacity: .55; cursor: default; }
 details { margin-top: 14px; }
 summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer;
           font-weight: 600; color: var(--brand); font-size: .9rem; }
+
+/* ── capture ───────────────────────────────────────────────────────── */
+
+/* The slot keeps its height before a photo lands in it, so taking the four shots does not
+   make the page jump under the thumb that is tapping it. */
+.shot { min-height: 96px; display: flex; align-items: center; justify-content: center;
+        background: var(--sunk); border-radius: 10px; margin-bottom: 12px;
+        overflow: hidden; }
+.shot img { display: block; width: 100%; }

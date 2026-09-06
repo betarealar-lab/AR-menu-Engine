@@ -137,6 +137,16 @@ const asMajor = (m) => (m ? (m / 100).toFixed(2).replace(/\.00$/, "") : "");
       </label>
       <p class="hint">Only models you have approved appear here.</p>
 
+      {!isNew && (
+        <div class="actions">
+          <a class="btn ghost grow" href={`/admin/${slug}/item/${item.id}/3d`}>
+            {item.model_id ? "Build a new 3D model" : "Make a 3D model"}
+          </a>
+        </div>
+      )}
+      <p class="hint">Four photos of the dish and we build it. A new one replaces nothing
+        until you approve it and pick it above.</p>
+
       <div class="switch">
         <span>Offer 3D and AR<small>Off keeps the model attached but the dish behaves like a photo dish.</small></span>
         <input type="checkbox" name="is_3d" checked={item.is_3d} />

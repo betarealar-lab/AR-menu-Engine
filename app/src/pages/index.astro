@@ -1,0 +1,12 @@
+---
+// The root. Nothing lives here yet, and a 404 on the address somebody types first is a
+// bad first impression of a working system.
+//
+// It sends you to the panel, which sends you to the login if you are not signed in. That
+// is the whole rule, and it is deliberately not a landing page: the marketing site is a
+// different product on a different origin (betareal.ge), and building a placeholder for it
+// here would mean deleting one later.
+//
+// Diner menus are at /{slug}. They are the only public pages this app serves.
+return Astro.redirect("/admin", 302);
+---

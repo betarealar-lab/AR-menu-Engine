@@ -1,12 +1,16 @@
-// Photo upload. Straight to R2, tenant-prefixed, never through a database.
+// A dish photo, for the menu card. Straight to R2, never through the database.
 //
 // The browser has already resized to 860px and re-encoded to WebP before this is called -
 // the card draws at 430px, and a 4000px camera shot is thousands of wasted kilobytes on
 // every diner's page load. A photo the browser re-encodes can only get smaller, which is
 // why images are allowed from an owner and models are not (TEMPLATE-GUIDELINES §2).
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+//
+// This is NOT the path a 3D capture takes. See `capture.js`: the engine wants the detail
+// this endpoint deliberately throws away, and feeding it menu-card photos would cap every
+// model we ever build at 860px of input.
 import { requireApiUser, jsonError } from "../../lib/api.js";
 import { republish } from "../../lib/publish.js";
+import { put, digest, tenantPrefix } from "../../lib/r2.js";
 import { envVar } from "../../lib/env.js";
 
 const MAX = 4 * 1024 * 1024;
@@ -31,26 +35,9 @@ export async function POST({ request, cookies }) {
     .from("tenants").select("id").eq("slug", slug).single();
   if (!tenant) return jsonError("No such restaurant", 404);
 
-  // Content-addressed, so re-uploading the same photo does not make a second copy and a
-  // rename never rots a URL (MENU-PLATFORM §2.4).
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  const hash = [...new Uint8Array(digest)].slice(0, 8)
-    .map((b) => b.toString(16).padStart(2, "0")).join("");
-  const key = `photos/${slug}/${hash}.webp`;
-
-  const s3 = new S3Client({
-    region: "auto",
-    endpoint: envVar("R2_ENDPOINT"),
-    credentials: {
-      accessKeyId: envVar("R2_ACCESS_KEY_ID"),
-      secretAccessKey: envVar("R2_SECRET_ACCESS_KEY"),
-    },
-  });
-  await s3.send(new PutObjectCommand({
-    Bucket: envVar("R2_BUCKET_PHOTOS", "betareal-photos"),
-    Key: key, Body: bytes, ContentType: "image/webp",
-  }));
+  const key = `${tenantPrefix(tenant.id)}/photos/${await digest(bytes)}.webp`;
+  await put(envVar("R2_BUCKET_PHOTOS", "betareal-photos"), key, bytes, "image/webp");
 
   if (itemId) {
     const { error } = await supa.from("items")

@@ -18,12 +18,26 @@ const { data: tenant } = await supa
   .from("tenants").select("id, name").eq("slug", slug).single();
 if (!tenant) return new Response("Not found", { status: 404 });
 
-const [{ data: models }, { data: items }] = await Promise.all([
+const [{ data: models }, { data: items }, { data: requests }] = await Promise.all([
   supa.from("models")
       .select("id, title, dish, variant, poster_key, draco_key, tenant_state, created_utc")
       .eq("tenant_id", tenant.id).order("created_utc", { ascending: false }),
   supa.from("items").select("id, name, model_id").eq("tenant_id", tenant.id),
+  // What is on the way. Shown FIRST, because "where is the model I asked for" is the
+  // question this screen exists to answer and an empty library is not an answer to it.
+  supa.from("model_requests")
+      .select("id, title, state, note, item_id, requested_utc")
+      .eq("tenant_id", tenant.id)
+      .in("state", ["pending", "approved", "running", "failed"])
+      .order("requested_utc", { ascending: false }),
 ]);
+
+const WAITING = {
+  pending:  "Waiting for us to approve it",
+  approved: "In the queue",
+  running:  "Being built now",
+  failed:   "Did not work",
+};
 
 // Which dish is using which model. The pointer lives on the item, not the model
 // (MENU-PLATFORM §3), so this is the only place that relationship can be read from.
@@ -38,7 +52,31 @@ const groups = [
 ];
 ---
 <Admin title="3D models" tab="models" slug={slug} back={`/admin/${slug}/menu`}>
-  {(models || []).length === 0 && (
+  {(requests || []).length > 0 && (
+    <div class="card">
+      <h2>On the way · {requests.length}</h2>
+      <ul class="rows">
+        {requests.map((r) => (
+          <li>
+            <div class="row">
+              <div class="thumb"></div>
+              <div class="body">
+                <b>{r.title || "Dish"}</b>
+                <small>{r.state === "failed" && r.note ? r.note : WAITING[r.state]}</small>
+              </div>
+              {r.item_id && (
+                <a class="chev" href={`/admin/${slug}/item/${r.item_id}/3d`}>&#8250;</a>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p class="hint" style="margin:14px 0 0">A model takes a few minutes. It lands below
+        for you to approve before any diner sees it.</p>
+    </div>
+  )}
+
+  {(models || []).length === 0 && (requests || []).length === 0 && (
     <div class="empty">
       <p>No 3D models yet.</p>
       <p class="hint">Send us photos of a dish and it appears here for you to approve.</p>

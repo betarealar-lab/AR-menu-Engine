@@ -112,12 +112,26 @@ def main() -> int:
                       f"{pol.get(t, 0)} policies")
 
             # DECISIONS 9.3: no paywall exists yet, so no column may pretend one does.
+            #
+            # One allowance, and the distinction is worth stating because the next person
+            # to add a column will want to argue it applies to theirs too:
+            #
+            #   `tenants.model_quota` caps OUR spend, not a restaurant's access. A
+            #   generation costs 30 credits of real money; the cap exists so self-serve
+            #   cannot outspend us while nobody is watching. Nobody is charged for
+            #   anything, no restaurant pays to raise it, and removing it would not
+            #   unlock a feature - it would just remove the brake.
+            #
+            # A plan, a tier, a price or a subscription still trips this, and so would a
+            # quota that gates something a restaurant could pay to unlock. That is the
+            # line: a cost ceiling on us is not a product boundary on them.
+            COST_CAPS = {("tenants", "model_quota")}
             cur.execute("""
                 select table_name, column_name from information_schema.columns
                 where table_schema = 'public'
-                  and column_name ~ '(plan|tier|quota|stripe|billing|subscription)'
+                  and column_name ~ '(plan|tier|quota|stripe|billing|subscription|price_plan)'
             """)
-            billing = cur.fetchall()
+            billing = [row for row in cur.fetchall() if tuple(row) not in COST_CAPS]
             check("no billing columns exist yet", not billing, str(billing))
 
             print("\n== two restaurants that must not see each other ==")
