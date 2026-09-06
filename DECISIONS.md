@@ -843,3 +843,62 @@ address and never part of a storage key. Rename a restaurant once and its files 
 across two prefixes, so "delete everything this restaurant owns" stops having one answer.
 New keys are `t/<tenant uuid>/…`; keys already written keep resolving, because they are
 stored per row and never recomputed.
+
+## 13. One admin, and it is the Next one
+
+**2026-09-06.** Temo: *"what i don't like with ur approach is that u try to build everything
+by urself when we have a base to go from... is astro right for admin panel or not."*
+
+It is not. Astro's design centre is shipping HTML with islands of interactivity, and that is
+exactly why it is right for the diner menu - the no-double-load fix depends on dishes being
+in the HTML. An admin is the opposite shape: nearly everything is interactive, so islands
+become ceremony; there is no client router, so every tab is a round trip that drops state;
+and inline vanilla JS does not survive a filterable table or an upload queue.
+
+So: **`admin/` is the platform's Next app, copied in and re-pointed at our schema.** The
+Astro admin that had been built in `app/src/pages/admin` was deleted the same day, along
+with its API routes. `app/` is the menu app and nothing else: `/{slug}`, `/a/<key>`, `/e`.
+
+What "re-pointed" means: each screen keeps the view-model it was written against, and one
+file per screen in `admin/lib/data/` maps that onto our tables. A view-model, not a
+compatibility layer - there is no view called `menu_items` and no trigger pretending there
+is, so a screen can start speaking the new shape natively whenever it is ready.
+
+**The tenants screen is the exception**: rewritten, not ported. The platform's is 1,215
+lines about brands, branches, plan tiers and a cleartext password table. We have none of
+those, and that table is the one piece of their debt that must not come across.
+
+### 13.1 - What the product is, and the order things get built
+
+Temo, same day: *"prioritize user experience and product design... in final product
+restaurant owner logs in, creates their menu, populates it and they have access to 3d model
+creation engine our main product and selling point. so basically we are creating delivery
+vehicle for our 3d models."*
+
+The build order follows from that and was agreed explicitly: **get every function in place
+and usable first, then remake the UI, then the refinements** - turntable thumbnails,
+preflight photo checks, the 3D-vs-not analytics. Not because the UI matters less; because
+a UI pass over screens whose functions are still moving is a UI pass done twice.
+
+**The milestone that means "done":** one real restaurant, onboarded entirely self-serve,
+with a 3D model they made themselves live on a menu diners scan - and nobody from BetaReal
+in the loop. Everything is built toward that and nothing else until it is true.
+
+Decisions taken in the same conversation, recorded so they are not re-asked:
+
+- Self-serve signup, **behind invite codes** until testing is done. Email confirmation is
+  skipped for private testing; turn it on before public.
+- Populating the menu: **typing now, import later** (PDF, spreadsheet, a link to an old
+  site). Photos stay manual either way. The setup flow has a visible "coming soon" slot.
+- Photos: the owner takes them. A pro-shoot offering is a separate product ("BetaReal
+  Premium") and is not this build's concern.
+- Manual QA of models before an owner sees them: **not yet** - test first whether owners
+  following the guidance get good models most of the time.
+- Notification when a model is ready: in-app first, email second.
+- The admin must work on **both** desktop and phone; most owners set up on a laptop.
+- **First three models free, then "contact us."** Pricing is not decided and Meshy credits
+  are bought in thousand-unit batches, so nothing is metered yet. Failures need guardrails:
+  two rejections on one dish means the input is bad, and the third attempt is not free.
+- Model export: **no.** Models stay on the platform; owners buy uses of them. Ad-video
+  generation and similar are future services on top.
+- QR codes: yes, generated in the admin.

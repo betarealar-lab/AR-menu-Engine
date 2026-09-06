@@ -453,18 +453,18 @@ check_render.py    100 checks of the rendered HTML: XSS and CSS injection from a
                    restaurant's own typing, the no-flash properties, `node --check`
                    on every inlined script, and that the ported viewer is present
                    BYTE FOR BYTE. Needs node
-check_admin.py     46 checks of the ADMIN over HTTP, as a real signed-in user:
+check_admin.py     76 checks of THE PRODUCT end to end, as the people who use it:
                    creates a throwaway account, signs in through the real form,
                    opens every screen, saves a dish, a category and a colour, and
                    reads them back. Then the negative - a signed-in stranger must
                    not be able to open or edit someone else's restaurant. Needs a
                    server: cd app && npm run dev. Cleans up after itself
-app/               the Astro app. Diner menus AND the admin panel, one renderer
-app/src/pages/admin/    the panel. Phone-first: one column, 44px targets, a bottom
-                   bar, lists not tables. No Publish button - saving publishes
-app/src/lib/fields.js   the ONLY list of settings keys the admin may write. The
-                   form and the endpoint both read it, so a field cannot exist in
-                   one and not the other. The names are the live restaurants' own
+app/               the MENU app (Astro, SSR). Diner pages only: /{slug}, /a/<key>,
+                   /e. The Astro admin that lived here was retired 2026-09-06
+admin/             THE admin (Next 16). Adopted from the platform's app and
+                   re-pointed at our schema; see DECISIONS 13
+admin/lib/data/    every query the admin makes, one file per screen. The screens
+                   keep the platform's view-model; the mapping to our schema is here
 menu/make_admin.py      creates an account and prints a one-time set-password
                    link. No password is ever chosen, printed or stored by us
 menu/model_requests.py   THE BRIDGE, and the only file that knows both halves. Approved

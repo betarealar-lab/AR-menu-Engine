@@ -78,3 +78,18 @@ export async function loadTemplates(currentId: string) {
     .select('id, name, listed').order('name')
   return (data || []).filter(t => t.listed || t.id === currentId)
 }
+
+/** Change the template and nothing else.
+ *
+ *  NOT saveThemeConfig with one key: that function writes both bags whole, which is right
+ *  for the theme screen (it loaded the whole bag first) and destroys everything for a
+ *  caller that only has one key. Setup did exactly that - picking a look wiped the
+ *  restaurant's name, address and hours. This merges. */
+export async function setTemplate(tenantId: string, templateId: string) {
+  const supabase = createClient()
+  const { data } = await supabase.from('tenants').select('settings').eq('id', tenantId).single()
+  const settings = { ...((data?.settings as ThemeConfig) || {}), template_key: templateId }
+  const { error } = await supabase.from('tenants')
+    .update({ template_id: templateId, settings }).eq('id', tenantId)
+  return error
+}

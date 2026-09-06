@@ -16,7 +16,8 @@ export async function proxy(request: NextRequest) {
   // /start is the front door and /api/signup is what it knocks on; both happen before
   // an account exists. /e never exists here (it is the menu app's) but is named so nobody
   // adds a beacon route to the admin and wonders why diners are being redirected.
-  const PUBLIC = ['/login', '/reset-password', '/auth', '/start', '/api/signup', '/e']
+  const PUBLIC = ['/login', '/reset-password', '/set-password', '/api/set-password',
+                  '/auth', '/start', '/api/signup', '/e']
   const isProtected = !PUBLIC.some(
     open => pathname === open || pathname.startsWith(`${open}/`),
   )
@@ -48,11 +49,23 @@ export async function proxy(request: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!user && isProtected) return NextResponse.redirect(new URL('/login', request.url))
+    if (!user && isProtected) {
+      // An API call gets a 401 it can read, not a login page it cannot. Redirecting a
+      // fetch() to HTML is how a signed-out DELETE once came back as "200 OK".
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+      }
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
     if (user && isAuthPage) return NextResponse.redirect(new URL('/home', request.url))
   } catch {
     // Supabase unreachable — send protected routes to login, never return 500
-    if (isProtected) return NextResponse.redirect(new URL('/login', request.url))
+    if (isProtected) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+      }
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
   }
 
   return supabaseResponse

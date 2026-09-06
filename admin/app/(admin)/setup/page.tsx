@@ -22,7 +22,7 @@ import { useRouter } from 'next/navigation'
 import { usePlan } from '@/lib/usePlan'
 import { createClient } from '@/lib/supabase/client'
 import { loadLibrary } from '@/lib/data/models'
-import { saveThemeConfig } from '@/lib/data/theme'
+import { setTemplate } from '@/lib/data/theme'
 import Plate from '@/components/Plate'
 import QrCode from '@/components/QrCode'
 
@@ -107,9 +107,10 @@ function Look({ plan, onNext, onSay }: {
 
   async function pick(id: string) {
     setCurrent(id)
-    // Both the column and the settings key, because the renderer reads template_key the
-    // way the live restaurants store it and everything else joins on the column.
-    const err = await saveThemeConfig(plan.restaurantId!, { template_key: id })
+    // Merged, not replaced. The first version of this called saveThemeConfig with one
+    // key, and that function writes both bags whole - picking a look wiped the name,
+    // the address and the hours. check_admin.py now proves it does not.
+    const err = await setTemplate(plan.restaurantId!, id)
     if (err) return onSay(err.message)
     setNonce(n => n + 1)          // reload the frame; it is the real page
   }
@@ -140,7 +141,7 @@ function Look({ plan, onNext, onSay }: {
 
       <div className="card overflow-hidden" style={{ minHeight: 560 }}>
         <iframe key={nonce} title="Your menu"
-                src={`${MENU_ORIGIN}/${plan.restaurantSlug}`}
+                src={`${MENU_ORIGIN}/${plan.restaurantSlug}?preview=${nonce}`}
                 className="w-full h-[560px] border-0" />
       </div>
     </div>

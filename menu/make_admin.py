@@ -41,8 +41,8 @@ def main() -> int:
                     help="comma-separated slugs; default is every restaurant")
     ap.add_argument("--super", action="store_true",
                     help="also make them a super admin (sees every restaurant)")
-    ap.add_argument("--base", default=os.environ.get("PUBLIC_ORIGIN",
-                                                     "http://127.0.0.1:4321"),
+    ap.add_argument("--base", default=os.environ.get("ADMIN_ORIGIN",
+                                                     "http://127.0.0.1:3001"),
                     help="where the admin is served from")
     a = ap.parse_args()
 
@@ -112,7 +112,7 @@ def main() -> int:
     print()
     otp = link.json().get("email_otp") if link.ok else None
     if otp:
-        target = (f"{a.base.rstrip('/')}/admin/set-password"
+        target = (f"{a.base.rstrip('/')}/set-password"
                   f"?token={otp}&email={quote(a.email)}")
         print("  Open this, choose a password, and you are in:\n")
         print(f"    {target}\n")

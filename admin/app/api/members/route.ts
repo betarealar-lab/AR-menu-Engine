@@ -79,9 +79,13 @@ export async function POST(req: NextRequest) {
     if (otp) {
       // Our own page, not Supabase's action_link. That one redirects to whatever Site URL
       // the dashboard holds - out of the box `http://localhost:3000`, which is somebody
-      // else's project - and it is a setting nobody will remember exists.
-      const origin = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
-      link = `${origin}/admin/set-password?token=${otp}&email=${encodeURIComponent(clean)}`
+      // else's project - and it is a setting nobody will remember exists. On THIS origin,
+      // read off the request, so it is right in every environment without a setting.
+      // Configured, because behind a proxy req.url is the internal address and Next
+      // normalises the host either way - a link that says "localhost" is a link that
+      // works on exactly one machine. Falls back to the request for a bare dev server.
+      const origin = process.env.NEXT_PUBLIC_ADMIN_ORIGIN || new URL(req.url).origin
+      link = `${origin}/set-password?token=${otp}&email=${encodeURIComponent(clean)}`
     }
   }
 
