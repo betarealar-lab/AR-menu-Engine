@@ -64,7 +64,8 @@ const EMPTY: PlanAccess = {
   canUseMenu: true,
   canUseAnalytics: true,
   canUseTheme: true,
-  canUseDeveloperAnalytics: true,
+  // Was an iframe to the platform's production analytics. Deleted; never true again.
+  canUseDeveloperAnalytics: false,
   canUploadModels: true,
   canManageTenants: false,
   canManageBranches: false,
