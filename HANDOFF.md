@@ -453,7 +453,7 @@ check_render.py    100 checks of the rendered HTML: XSS and CSS injection from a
                    restaurant's own typing, the no-flash properties, `node --check`
                    on every inlined script, and that the ported viewer is present
                    BYTE FOR BYTE. Needs node
-check_admin.py     30 checks of the ADMIN over HTTP, as a real signed-in user:
+check_admin.py     46 checks of the ADMIN over HTTP, as a real signed-in user:
                    creates a throwaway account, signs in through the real form,
                    opens every screen, saves a dish, a category and a colour, and
                    reads them back. Then the negative - a signed-in stranger must
@@ -467,6 +467,20 @@ app/src/lib/fields.js   the ONLY list of settings keys the admin may write. The
                    one and not the other. The names are the live restaurants' own
 menu/make_admin.py      creates an account and prints a one-time set-password
                    link. No password is ever chosen, printed or stored by us
+menu/requests.py   THE BRIDGE, and the only file that knows both halves. Approved
+                   requests -> frames in the dataset -> a generate job; then
+                   finished work -> a `models` row the owner can approve.
+                   --once / --watch / --status. It never approves anything:
+                   a request reaches `approved` through the quota trigger in
+                   0007 and no other way, so a bug here wastes a pass, not
+                   30 credits
+app/src/pages/api/capture.js   a 3D capture frame. 2048px JPEG, NOT the 860px
+                   WebP a menu card wants - the detail thrown away here is the
+                   ceiling on every model built from it, forever
+app/src/pages/api/model-request.js  asks for a model by writing a row. It cannot
+                   approve one; the column grants mean it could not if it tried
+app/src/lib/r2.js  the one place that puts an object in a bucket. Keys carry the
+                   TENANT UUID, never the slug (MENU-PLATFORM §2.4)
 menu/render/ported/     the platform's 3D + AR code, VERBATIM. Do not edit
                    xr.js / viewer.js   theirs, unmodified
                    viewer.css / .html  theirs, unmodified
