@@ -131,7 +131,7 @@ export default function ResetPasswordPage() {
             type="submit"
             disabled={loading}
             className="w-full py-2.5 rounded-lg font-semibold text-sm transition-opacity"
-            style={{ background: 'var(--gold)', color: '#0f0b07', opacity: loading ? 0.6 : 1 }}
+            style={{ background: 'var(--gold)', color: 'var(--gold-ink)', opacity: loading ? 0.6 : 1 }}
           >
             {loading ? T.working : hasSession ? T.updatePassword : T.sendResetEmail}
           </button>

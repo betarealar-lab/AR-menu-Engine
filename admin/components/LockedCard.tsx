@@ -32,7 +32,7 @@ export default function LockedCard({
       <Link
         href="/menu"
         className="inline-flex mt-5 px-4 py-2 rounded-lg text-sm font-semibold"
-        style={{ background: 'var(--gold)', color: '#0f0b07' }}
+        style={{ background: 'var(--gold)', color: 'var(--gold-ink)' }}
       >
         {T.backToMenu}
       </Link>

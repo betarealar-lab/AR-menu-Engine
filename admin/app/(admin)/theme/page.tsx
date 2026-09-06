@@ -563,7 +563,7 @@ export default function ThemePage() {
           </button>
           <button onClick={save} disabled={saving}
                   className="px-5 py-2 rounded-lg text-sm font-semibold"
-                  style={{ background: 'var(--gold)', color: '#0f0b07',
+                  style={{ background: 'var(--gold)', color: 'var(--gold-ink)',
                            opacity: saving ? 0.6 : dirty ? 1 : 0.65,
                            boxShadow: dirty && !saving ? '0 0 0 3px rgba(231,177,90,0.28)' : undefined,
                            transition: 'box-shadow .2s, opacity .2s' }}>
@@ -582,7 +582,7 @@ export default function ThemePage() {
           <button key={t.id} onClick={() => setTab(t.id)}
                   className="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
                   style={{ background: tab === t.id ? 'var(--gold)' : 'transparent',
-                           color: tab === t.id ? '#0f0b07' : 'var(--dim)' }}>
+                           color: tab === t.id ? 'var(--gold-ink)' : 'var(--dim)' }}>
             {t.label}
           </button>
         ))}
@@ -1229,7 +1229,7 @@ function Segmented({ value, onChange, options }:
         <button key={o.id} onClick={() => onChange(o.id)}
                 className="px-3 py-1 rounded-md text-xs font-medium transition-all"
                 style={{ background: value === o.id ? 'var(--gold)' : 'transparent',
-                         color: value === o.id ? '#0f0b07' : 'var(--dim)' }}>
+                         color: value === o.id ? 'var(--gold-ink)' : 'var(--dim)' }}>
           {o.label}
         </button>
       ))}

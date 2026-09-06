@@ -93,6 +93,7 @@ export default function MenuPage() {
   const [filters, setFilters]       = useState<MenuFilters>({ ...DEFAULT_MENU_FILTERS } as MenuFilters)
   const [loading, setLoading]       = useState(true)
   const [tab, setTab]               = useState<'items' | 'categories'>('items')
+  const [showFilters, setShowFilters] = useState(false)
 
   const [itemModal, setItemModal]   = useState(false)
   const [editItem, setEditItem]     = useState<MenuItem | null>(null)
@@ -497,83 +498,63 @@ export default function MenuPage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold page-title" style={{ color: 'var(--gold)' }}>{T.menuTitle}</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--dim)' }}>{T.menuDesc}</p>
-          <p className="text-xs mt-1" style={{ color: 'var(--dim)' }}>
-            {T.tenantLabel}: <span style={{ color: 'var(--text)' }}>{plan.restaurantName}</span>
+      {/* One header: what this is, which views there are, and the single primary action.
+          The restaurant's name is in the sidebar and does not need saying twice. */}
+      <div className="flex items-center gap-3 flex-wrap mb-5">
+        <div className="mr-auto">
+          <h1 className="page-title">{T.menuTitle}</h1>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--dim)' }}>
+            {items.length} dish{items.length === 1 ? '' : 'es'} · {categories.length} categories
+            {activeArItemCount > 0 && <> · {activeArItemCount} in 3D</>}
           </p>
         </div>
-        {msg && (
-          <span className="text-sm px-3 py-1.5 rounded-lg shrink-0"
-                style={{ background: 'rgba(76,175,125,0.15)', color: 'var(--success)' }}>
-            {msg}
-          </span>
-        )}
+
+        <div className="flex rounded-lg p-0.5" style={{ background: 'var(--card2)' }}>
+          {(['items', 'categories'] as const).map(id => (
+            <button key={id} onClick={() => setTab(id)}
+                    className="px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors"
+                    style={{ background: tab === id ? 'var(--card)' : 'transparent',
+                             color: tab === id ? 'var(--text)' : 'var(--dim)',
+                             boxShadow: tab === id ? 'var(--shadow)' : 'none' }}>
+              {id === 'items' ? T.tabItems : T.tabCategories}
+            </button>
+          ))}
+        </div>
+
+        <button onClick={tab === 'items' ? openNewItem : openNewCat} className="btn btn-primary">
+          {tab === 'items' ? T.addItem : T.addCategory}
+        </button>
       </div>
 
-      <div className="flex gap-1 mb-6 p-1 rounded-lg w-fit"
-           style={{ background: 'var(--card)' }}>
-        {(['items', 'categories'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-                  className="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
-                  style={{ background: tab === t ? 'var(--gold)' : 'transparent',
-                           color: tab === t ? '#0f0b07' : 'var(--dim)' }}>
-            {t === 'items'
-              ? `${T.tabItems} (${items.length})`
-              : `${T.tabCategories} (${categories.length})`}
-          </button>
-        ))}
-      </div>
+      {msg && <div className="card px-4 py-3 mb-4 text-sm">{msg}</div>}
 
       {loading ? (
         <p style={{ color: 'var(--dim)' }}>{T.loading}</p>
       ) : tab === 'items' ? (
         <>
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <button onClick={openNewItem}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: 'var(--gold)', color: '#0f0b07' }}>
-              {T.addItem}
-            </button>
-            <span className="text-sm px-3 py-2 rounded-lg"
-                  style={{ background: 'var(--card)', color: 'var(--dim)', border: '1px solid var(--border)' }}>
-              {T.activeArItems}: <span style={{ color: 'var(--text)' }}>{activeArItemCount} / {itemLimitLabel}</span>
-            </span>
-            <button type="button"
-                    onClick={() => updatePhoneLayout(phoneLayout === 'twin' ? 'list' : 'twin')}
-                    className="text-sm px-3 py-2 rounded-lg font-medium transition-colors"
-                    style={{ background: phoneLayout === 'twin' ? 'var(--gold)' : 'var(--card)',
-                             color: phoneLayout === 'twin' ? '#0f0b07' : 'var(--dim)',
-                             border: '1px solid var(--border)' }}
-                    title={T.twinPhoneTitle}>
-              {T.twinPhoneView}: {phoneLayout === 'twin' ? T.toggleOn : T.toggleOff}
-            </button>
-            <button type="button"
-                    onClick={() => updateSpinEnabled(!spinEnabled)}
-                    className="text-sm px-3 py-2 rounded-lg font-medium transition-colors"
-                    style={{ background: spinEnabled ? 'var(--gold)' : 'var(--card)',
-                             color: spinEnabled ? '#0f0b07' : 'var(--dim)',
-                             border: '1px solid var(--border)' }}
-                    title={T.spinTitle}>
-              360° Spin: {spinEnabled ? T.toggleOn : T.toggleOff}
-            </button>
-          </div>
-          <div className="mb-4 rounded-xl p-3 md:p-4"
-               style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-              <div className="flex-1 min-w-[220px]">
-                <label className="sr-only" htmlFor="menu-search">{T.menuSearchPlaceholder}</label>
-                <input
-                  id="menu-search"
-                  type="search"
-                  value={filters.query}
-                  onChange={e => updateFilter('query', e.target.value)}
-                  placeholder={T.menuSearchPlaceholder}
-                  className="h-11 text-base"
-                />
-              </div>
+          {/* Search is always here; the five filters are one tap away with a count when
+              they are on. Five dropdowns permanently open is a screen that looks like work
+              before any work has been done. */}
+          <div className="card p-3 md:p-4 mb-4">
+            <div className="flex gap-2 items-center">
+              <label className="sr-only" htmlFor="menu-search">{T.menuSearchPlaceholder}</label>
+              <input id="menu-search" type="search" value={filters.query}
+                     onChange={e => updateFilter('query', e.target.value)}
+                     placeholder={T.menuSearchPlaceholder} className="flex-1" />
+              <button type="button" onClick={() => setShowFilters(s => !s)}
+                      className="btn btn-sm shrink-0"
+                      style={filtersActive ? { borderColor: 'var(--gold)', color: 'var(--gold)' } : undefined}>
+                {T.menuFilterAll === 'All' ? 'Filters' : T.menuFilterCategory}
+                {filtersActive ? ' ·' : ''}
+              </button>
+              {filtersActive && (
+                <button type="button" onClick={clearFilters} className="btn btn-sm btn-ghost shrink-0">
+                  {T.menuClearFilters}
+                </button>
+              )}
+            </div>
+
+            <div className={showFilters ? 'mt-3' : 'hidden'}>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end">
                 <FilterField label={T.menuFilterCategory}>
                   <select value={filters.categoryId} onChange={e => updateFilter('categoryId', e.target.value)}>
@@ -620,16 +601,24 @@ export default function MenuPage() {
                 </FilterField>
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm" style={{ color: 'var(--dim)' }}>{resultCountLabel}</span>
-              {filtersActive && (
-                <button type="button"
-                        onClick={clearFilters}
-                        className="text-sm px-3 py-1.5 rounded-lg font-medium"
-                        style={{ color: 'var(--gold)', border: '1px solid var(--border)', background: 'var(--card2)' }}>
-                  {T.menuClearFilters}
-                </button>
-              )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+                <span className="text-xs" style={{ color: 'var(--dim)' }}>{resultCountLabel}</span>
+
+                {/* How the menu LOOKS on a phone: settings, not actions, so they live with
+                    the other view controls rather than beside "Add dish". */}
+                <label className="flex items-center gap-2 text-xs ml-auto" style={{ color: 'var(--dim)' }}
+                       title={T.twinPhoneTitle}>
+                  <input type="checkbox" checked={phoneLayout === 'twin'} style={{ width: 'auto' }}
+                         onChange={e => updatePhoneLayout(e.target.checked ? 'twin' : 'list')} />
+                  {T.twinPhoneView}
+                </label>
+                <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--dim)' }}
+                       title={T.spinTitle}>
+                  <input type="checkbox" checked={spinEnabled} style={{ width: 'auto' }}
+                         onChange={e => updateSpinEnabled(e.target.checked)} />
+                  360° spin
+                </label>
             </div>
           </div>
           {planLimitReached && plan.itemLimit !== null && (
@@ -638,72 +627,67 @@ export default function MenuPage() {
               {T.planLimitReachedHint}
             </div>
           )}
-          <div className="table-scroll rounded-xl"
-               style={{ border: '1px solid var(--border)' }}>
-            <table className="w-full text-sm" style={{ minWidth: '600px' }}>
-              <thead>
-                <tr style={{ background: 'var(--card2)', borderBottom: '1px solid var(--border)' }}>
-                  {[T.colName, T.colCategory, T.colTopLevel, T.colPrice, T.colModel, T.colVisible, ''].map((h, i) => (
-                    <th key={i} className="px-4 py-3 text-left font-medium"
-                        style={{ color: 'var(--dim)' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.map((item, i) => (
-                  <tr key={item.id}
-                      style={{ background: i % 2 ? 'var(--card)' : 'transparent',
-                               borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{item.name_en}</div>
-                      <div className="text-xs mt-0.5" style={{ color: 'var(--dim)' }}>{item.name_ka}</div>
-                    </td>
-                    <td className="px-4 py-3" style={{ color: 'var(--dim)' }}>
-                      {catName(item.category_id)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full"
-                            style={{ background: 'var(--card2)', color: 'var(--dim)', border: '1px solid var(--border)' }}>
-                        {groupForCategory(item.category_id) === 'drink' ? T.drinksTab : T.foodTab}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono" style={{ color: 'var(--gold)' }}>
-                      {item.price}
-                    </td>
-                    <td className="px-4 py-3" style={{ color: 'var(--dim)', fontSize: '0.75rem' }}>
-                      {plan.canUploadModels
-                        ? item.model
-                        : item.model
-                          ? T.modelManagedByUs
-                          : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full"
-                            style={{ background: item.visible ? 'rgba(76,175,125,0.15)' : 'rgba(224,82,82,0.12)',
-                                     color: item.visible ? 'var(--success)' : 'var(--danger)' }}>
-                        {item.visible ? T.visible : T.hidden}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button onClick={() => openEditItem(item)}
-                                className="text-xs px-2.5 py-1 rounded"
-                                style={{ background: 'var(--gold-dim, rgba(242,181,53,0.12))',
-                                         color: 'var(--gold)' }}>
-                          {T.edit}
-                        </button>
-                        <button onClick={() => setDeleteId(item.id)}
-                                className="text-xs px-2.5 py-1 rounded"
-                                style={{ background: 'rgba(224,82,82,0.1)',
-                                         color: 'var(--danger)' }}>
-                          {T.delete}
-                        </button>
-                      </div>
-                    </td>
+          {/* A menu should look like food. The photo is the first column, the whole row
+              opens the editor, and the model is a badge - the old "Model" column printed
+              the raw R2 URL, which is developer output, not a product. */}
+          <div className="card overflow-hidden">
+            <div className="table-scroll">
+              <table className="w-full text-sm" style={{ minWidth: 640 }}>
+                <thead>
+                  <tr style={{ background: 'var(--card2)', borderBottom: '1px solid var(--border)' }}>
+                    <th className="w-14"></th>
+                    {[T.colName, T.colCategory, T.colPrice, '3D', T.colVisible, ''].map((h, i) => (
+                      <th key={i} className="px-3 py-2.5 text-left eyebrow"
+                          style={{ textAlign: h === T.colPrice ? 'right' : 'left' }}>{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredItems.map(item => (
+                    <tr key={item.id} onClick={() => openEditItem(item)}
+                        className="cursor-pointer transition-colors"
+                        style={{ borderTop: '1px solid var(--border)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--card2)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <td className="pl-4 py-2">
+                        <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0"
+                             style={{ background: 'var(--card2)' }}>
+                          {item.thumbnail_url
+                            ? <img src={item.thumbnail_url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                            : null}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="font-semibold">{item.name_en || <span style={{ color: 'var(--danger)' }}>{T.menuFilterMissingEn}</span>}</div>
+                        {item.name_ka && <div className="text-xs" style={{ color: 'var(--dim)' }}>{item.name_ka}</div>}
+                      </td>
+                      <td className="px-3 py-2" style={{ color: 'var(--dim)' }}>
+                        {catName(item.category_id)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+                        {item.price || <span style={{ color: 'var(--danger)' }}>—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {item.model
+                          ? <span className={`pill ${item.is_3d ? 'pill-on' : 'pill-mute'}`}>
+                              {item.is_3d ? '3D' : 'off'}
+                            </span>
+                          : <span style={{ color: 'var(--dim)' }}>—</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`pill ${item.visible ? 'pill-on' : 'pill-off'}`}>
+                          {item.visible ? T.visible : T.hidden}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap">
+                        <button onClick={e => { e.stopPropagation(); setDeleteId(item.id) }}
+                                className="btn btn-sm btn-ghost btn-danger">{T.delete}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           {filteredItems.length === 0 && (
             <div className="mt-4 rounded-xl p-5 text-center"
@@ -713,7 +697,7 @@ export default function MenuPage() {
               <button type="button"
                       onClick={clearFilters}
                       className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold"
-                      style={{ background: 'var(--gold)', color: '#0f0b07' }}>
+                      style={{ background: 'var(--gold)', color: 'var(--gold-ink)' }}>
                 {T.menuClearFilters}
               </button>
             </div>
@@ -721,53 +705,43 @@ export default function MenuPage() {
         </>
       ) : (
         <>
-          <button onClick={openNewCat}
-                  className="mb-4 px-4 py-2 rounded-lg text-sm font-semibold"
-                  style={{ background: 'var(--gold)', color: '#0f0b07' }}>
-            {T.addCategory}
-          </button>
-          <div className="table-scroll rounded-xl"
-               style={{ border: '1px solid var(--border)' }}>
-            <table className="w-full text-sm" style={{ minWidth: '420px' }}>
-              <thead>
-                <tr style={{ background: 'var(--card2)', borderBottom: '1px solid var(--border)' }}>
-                  {[T.nameEn, T.nameKa, T.colMenuOrder, T.colItems, ''].map((h, i) => (
-                    <th key={i} className="px-4 py-3 text-left font-medium"
-                        style={{ color: 'var(--dim)' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map((cat, i) => (
-                  <tr key={cat.id}
-                      style={{ background: i % 2 ? 'var(--card)' : 'transparent',
-                               borderBottom: '1px solid var(--border)' }}>
-                    <td className="px-4 py-3 font-medium">{cat.name_en}</td>
-                    <td className="px-4 py-3" style={{ color: 'var(--dim)' }}>{cat.name_ka}</td>
-                    <td className="px-4 py-3" style={{ color: 'var(--dim)' }}>{cat.sort_order}</td>
-                    <td className="px-4 py-3" style={{ color: 'var(--dim)' }}>
-                      {items.filter(it => it.category_id === cat.id).length}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button onClick={() => openEditCat(cat)}
-                                className="text-xs px-2.5 py-1 rounded"
-                                style={{ background: 'var(--gold-dim, rgba(242,181,53,0.12))',
-                                         color: 'var(--gold)' }}>
-                          {T.edit}
-                        </button>
-                        <button onClick={() => setDeleteCatId(cat.id)}
-                                className="text-xs px-2.5 py-1 rounded"
-                                style={{ background: 'rgba(224,82,82,0.1)',
-                                         color: 'var(--danger)' }}>
-                          {T.delete}
-                        </button>
-                      </div>
-                    </td>
+          <div className="card overflow-hidden">
+            <div className="table-scroll">
+              <table className="w-full text-sm" style={{ minWidth: 420 }}>
+                <thead>
+                  <tr style={{ background: 'var(--card2)', borderBottom: '1px solid var(--border)' }}>
+                    {[T.nameEn, T.nameKa, T.colMenuOrder, T.colItems, ''].map((h, i) => (
+                      <th key={i} className="px-4 py-2.5 text-left eyebrow">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {categories.map(cat => (
+                    <tr key={cat.id} onClick={() => openEditCat(cat)}
+                        className="cursor-pointer transition-colors"
+                        style={{ borderTop: '1px solid var(--border)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--card2)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <td className="px-4 py-2.5 font-semibold">{cat.name_en}</td>
+                      <td className="px-4 py-2.5" style={{ color: 'var(--dim)' }}>{cat.name_ka}</td>
+                      <td className="px-4 py-2.5" style={{ color: 'var(--dim)' }}>{cat.sort_order}</td>
+                      <td className="px-4 py-2.5" style={{ color: 'var(--dim)' }}>
+                        {items.filter(it => it.category_id === cat.id).length}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button onClick={e => { e.stopPropagation(); setDeleteCatId(cat.id) }}
+                                className="btn btn-sm btn-ghost btn-danger">{T.delete}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {categories.length === 0 && (
+              <p className="p-8 text-center text-sm" style={{ color: 'var(--dim)' }}>
+                No categories yet. Dishes without one still show, grouped together.
+              </p>
+            )}
           </div>
         </>
       )}
@@ -1058,7 +1032,7 @@ export default function MenuPage() {
             </button>
             <button onClick={saveItem} disabled={saving}
                     className="px-5 py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: 'var(--gold)', color: '#0f0b07', opacity: saving ? 0.6 : 1 }}>
+                    style={{ background: 'var(--gold)', color: 'var(--gold-ink)', opacity: saving ? 0.6 : 1 }}>
               {saving ? T.saving : T.save}
             </button>
           </div>
@@ -1088,7 +1062,7 @@ export default function MenuPage() {
             </button>
             <button onClick={saveCat} disabled={saving}
                     className="px-5 py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: 'var(--gold)', color: '#0f0b07', opacity: saving ? 0.6 : 1 }}>
+                    style={{ background: 'var(--gold)', color: 'var(--gold-ink)', opacity: saving ? 0.6 : 1 }}>
               {saving ? T.saving : T.save}
             </button>
           </div>
