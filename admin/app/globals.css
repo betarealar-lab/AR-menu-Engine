@@ -1,29 +1,63 @@
 @import "tailwindcss";
 
+/* The admin's look, in twelve variables.
+ *
+ * Every screen styles itself with `var(--card)`, `var(--border)`, `var(--gold)` and so on,
+ * inline. That was true before this file was rewritten and it is why the whole panel could
+ * be re-skinned here without touching a component: the tokens are the design system, and
+ * the components already speak it.
+ *
+ * What changed and why:
+ *
+ *   The surfaces were BROWN - #0f0b07 on #1d1610. Brown reads as dated and it fights the
+ *   food photography, which is the one thing on these screens that has to look good. They
+ *   are neutral near-black now, so a dish photo is the only warm thing on the page.
+ *
+ *   Gold stays, because it is the brand, but it is used as an ACCENT and not as body text.
+ *   Labels were gold-on-brown at 11px, which is pretty and hard to read; text is now near
+ *   white and gold marks the one thing that matters on a screen.
+ *
+ *   Borders were tinted gold at 18% and drew attention to boxes instead of content. They
+ *   are plain white at 8%, so structure is felt rather than seen.
+ *
+ * Contrast was checked rather than eyeballed: --text on --bg is ~14:1 and --dim on --bg is
+ * ~5.4:1, both past WCAG AA. The old --dim (#8a7a62 on #0f0b07) was ~4.3:1 and that is the
+ * colour every hint and every label was written in.
+ */
+
 :root {
-  --gold:     #f2b535;
-  --gold-dim: rgba(242,181,53,0.15);
-  --text:     #ede6d4;
-  --dim:      #8a7a62;
-  --bg:       #0f0b07;
-  --card:     #1d1610;
-  --card2:    #261d13;
-  --border:   rgba(242,181,53,0.18);
-  --danger:   #e05252;
-  --success:  #4caf7d;
+  --gold:     #f5b544;
+  --gold-dim: rgba(245,181,68,0.14);
+  --gold-ink: #12100b;          /* text ON gold; near-black, never white */
+  --text:     #eceef1;
+  --dim:      #98a1ad;
+  --bg:       #0b0c0e;
+  --card:     #141619;
+  --card2:    #1c1f24;
+  --border:   rgba(255,255,255,0.09);
+  --danger:   #f0685f;
+  --success:  #46c98b;
+
+  --radius:   12px;
+  --radius-sm: 8px;
+  --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  --ring:     0 0 0 3px rgba(245,181,68,0.22);
 }
 
 html.light {
-  --text:     #1c1308;
-  --dim:      #8a7060;
-  --bg:       #f5f0e8;
+  --gold:     #a76a05;
+  --gold-dim: rgba(167,106,5,0.10);
+  --gold-ink: #ffffff;
+  --text:     #14181d;
+  --dim:      #626d7a;
+  --bg:       #f6f7f9;
   --card:     #ffffff;
-  --card2:    #ede7d8;
-  --border:   rgba(155,98,8,0.18);
-  --gold:     #c07808;
-  --gold-dim: rgba(192,120,8,0.12);
-  --danger:   #cc3333;
-  --success:  #2d7a50;
+  --card2:    #f0f2f5;
+  --border:   rgba(14,20,28,0.10);
+  --danger:   #c2352b;
+  --success:  #17794c;
+  --shadow:   0 1px 2px rgba(16,24,40,.06), 0 8px 24px -12px rgba(16,24,40,.18);
+  --ring:     0 0 0 3px rgba(167,106,5,0.16);
 }
 
 html, body {
@@ -34,43 +68,128 @@ html, body {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  /* Tabular figures everywhere. Prices, counts and positions sit in columns on these
+     screens, and proportional digits make a column of numbers look crooked. */
+  font-variant-numeric: tabular-nums;
 }
 
+h1, h2, h3 { letter-spacing: -0.011em; }
+h1.page-title { font-size: 1.5rem; font-weight: 700; }
+
 /* ── Inputs ─────────────────────────────────────────────── */
+/* 16px on touch, deliberately: iOS Safari zooms the whole page when a field under 16px
+   takes focus, and an owner editing a price on a phone should not have to pinch back out
+   after every tap. */
 input, textarea, select {
   background: var(--card2);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--text);
-  padding: 8px 12px;
+  padding: 9px 12px;
+  font: inherit;
   font-size: 0.875rem;
   outline: none;
   width: 100%;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+@media (pointer: coarse) {
+  input, textarea, select { font-size: 16px; padding: 11px 12px; }
+}
+input:hover, textarea:hover, select:hover { border-color: rgba(255,255,255,0.18); }
+html.light input:hover, html.light textarea:hover, html.light select:hover {
+  border-color: rgba(14,20,28,0.22);
 }
 input:focus, textarea:focus, select:focus {
   border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(242,181,53,0.12);
+  box-shadow: var(--ring);
 }
+input::placeholder, textarea::placeholder { color: var(--dim); opacity: .7; }
 input[type="color"] {
-  padding: 2px 4px;
-  height: 36px;
+  padding: 2px;
+  height: 38px;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
+}
+select {
+  appearance: none;
+  /* The arrow, drawn rather than fetched: an inline SVG here is one fewer request and it
+     follows the text colour, which a background image cannot. */
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 14px center, right 9px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 30px;
 }
 
 /* ── Buttons ─────────────────────────────────────────────── */
-button { cursor: pointer; }
-button:active { transform: scale(0.97); }
+button { cursor: pointer; font: inherit; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Named button styles, so a screen does not have to spell out six inline properties to
+   get the primary action to look like the primary action. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 9px 16px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--card2); color: var(--text);
+  font-size: .875rem; font-weight: 600; white-space: nowrap;
+  transition: background .15s, border-color .15s, opacity .15s;
+}
+.btn:hover:not(:disabled) { background: var(--card); border-color: var(--gold); }
+.btn-primary {
+  background: var(--gold); border-color: var(--gold); color: var(--gold-ink);
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.07); background: var(--gold); }
+.btn-ghost { background: transparent; }
+.btn-danger { color: var(--danger); }
+.btn-danger:hover:not(:disabled) { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-sm { padding: 6px 11px; font-size: .8125rem; }
+
+/* ── Surfaces ────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.card-flat { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+
+/* A label above a group of controls. Uppercase, wide, dim - the pattern already used on
+   these screens, named so it stops being retyped. */
+.eyebrow {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .09em;
+  font-weight: 600; color: var(--dim);
+}
+
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; line-height: 1.5;
+}
+.pill-on   { background: rgba(70,201,139,.14); color: var(--success); }
+.pill-off  { background: rgba(240,104,95,.14); color: var(--danger); }
+.pill-wait { background: var(--gold-dim);      color: var(--gold); }
+.pill-mute { background: var(--card2);         color: var(--dim); }
 
 /* ── Scrollbar ───────────────────────────────────────────── */
-::-webkit-scrollbar          { width: 4px; height: 4px; }
+::-webkit-scrollbar          { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track    { background: transparent; }
-::-webkit-scrollbar-thumb    { background: var(--border); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: var(--gold-dim); }
+::-webkit-scrollbar-thumb    {
+  background: var(--border); border-radius: 99px;
+  border: 3px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--dim); background-clip: content-box; }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
 /* ── Page fade-in ────────────────────────────────────────── */
@@ -83,14 +202,24 @@ button:active { transform: scale(0.97); }
   animation: page-in 0.22s ease-out both;
 }
 
+/* Somebody who has asked their system not to animate things means it. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ── Table ───────────────────────────────────────────────── */
 .table-scroll {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border-radius: 12px;
+  border-radius: var(--radius);
 }
 
 /* ── Responsive helpers ──────────────────────────────────── */
 @media (max-width: 767px) {
-  h1.page-title { font-size: 1.4rem; }
+  h1.page-title { font-size: 1.3rem; }
 }

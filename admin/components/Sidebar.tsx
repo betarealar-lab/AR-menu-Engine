@@ -5,28 +5,18 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { translations, type Lang } from '@/lib/i18n'
 import { usePlan } from '@/lib/usePlan'
+import TenantPicker from '@/components/TenantPicker'
 import { adminIdentityLabel } from '@/lib/adminUx'
 
-const LIGHT: Record<string, string> = {
-  '--bg':       '#f5f0e8',
-  '--card':     '#ffffff',
-  '--card2':    '#ede7d8',
-  '--border':   'rgba(155,98,8,0.18)',
-  '--text':     '#1c1308',
-  '--dim':      '#8a7060',
-  '--gold':     '#c07808',
-  '--gold-dim': 'rgba(192,120,8,0.12)',
-  '--danger':   '#cc3333',
-  '--success':  '#2d7a50',
-}
 
+/** Light mode is a class on <html>, not a second palette written in JavaScript.
+ *
+ *  It used to be both: globals.css had an `html.light` block AND this file set the same
+ *  ten variables inline on the root element. Inline wins, so the stylesheet's light theme
+ *  was dead code and every colour had to be changed in two places to change at all - which
+ *  is exactly how one of them ends up stale. */
 function applyThemeVars(isDark: boolean) {
-  const root = document.documentElement
-  if (isDark) {
-    Object.keys(LIGHT).forEach(k => root.style.removeProperty(k))
-  } else {
-    Object.entries(LIGHT).forEach(([k, v]) => root.style.setProperty(k, v))
-  }
+  document.documentElement.classList.toggle('light', !isDark)
 }
 
 interface Props {
@@ -148,6 +138,11 @@ export default function Sidebar({ open, onClose }: Props) {
         >
           ×
         </button>
+      </div>
+
+      {/* Which restaurant. Above the nav because it decides what every link below shows. */}
+      <div className="px-3 pt-3 shrink-0">
+        <TenantPicker plan={plan} />
       </div>
 
       {/* Nav links */}

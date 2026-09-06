@@ -434,6 +434,71 @@ def main() -> int:
         check("an owner can read their own usage", rpc.ok and isinstance(rpc.json(), int),
               rpc.text[:140])
 
+        # ── the Next admin refuses anonymous visitors on every screen ────────
+        # Its middleware used to name the five paths that existed when it was written, so
+        # adding a screen shipped it unauthenticated - /models did exactly that. Checked
+        # per route rather than in principle, because that is the failure mode: not a
+        # broken rule, a rule somebody forgot to extend.
+        next_base = os.environ.get("ADMIN_NEXT_BASE", "http://127.0.0.1:3001")
+        try:
+            requests.get(f"{next_base}/login", timeout=6)
+        except requests.RequestException:
+            print("  --   Next admin not running; skipped "
+                  f"({next_base}; cd admin && npm run dev)")
+        else:
+            for path in ("/", "/menu", "/theme", "/models", "/tenants", "/dashboard",
+                         "/history", "/dev-analytics"):
+                r = requests.get(f"{next_base}{path}", timeout=20, allow_redirects=False)
+                check(f"admin {path} refuses a signed-out visitor",
+                      r.status_code in (302, 307), f"got {r.status_code}")
+            r = requests.get(f"{next_base}/login", timeout=20, allow_redirects=False)
+            check("admin /login is still reachable", r.status_code == 200,
+                  f"got {r.status_code}")
+
+        # ── letting somebody else in ─────────────────────────────────────────
+        # The rule that matters: being an owner of one restaurant must not be a way to
+        # write yourself into another. An INSERT policy could not express it - the policy
+        # only sees the row being written, and that row looks perfectly legal - so it lives
+        # in add_tenant_member, and this is the check that it actually holds.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            _, err = as_user(outsider_id,
+                             "select add_tenant_member(%s, %s, 'owner')",
+                             (str(tenant_id), outsider_id))
+            check("a stranger cannot add themselves to a restaurant", err is not None,
+                  "anyone signed in could join any restaurant")
+
+            rows, err = as_user(owner_id,
+                                "select add_tenant_member(%s, %s, 'staff')",
+                                (str(tenant_id), outsider_id))
+            check("an owner CAN add somebody to their own", err is None, str(err))
+
+            # The last member cannot leave. A restaurant nobody can edit cannot be fixed
+            # from inside the product.
+            cur.execute("delete from tenant_members where tenant_id = %s and user_id <> %s",
+                        (tenant_id, owner_id))
+            conn.commit()
+            _, err = as_user(owner_id, "select remove_tenant_member(%s, %s)",
+                             (str(tenant_id), owner_id))
+            check("the last person cannot remove themselves", err is not None,
+                  "a restaurant could be orphaned with no way back in")
+
+            # 0001 let an owner see only their OWN membership row, so a members list always
+            # had exactly one person in it. 0008 widened it to everyone in a restaurant you
+            # are in, which is the set the screen is for.
+            cur.execute("""insert into tenant_members (tenant_id, user_id, role)
+                           values (%s, %s, 'staff')
+                           on conflict do nothing""", (tenant_id, outsider_id))
+            conn.commit()
+            rows, err = as_user(owner_id,
+                                "select user_id from tenant_members where tenant_id = %s",
+                                (str(tenant_id),))
+            check("an owner sees everyone in their restaurant, not just themselves",
+                  rows and len(rows) == 2, f"{rows} {err}")
+
+            cur.execute("delete from tenant_members where tenant_id = %s and user_id = %s",
+                        (tenant_id, outsider_id))
+            conn.commit()
+
         # ── the two jsonb bags stay on their own sides ───────────────────────
         # The theme screen loads a merged bag of ~104 keys and saves it split again. If
         # that split is ever wrong the symptom is silent and slow: a closing time

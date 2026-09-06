@@ -4,12 +4,19 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const isAuthPage = pathname === '/login'
-  const isProtected = pathname.startsWith('/dashboard') ||
-                      pathname.startsWith('/dev-analytics') ||
-                      pathname.startsWith('/menu') ||
-                      pathname.startsWith('/tenants') ||
-                      pathname.startsWith('/theme') ||
-                      pathname === '/'
+
+  // Deny by default. This used to be a list of the five paths that existed when it was
+  // written, so adding a screen quietly shipped it unauthenticated - /models did exactly
+  // that, and it was only ever RLS stopping an anonymous visitor seeing anything. A
+  // guard you have to remember to extend is a guard that is one commit from being wrong.
+  //
+  // Everything is protected except the handful of things that must work signed out, and
+  // Next's own paths, which the matcher below already skips but which are named here so
+  // the rule reads completely on its own.
+  const PUBLIC = ['/login', '/reset-password', '/auth']
+  const isProtected = !PUBLIC.some(
+    open => pathname === open || pathname.startsWith(`${open}/`),
+  )
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
