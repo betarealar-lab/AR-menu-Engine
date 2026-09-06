@@ -168,6 +168,42 @@ def main() -> int:
     check("iOS AR goes through a rel=ar anchor", "setAttribute('rel', 'ar')" in html)
     check("Android AR has the Three.js carousel", "window.XR = {" in html)
 
+    print("\n== one palette key list, in three languages ==")
+    # `render_theme_keys.py` has said "check_render.py asserts the two stay in step" since
+    # the day it was written, and no such check existed. It does now, and there are three
+    # copies to keep honest: the Python importer that splits a live theme_config, the JS
+    # renderer that turns a palette into CSS custom properties, and the TypeScript the
+    # admin uses to tell a colour from a closing time.
+    #
+    # A shared package would be better if these were one language in one app. They are
+    # three languages in two apps, so the alternative to duplication is a build step
+    # between them - and a duplicate list that FAILS THE BUILD when it drifts is safer than
+    # a build step nobody remembers to run.
+    import re as _re
+    py_src = (ROOT / "menu" / "render_theme_keys.py").read_text(encoding="utf-8")
+    py_keys = set(_re.findall(r'"(\w+)"', py_src[py_src.index("PALETTE_KEYS = {"):]))
+
+    js_src = (ROOT / "app" / "src" / "lib" / "theme.js").read_text(encoding="utf-8")
+    js_body = js_src[js_src.index("export const VAR_MAP = {"):]
+    js_body = js_body[:js_body.index("\n};")]
+    js_keys = set(_re.findall(r'(\w+):\s*"--', js_body))
+
+    ts_path = ROOT / "admin" / "lib" / "paletteKeys.ts"
+    ts_keys = set()
+    if ts_path.is_file():
+        ts_src = ts_path.read_text(encoding="utf-8")
+        ts_body = ts_src[ts_src.index("PALETTE_KEYS: ReadonlySet<string> = new Set(["):]
+        ts_keys = set(_re.findall(r"'(\w+)'", ts_body[:ts_body.index("])")]))
+
+    check(f"the renderer knows {len(js_keys)} palette keys", len(js_keys) > 30)
+    check("the Python importer agrees with the renderer", py_keys == js_keys,
+          f"only in python: {sorted(py_keys - js_keys)}; "
+          f"only in js: {sorted(js_keys - py_keys)}")
+    if ts_keys:
+        check("the admin agrees with the renderer", ts_keys == js_keys,
+              f"only in ts: {sorted(ts_keys - js_keys)}; "
+              f"only in js: {sorted(js_keys - ts_keys)}")
+
     print("\n== a template is a palette, not a page ==")
     mg = render(snapshot(template="monday_greens", theme={}))
     check("a known template is applied", 'data-template="monday_greens"' in mg)

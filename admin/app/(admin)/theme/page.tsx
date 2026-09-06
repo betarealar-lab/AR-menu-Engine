@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo, type CSSProperties } from 'react'
+import { loadThemeConfig, saveThemeConfig } from '@/lib/data/theme'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
 import type { Translations } from '@/lib/i18n'
@@ -250,9 +251,9 @@ export default function ThemePage() {
       setLoading(plan.loading)
       return
     }
-    const { data } = await supabase.from('theme_config').select('key,value').eq('restaurant_id', plan.restaurantId)
-    const map: ThemeConfig = {}
-    data?.forEach(r => { map[r.key] = r.value })
+    // 104 key/value rows became one row of two jsonb columns. Which side each key lands
+    // on is isPaletteKey - the same rule that split the live restaurants on import.
+    const map = await loadThemeConfig(plan.restaurantId)
     setConfig(map)
     setSavedConfig(map)
     setLoading(false)
@@ -492,8 +493,7 @@ export default function ThemePage() {
 
   async function save() {
     setSaving(true)
-    const rows = Object.entries(config).map(([key, value]) => ({ key, value, restaurant_id: plan.restaurantId }))
-    await supabase.from('theme_config').upsert(rows, { onConflict: 'restaurant_id,key' })
+    await saveThemeConfig(plan.restaurantId!, config)
     setSavedConfig({ ...config })
     setSaving(false)
     setMsg(T.saved)
@@ -503,8 +503,10 @@ export default function ThemePage() {
   async function reset() {
     if (!confirm(T.resetConfirm)) return
     const next = currentTemplateDefaults(config, plan.restaurantSlug)
-    const rows = Object.entries(next).map(([key, value]) => ({ key, value, restaurant_id: plan.restaurantId }))
-    const { error } = await supabase.from('theme_config').upsert(rows, { onConflict: 'restaurant_id,key' })
+    // A reset REPLACES the bag rather than merging over it - that is the point of a reset,
+    // and saveThemeConfig writes both columns whole, so a key the template does not define
+    // genuinely goes away instead of surviving as a leftover nobody can see.
+    const error = await saveThemeConfig(plan.restaurantId!, next)
     if (error) {
       setMsg(text(T.resetFailed, { message: error.message }))
       setTimeout(() => setMsg(''), 5000)

@@ -25,6 +25,8 @@ import uuid
 
 import requests
 
+from pathlib import Path
+
 from config import load_env
 
 BASE = os.environ.get("ADMIN_BASE", "http://127.0.0.1:4321")
@@ -403,6 +405,38 @@ def main() -> int:
         over = r.json() if r.ok else {}
         check("over quota, a request waits for us instead of running",
               over.get("state") == "pending", str(over))
+
+        # ── the two jsonb bags stay on their own sides ───────────────────────
+        # The theme screen loads a merged bag of ~104 keys and saves it split again. If
+        # that split is ever wrong the symptom is silent and slow: a closing time
+        # serialised into every diner's <head> as a CSS custom property, or an accent
+        # colour in the settings bag where the renderer never looks for it.
+        #
+        # Asserted against every restaurant that actually exists, not a fixture, because
+        # the imported ones are the ones carrying 68 colours and 36 settings apiece.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from menu.render_theme_keys import PALETTE_KEYS
+
+        def bare(k):
+            for prefix in ("day_", "night_"):
+                if k.startswith(prefix):
+                    return k[len(prefix):]
+            return k
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select slug, theme, settings from tenants")
+            strays_in_theme, strays_in_settings = [], []
+            for tslug, theme, settings in cur.fetchall():
+                for k in (theme or {}):
+                    if bare(k) not in PALETTE_KEYS:
+                        strays_in_theme.append(f"{tslug}.{k}")
+                for k in (settings or {}):
+                    if bare(k) in PALETTE_KEYS:
+                        strays_in_settings.append(f"{tslug}.{k}")
+            check("no restaurant has a non-colour in its palette", not strays_in_theme,
+                  str(strays_in_theme[:6]))
+            check("and no colour is stranded in its settings", not strays_in_settings,
+                  str(strays_in_settings[:6]))
 
         # ── the published page reflects the edit ─────────────────────────────
         r = requests.get(f"{BASE}/{slug}", timeout=60)
