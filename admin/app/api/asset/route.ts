@@ -22,20 +22,29 @@ import { createClient } from '@/lib/supabase/server'
 
 type Kind = 'photo' | 'hero' | 'logo' | 'glb' | 'usdz' | 'video'
 
-const RULES: Record<Kind, { ext: string; type: string; bucket: 'photos' | 'models'
-                            ours: boolean; max: number }> = {
-  photo: { ext: 'webp', type: 'image/webp',           bucket: 'photos', ours: false, max: 4  },
-  hero:  { ext: 'webp', type: 'image/webp',           bucket: 'photos', ours: false, max: 6  },
-  logo:  { ext: 'webp', type: 'image/webp',           bucket: 'photos', ours: false, max: 2  },
-  glb:   { ext: 'glb',  type: 'model/gltf-binary',    bucket: 'models', ours: true,  max: 40 },
-  usdz:  { ext: 'usdz', type: 'model/vnd.usdz+zip',   bucket: 'models', ours: true,  max: 40 },
-  video: { ext: 'mp4',  type: 'video/mp4',            bucket: 'models', ours: true,  max: 60 },
+const RULES: Record<Kind, { ext: string; type: string; ours: boolean; max: number }> = {
+  photo: { ext: 'webp', type: 'image/webp',         ours: false, max: 4  },
+  hero:  { ext: 'webp', type: 'image/webp',         ours: false, max: 6  },
+  logo:  { ext: 'webp', type: 'image/webp',         ours: false, max: 2  },
+  glb:   { ext: 'glb',  type: 'model/gltf-binary',  ours: true,  max: 40 },
+  usdz:  { ext: 'usdz', type: 'model/vnd.usdz+zip', ours: true,  max: 40 },
+  video: { ext: 'mp4',  type: 'video/mp4',          ours: true,  max: 60 },
 }
 
-function bucketName(which: 'photos' | 'models') {
-  return which === 'models'
-    ? process.env.R2_BUCKET_MODELS || 'betareal-models'
-    : process.env.R2_BUCKET_PHOTOS || 'betareal-photos'
+/** Everything a restaurant uploads goes in ONE bucket, and it is the photos one.
+ *
+ *  This used to route glb, usdz and video to the models bucket, which broke them
+ *  completely and quietly: the menu app serves `/a/<key>`, and its rule is "catalog/ and
+ *  models/ come from the models bucket, everything else from photos". A hero video written
+ *  to `t/<id>/video/…` in the MODELS bucket was then looked for in the PHOTOS bucket, so
+ *  every upload succeeded and every resulting URL was a 404. That is exactly how it
+ *  presented: the branding tab appeared to work and the video never played.
+ *
+ *  The split those two buckets exist for is engine OUTPUT (catalog/, models/ - large, few,
+ *  regenerable) against everything else. A restaurant's own hero video is not engine
+ *  output. One rule, matching the serving route with nothing to keep in step. */
+function bucketName() {
+  return process.env.R2_BUCKET_PHOTOS || 'betareal-photos'
 }
 
 export async function POST(req: NextRequest) {
@@ -65,8 +74,11 @@ export async function POST(req: NextRequest) {
   if (!tenant) return NextResponse.json({ error: 'Restaurant not found' }, { status: 403 })
 
   if (rule.ours) {
+    // `limit(1)`, not a bare maybeSingle: a super admin can SEE every row in this table
+    // (that is what the policy says), so with two of us maybeSingle would error on
+    // "multiple rows" and every super admin would silently lose the ability to upload.
     const { data: isSuper } = await supabase
-      .from('super_admins').select('user_id').maybeSingle()
+      .from('super_admins').select('user_id').limit(1).maybeSingle()
     if (!isSuper) {
       return NextResponse.json(
         { error: kind === 'video'
@@ -94,7 +106,7 @@ export async function POST(req: NextRequest) {
     },
   })
   await s3.send(new PutObjectCommand({
-    Bucket: bucketName(rule.bucket), Key: key, Body: bytes, ContentType: rule.type,
+    Bucket: bucketName(), Key: key, Body: bytes, ContentType: rule.type,
   }))
 
   // The buckets are private and ONE service serves them - the menu app, which already has

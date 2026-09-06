@@ -425,7 +425,12 @@ export default function ThemePage() {
     if (!/\.mp4$/i.test(file.name)) { setMsg(T.onlyMp4Files); return }
     const mb = file.size / (1024 * 1024)
     if (mb > HERO_VIDEO_MAX_MB) {
-      setMsg(text(T.heroVideoTooBig, { mb: mb.toFixed(1), limit: HERO_VIDEO_MAX_MB }))
+      // A cap on PAGE WEIGHT, not on what the server accepts - this clip sits on top of
+      // every diner's first screen. The live ones are 1.2 and 1.6 MB. Encode it down
+      // rather than raising this.
+      setMsg(`${file.name} is ${mb.toFixed(1)} MB. A hero video has to stay under `
+             + `${HERO_VIDEO_MAX_MB} MB — it loads before anything else a diner sees. `
+             + `Encode it smaller and try again.`)
       return
     }
     setUploadingKey(key)

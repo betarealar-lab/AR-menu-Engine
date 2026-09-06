@@ -67,7 +67,9 @@ const EMPTY: PlanAccess = {
   // Ours: every restaurant at once, and the queue behind them. Only a super admin, and
   // the security boundary is in the database (admin_overview), not in this flag.
   canUseDeveloperAnalytics: false,
-  canUploadModels: true,
+  // What the server enforces: models and hero videos are ours to upload (api/asset).
+  // A flag that said otherwise would put a control in front of an owner that refuses them.
+  canUploadModels: false,
   canManageTenants: false,
   canManageBranches: false,
   canCreateBranches: false,
@@ -125,6 +127,7 @@ export function usePlan(): PlanAccess {
         label: isSuper ? 'BetaReal' : '',
         canManageTenants: isSuper,
         canUseDeveloperAnalytics: isSuper,
+        canUploadModels: isSuper,
         restaurantId: current?.id ?? null,
         restaurantSlug: current?.slug ?? '',
         restaurantName: current?.name ?? '',

@@ -464,6 +464,74 @@ def main() -> int:
         r = sb.get(tok, "models", id=f"eq.{model_id}", select="id")
         check("and it still exists", r.ok and len(r.json()) == 1)
 
+        # ── uploads come back ────────────────────────────────────────────────
+        # The ROUND TRIP, which is the only thing that catches the failure that actually
+        # happened: hero videos were written to the models bucket and served from the
+        # photos one, so every upload succeeded and every URL it returned was a 404. The
+        # branding tab looked like it worked and the video never played.
+        #
+        # Through the real routes, with the owner's real session, then fetching the URL the
+        # upload handed back.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("insert into super_admins (user_id) values (%s) "
+                        "on conflict do nothing", (owner_id,))
+            conn.commit()
+
+        # A structurally real MP4: ftyp box, then padding. Enough to store and serve.
+        mp4 = (b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41"
+               + b"\x00\x00\x00\x08free" + b"\x00" * 4096)
+        webp = b"RIFF\x24\x00\x00\x00WEBPVP8 " + b"\x00" * 32
+
+        for kind, blob, name, ctype in (
+            ("video", mp4, "hero.mp4", "video/mp4"),
+            ("hero", webp, "hero.webp", "image/webp"),
+            ("logo", webp, "logo.webp", "image/webp"),
+        ):
+            sent = owner.post(f"{ADMIN}/api/asset", timeout=60,
+                            files={"file": (name, blob, ctype)},
+                            data={"kind": kind, "tenantId": str(tenant_id)})
+            body = sent.json() if sent.ok else {}
+            if not check(f"a {kind} uploads", sent.ok and body.get("url"), sent.text[:160]):
+                continue
+
+            # The URL it handed back must actually serve the bytes. This is the assertion
+            # that was missing.
+            got = requests.get(body["url"], timeout=60)
+            check(f"and the {kind} URL it returned actually serves",
+                  got.status_code == 200 and len(got.content) == len(blob),
+                  f"HTTP {got.status_code}, {len(got.content)} of {len(blob)} bytes")
+            check(f"with the right content type for a {kind}",
+                  got.headers.get("Content-Type") == ctype,
+                  got.headers.get("Content-Type", "none"))
+
+            if kind == "video":
+                # Safari will not play a source that cannot answer a byte range: it asks
+                # for one first and gives up on a plain 200.
+                part = requests.get(body["url"], timeout=60, headers={"Range": "bytes=0-99"})
+                check("and a video answers a byte range",
+                      part.status_code == 206 and len(part.content) == 100,
+                      f"HTTP {part.status_code}, {len(part.content)} bytes")
+                check("naming the range it sent", "bytes 0-99/" in
+                      (part.headers.get("Content-Range") or ""),
+                      part.headers.get("Content-Range", "none"))
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("delete from super_admins where user_id = %s", (owner_id,))
+            conn.commit()
+
+        # And with the super-admin row gone, the same upload is refused - the rule that
+        # models and hero videos are ours, enforced server-side rather than by leaving a
+        # button out of a screen.
+        sent = owner.post(f"{ADMIN}/api/asset", timeout=60,
+                        files={"file": ("hero.mp4", mp4, "video/mp4")},
+                        data={"kind": "video", "tenantId": str(tenant_id)})
+        check("an owner who is not us cannot upload a hero video", sent.status_code == 403,
+              f"HTTP {sent.status_code}")
+        sent = owner.post(f"{ADMIN}/api/asset", timeout=60,
+                        files={"file": ("d.webp", webp, "image/webp")},
+                        data={"kind": "photo", "tenantId": str(tenant_id)})
+        check("but their own photos still go up", sent.ok, sent.text[:140])
+
         # ── the team ─────────────────────────────────────────────────────────
         print("\n== the team ==")
         with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
