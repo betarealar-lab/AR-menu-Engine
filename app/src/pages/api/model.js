@@ -32,6 +32,20 @@ export async function POST({ request, cookies }) {
     patch.decided_by = gate.user.id;
   }
   if (typeof body.title === "string") patch.title = body.title.trim();
+
+  // "h v zoom" - three bare numbers, the platform's own convention (0003_model_view), so
+  // the value a person already learned still means the same thing. Empty clears it back
+  // to model-viewer's default framing.
+  if (typeof body.view_orbit === "string") {
+    const v = body.view_orbit.trim();
+    if (!v) {
+      patch.view_orbit = null;
+    } else if (/^-?\d+(\.\d+)?( -?\d+(\.\d+)?){2}$/.test(v)) {
+      patch.view_orbit = v;
+    } else {
+      return jsonError("That is not an angle", 400);
+    }
+  }
   if (!Object.keys(patch).length) return jsonError("Nothing to save", 400);
 
   const { error } = await supa.from("models")

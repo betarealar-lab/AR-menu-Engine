@@ -206,6 +206,57 @@ def main() -> int:
             check("the dish is still what its owner typed",
                   cur.fetchone()[0] == "Khachapuri")
 
+        # ── the three things the platform's admin has that this one owed ────
+        r = s.post(f"{BASE}/api/item", timeout=45, json={
+            "slug": slug, "id": item_id, "name": "Khachapuri", "price_minor": 1850,
+            "visible": True, "is_3d": True,
+            "variants": [{"en": "Regular", "ka": "ჩვეულ",
+                          "price": "18.50 ₾"},
+                         {"en": "Large", "price": "24 ₾"},
+                         {"junk": "dropped", "price": "1"}],
+        })
+        check("a dish can be priced more than one way", r.ok, r.text[:120])
+
+        r = s.post(f"{BASE}/api/item", timeout=45,
+                   json={"slug": slug, "order": [item_id]})
+        check("dishes can be reordered", r.ok, r.text[:120])
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select variants, position from items where id = %s", (item_id,))
+            variants, position = cur.fetchone()
+            check("both sizes are stored in the platform's own shape",
+                  len(variants) == 2 and variants[0]["en"] == "Regular"
+                  and variants[0]["price"] == "18.50 ₾"
+                  and variants[0].get("ka"),
+                  str(variants))
+            check("a variant field we do not recognise is dropped",
+                  all("junk" not in v for v in variants), str(variants))
+            check("the new position is stored", position == 0, str(position))
+
+        # The camera angle. Three bare numbers, the platform's own convention, and it
+        # lives on the MODEL rather than the item so it travels with the mesh.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("""insert into models (tenant_id, title, dish, variant, draco_key)
+                           values (%s, 'Probe', 'probe-dish', 'default', 'catalog/x.glb')
+                           returning id""", (tenant_id,))
+            # psycopg hands back a UUID object and requests will not serialise one.
+            model_id = str(cur.fetchone()[0])
+            conn.commit()
+
+        r = s.post(f"{BASE}/api/model", timeout=45,
+                   json={"slug": slug, "id": model_id, "view_orbit": "45 60 110"})
+        check("a starting camera angle can be saved", r.ok, r.text[:120])
+
+        bad = s.post(f"{BASE}/api/model", timeout=45,
+                     json={"slug": slug, "id": model_id, "view_orbit": "rotate(90deg)"})
+        check("and something that is not an angle is refused", bad.status_code == 400,
+              f"HTTP {bad.status_code}")
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select view_orbit from models where id = %s", (model_id,))
+            check("the angle is stored as the platform writes it",
+                  cur.fetchone()[0] == "45 60 110")
+
         # ── asking for a 3D model, which is the only thing here that costs ──
         # No credits are spent by any of this: a request is a row, and nothing reads it
         # until `menu/requests.py` runs. That separation is the reason this is testable.

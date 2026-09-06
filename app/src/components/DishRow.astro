@@ -1,0 +1,45 @@
+---
+// One dish in the menu list.
+//
+// Its own component because the categorised list and the "no category" list draw the same
+// row, and two copies of a row that carries reorder controls, a price and three status
+// words is two places for them to drift apart.
+//
+// The link does NOT wrap the whole row: the arrows are buttons, and a button inside an
+// anchor is invalid markup that behaves differently in every browser. So the anchor covers
+// the part you tap to edit, and the arrows sit outside it.
+const { item, slug, orderable = true } = Astro.props;
+
+const money = (i) => i.price_text ||
+  (i.price_minor ? `${(i.price_minor / 100).toFixed(2).replace(/\.00$/, "")} ₾` : "—");
+const photo = (k) => (!k ? null : k.startsWith("http") ? k : `/a/${k}`);
+
+const state = !item.visible ? "hidden"
+  : item.text_only ? "text only"
+  : "on the menu";
+---
+<li data-id={item.id}>
+  <div class="row" style="gap:8px">
+    {orderable && (
+      <div class="ord">
+        <button type="button" class="mini up" aria-label="Move up">&#9650;</button>
+        <button type="button" class="mini down" aria-label="Move down">&#9660;</button>
+      </div>
+    )}
+    <a class="grab" href={`/admin/${slug}/item/${item.id}`}>
+      {photo(item.photo_key)
+        ? <img src={photo(item.photo_key)} alt="" loading="lazy" />
+        : <div class="thumb"></div>}
+      <div class="body">
+        <b>{item.name}</b>
+        <small>
+          {item.model_id && item.is_3d ? "3D · " : ""}
+          {state}
+          {(item.variants?.length ?? 0) > 0 ? ` · ${item.variants.length} sizes` : ""}
+        </small>
+      </div>
+      <span class="price">{money(item)}</span>
+      <span class="chev">&#8250;</span>
+    </a>
+  </div>
+</li>

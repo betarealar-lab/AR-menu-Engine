@@ -4,6 +4,7 @@
 // full-screen editor.
 import Admin from "../../../layouts/Admin.astro";
 import { requireUser, userClient } from "../../../lib/auth.js";
+import DishRow from "../../../components/DishRow.astro";
 
 const gate = await requireUser(Astro);
 if (gate) return gate;
@@ -22,13 +23,9 @@ const [{ data: cats }, { data: items }] = await Promise.all([
       .eq("tenant_id", tenant.id).order("position"),
   supa.from("items")
       .select("id, name, price_minor, price_text, currency, category_id, position, " +
-              "visible, photo_key, model_id, is_3d, text_only")
+              "visible, photo_key, model_id, is_3d, text_only, variants")
       .eq("tenant_id", tenant.id).order("position"),
 ]);
-
-const money = (i) => i.price_text ||
-  (i.price_minor ? `${(i.price_minor / 100).toFixed(2).replace(/\.00$/, "")} ₾` : "—");
-const photo = (k) => (!k ? null : k.startsWith("http") ? k : `/a/${k}`);
 
 const byCat = new Map((cats || []).map((c) => [c.id, []]));
 const loose = [];
@@ -53,25 +50,8 @@ for (const i of items || []) (byCat.get(i.category_id) || loose).push(i);
       {byCat.get(c.id).length === 0 ? (
         <p class="hint" style="margin:0">Nothing in this category yet.</p>
       ) : (
-        <ul class="rows">
-          {byCat.get(c.id).map((i) => (
-            <li>
-              <a class="row" href={`/admin/${slug}/item/${i.id}`}>
-                {photo(i.photo_key)
-                  ? <img src={photo(i.photo_key)} alt="" loading="lazy" />
-                  : <div class="thumb"></div>}
-                <div class="body">
-                  <b>{i.name}</b>
-                  <small>
-                    {i.model_id && i.is_3d ? "3D · " : ""}
-                    {!i.visible ? "hidden" : i.text_only ? "text only" : "on the menu"}
-                  </small>
-                </div>
-                <span class="price">{money(i)}</span>
-                <span class="chev">&#8250;</span>
-              </a>
-            </li>
-          ))}
+        <ul class="rows dishes" data-cat={c.id}>
+          {byCat.get(c.id).map((i) => <DishRow item={i} slug={slug} />)}
         </ul>
       )}
     </div>
@@ -81,19 +61,29 @@ for (const i of items || []) (byCat.get(i.category_id) || loose).push(i);
     <div class="card">
       <h2>No category</h2>
       <ul class="rows">
-        {loose.map((i) => (
-          <li>
-            <a class="row" href={`/admin/${slug}/item/${i.id}`}>
-              {photo(i.photo_key)
-                ? <img src={photo(i.photo_key)} alt="" loading="lazy" />
-                : <div class="thumb"></div>}
-              <div class="body"><b>{i.name}</b><small>needs a category</small></div>
-              <span class="price">{money(i)}</span>
-              <span class="chev">&#8250;</span>
-            </a>
-          </li>
-        ))}
+        {loose.map((i) => <DishRow item={i} slug={slug} orderable={false} />)}
       </ul>
     </div>
   )}
+  <script is:inline define:vars={{ slug }}>
+    // Same arrows as the categories screen, and for the same reason: dragging a row inside
+    // a scrolling page on a phone fights the scroll. The whole list is sent, because
+    // moving one dish changes several positions and sending them one at a time would
+    // leave gaps if a request failed halfway.
+    document.querySelectorAll(".dishes").forEach((list) => {
+      list.addEventListener("click", (ev) => {
+        const btn = ev.target.closest(".up, .down");
+        if (!btn) return;
+        const li = btn.closest("li");
+        const swap = btn.classList.contains("up")
+          ? li.previousElementSibling : li.nextElementSibling;
+        if (!swap) return;
+        if (btn.classList.contains("up")) list.insertBefore(li, swap);
+        else list.insertBefore(swap, li);
+        BR.save("/api/item", {
+          slug, order: [...list.children].map((el) => el.dataset.id),
+        }, { key: "order-" + list.dataset.cat, wait: 250 });
+      });
+    });
+  </script>
 </Admin>

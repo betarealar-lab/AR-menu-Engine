@@ -244,3 +244,9 @@ summary { min-height: var(--tap); display: flex; align-items: center; cursor: po
         background: var(--sunk); border-radius: 10px; margin-bottom: 12px;
         overflow: hidden; }
 .shot img { display: block; width: 100%; }
+
+/* The tappable part of a row, when the row also carries buttons. A button inside an
+   anchor is invalid markup that behaves differently in every browser, so the link covers
+   what you tap to edit and the arrows sit outside it. */
+.grab { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
+        color: inherit; text-decoration: none; padding: 4px 0; }

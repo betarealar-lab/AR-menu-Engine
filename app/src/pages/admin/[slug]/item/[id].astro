@@ -26,7 +26,7 @@ let item = {
   id: null, name: "", description: "", price_minor: 0, price_old_minor: null,
   price_text: null, currency: "GEL", category_id: cats?.[0]?.id ?? null,
   visible: true, text_only: false, is_3d: true, thumb_3d: false, featured: false,
-  photo_key: null, model_id: null, i18n: {}, position: 999,
+  photo_key: null, model_id: null, i18n: {}, position: 999, variants: [], addons: [],
 };
 if (!isNew) {
   const { data } = await supa.from("items").select("*").eq("id", id).single();
@@ -108,6 +108,17 @@ const asMajor = (m) => (m ? (m / 100).toFixed(2).replace(/\.00$/, "") : "");
     </div>
 
     <div class="card">
+      <h2>Sizes</h2>
+      <p class="hint" style="margin-top:0">A dish priced more than one way — a glass and a
+        bottle, regular and decaf. 30 of the 170 dishes on the live menus have these, and
+        they show as choices under the name.</p>
+      <ul class="rows" id="variants"></ul>
+      <div class="actions">
+        <button type="button" class="btn ghost grow" id="add-variant">Add a size</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Photo</h2>
       <div id="photo-box">
         {item.photo_key
@@ -180,7 +191,7 @@ const asMajor = (m) => (m ? (m / 100).toFixed(2).replace(/\.00$/, "") : "");
     )}
   </form>
 
-  <script is:inline define:vars={{ slug, itemId: item.id ?? null, second }}>
+  <script is:inline define:vars={{ slug, itemId: item.id ?? null, second, item: { variants: item.variants || [] } }}>
     (function () {
       const form = document.getElementById("dish");
       let id = itemId;
@@ -218,8 +229,62 @@ const asMajor = (m) => (m ? (m / 100).toFixed(2).replace(/\.00$/, "") : "");
           thumb_3d: form.thumb_3d.checked,
           featured: form.featured.checked,
           i18n,
+          variants: readVariants(),
         };
       }
+
+      // The platform's own shape, key for key: [{en, <lang>, price}] with the price as
+      // TEXT including the currency. Not minor units - a variant price on the live menus
+      // reads "16 ₾", and re-deriving that from an integer would mean guessing how each
+      // restaurant writes money.
+      const VARIANTS = document.getElementById("variants");
+
+      function readVariants() {
+        return [...VARIANTS.children].map((li) => {
+          const get = (n) => li.querySelector(`[data-f="${n}"]`)?.value.trim() || "";
+          const row = { en: get("en"), price: get("price") };
+          if (second) {
+            const alt = get("alt");
+            if (alt) row[second] = alt;
+          }
+          return row;
+        }).filter((row) => row.en || row.price);
+      }
+
+      function variantRow(row = {}) {
+        const li = document.createElement("li");
+        li.innerHTML =
+          '<div class="row" style="gap:8px">' +
+            '<div class="body">' +
+              '<input data-f="en" type="text" placeholder="Regular" aria-label="Size">' +
+              (second
+                ? '<input data-f="alt" type="text" placeholder="Also in ' + second +
+                  '" aria-label="Size in the second language">'
+                : "") +
+            '</div>' +
+            '<input data-f="price" type="text" placeholder="16 ₾" aria-label="Price" ' +
+                   'style="width:88px;flex:0 0 88px">' +
+            '<button type="button" class="mini del" aria-label="Remove">&#215;</button>' +
+          '</div>';
+        li.querySelector('[data-f="en"]').value = row.en || "";
+        li.querySelector('[data-f="price"]').value = row.price || "";
+        const alt = li.querySelector('[data-f="alt"]');
+        if (alt && second) alt.value = row[second] || "";
+        return li;
+      }
+
+      (item.variants || []).forEach((row) => VARIANTS.appendChild(variantRow(row)));
+
+      document.getElementById("add-variant").addEventListener("click", () => {
+        VARIANTS.appendChild(variantRow());
+        VARIANTS.lastElementChild.querySelector('[data-f="en"]').focus();
+      });
+
+      VARIANTS.addEventListener("click", (ev) => {
+        if (!ev.target.closest(".del")) return;
+        ev.target.closest("li").remove();
+        save(0);
+      });
 
       async function save(wait) {
         const body = payload();

@@ -20,7 +20,7 @@ if (!tenant) return new Response("Not found", { status: 404 });
 
 const [{ data: models }, { data: items }, { data: requests }] = await Promise.all([
   supa.from("models")
-      .select("id, title, dish, variant, poster_key, draco_key, tenant_state, created_utc")
+      .select("id, title, dish, variant, poster_key, draco_key, view_orbit, tenant_state, created_utc")
       .eq("tenant_id", tenant.id).order("created_utc", { ascending: false }),
   supa.from("items").select("id, name, model_id").eq("tenant_id", tenant.id),
   // What is on the way. Shown FIRST, because "where is the model I asked for" is the
@@ -107,11 +107,21 @@ const groups = [
                   {state !== "rejected" && (
                     <button type="button" class="btn ghost verdict" data-state="rejected">Reject</button>
                   )}
-                  {asset(m.draco_key) && (
-                    <a class="btn ghost" href={asset(m.draco_key)} target="_blank"
-                       rel="noopener">Open</a>
-                  )}
                 </div>
+
+                {asset(m.draco_key) && (
+                  <details class="angle" data-id={m.id} data-orbit={m.view_orbit || ""}>
+                    <summary>Starting angle</summary>
+                    <p class="hint" style="margin-top:0">Turn the dish to how it should
+                      first appear, then save it. A bowl framed from its own rim is an
+                      empty ellipse, and every diner sees whatever is set here.</p>
+                    <div class="stage" data-src={asset(m.draco_key)}></div>
+                    <div class="actions">
+                      <button type="button" class="btn use">Use this angle</button>
+                      <button type="button" class="btn ghost reset">Default</button>
+                    </div>
+                  </details>
+                )}
               </div>
             </div>
           </li>
@@ -124,7 +134,78 @@ const groups = [
     </div>
   ))}
 
+  <!-- Only on this screen, and only because setting a camera angle by typing three
+       numbers is a thing nobody will ever do correctly. It never reaches a diner's page -
+       theirs already has its own copy, pinned to the same version production ships. -->
+  <script type="module"
+          src="https://cdnjs.cloudflare.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"
+  ></script>
+
   <script is:inline define:vars={{ slug }}>
+    // The viewer is created when the section is opened, not on page load: a 3D library
+    // with twenty models would otherwise fetch twenty GLBs to show a list.
+    document.querySelectorAll(".angle").forEach((box) => {
+      const stage = box.querySelector(".stage");
+      let mv = null;
+      let framed = 0;                 // the radius model-viewer chose = 100% zoom
+
+      box.addEventListener("toggle", () => {
+        if (!box.open || mv) return;
+        mv = document.createElement("model-viewer");
+        mv.setAttribute("src", stage.dataset.src);
+        mv.setAttribute("camera-controls", "");
+        mv.setAttribute("touch-action", "pan-y");
+        mv.setAttribute("interaction-prompt", "none");
+        mv.setAttribute("loading", "eager");
+        mv.style.cssText = "width:100%;height:260px;background:var(--sunk);border-radius:10px";
+        if (box.dataset.orbit) {
+          const p = box.dataset.orbit.trim().split(/\s+/).map(Number);
+          if (p.length === 3 && p.every(Number.isFinite)) {
+            mv.setAttribute("camera-orbit", `${p[0]}deg ${p[1]}deg ${p[2]}%`);
+          }
+        }
+        // Whatever radius it settles on with no camera-orbit of ours IS 100%, which is
+        // what makes a percentage readable back out of a metre measurement at all.
+        mv.addEventListener("load", () => {
+          const o = mv.getCameraOrbit();
+          framed = box.dataset.orbit
+            ? o.radius / (Number(box.dataset.orbit.trim().split(/\s+/)[2]) / 100)
+            : o.radius;
+        }, { once: true });
+        stage.appendChild(mv);
+      });
+
+      box.querySelector(".use").addEventListener("click", async () => {
+        if (!mv || !framed) return BR.flash("Give it a moment to load", true);
+        const o = mv.getCameraOrbit();
+        const deg = (rad) => Math.round((rad * 180) / Math.PI);
+        // The renderer's own clamps (viewer.js _itemCameraOrbit), applied here so a saved
+        // angle is one that will actually be used rather than silently discarded.
+        const h = Math.max(-360, Math.min(360, deg(o.theta)));
+        const v = Math.max(0, Math.min(85, deg(o.phi)));
+        const zoom = Math.max(30, Math.min(300, Math.round((o.radius / framed) * 100)));
+        try {
+          await BR.post("/api/model", { slug, id: box.dataset.id,
+                                        view_orbit: `${h} ${v} ${zoom}` });
+          box.dataset.orbit = `${h} ${v} ${zoom}`;
+          BR.flash("Angle saved");
+        } catch (err) {
+          BR.flash("Not saved: " + err.message, true);
+        }
+      });
+
+      box.querySelector(".reset").addEventListener("click", async () => {
+        try {
+          await BR.post("/api/model", { slug, id: box.dataset.id, view_orbit: "" });
+          box.dataset.orbit = "";
+          mv?.removeAttribute("camera-orbit");
+          BR.flash("Back to the default angle");
+        } catch (err) {
+          BR.flash("Not saved: " + err.message, true);
+        }
+      });
+    });
+
     document.addEventListener("click", async (ev) => {
       const btn = ev.target.closest(".verdict");
       if (!btn) return;

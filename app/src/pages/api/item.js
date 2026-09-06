@@ -21,6 +21,21 @@ export async function POST({ request, cookies }) {
     .from("tenants").select("id").eq("slug", slug).single();
   if (!tenant) return jsonError("No such restaurant", 404);
 
+  // Reordering arrives as the whole list for one category, not one dish at a time: moving
+  // a dish changes several positions, and a half-applied reorder is a menu with two dishes
+  // claiming third place.
+  if (Array.isArray(body.order)) {
+    const ids = body.order.filter((id) => typeof id === "string");
+    for (let i = 0; i < ids.length; i++) {
+      const { error } = await supa.from("items")
+        .update({ position: i }).eq("id", ids[i]).eq("tenant_id", tenant.id);
+      if (error) return jsonError(error.message, 400);
+    }
+    republish(slug);
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { "Content-Type": "application/json" } });
+  }
+
   if (body._delete) {
     if (!body.id) return jsonError("Nothing to delete", 400);
     const { error } = await supa.from("items").delete().eq("id", body.id);
@@ -45,6 +60,25 @@ export async function POST({ request, cookies }) {
     thumb_3d: !!body.thumb_3d,
     featured: !!body.featured,
     i18n: body.i18n || {},
+    // The platform's shape, unchanged: [{en, ka, price}] with the price as TEXT including
+    // the currency, because that is what the live menus hold and what their renderer
+    // reads. Bounded and shape-checked here rather than trusted - it is jsonb, so an
+    // unchecked write is an unbounded write.
+    variants: Array.isArray(body.variants)
+      ? body.variants.slice(0, 12).map((v) => {
+          const row = {};
+          for (const [k, val] of Object.entries(v || {})) {
+            if (/^[a-z]{2}$/.test(k) || k === "price") {
+              if (typeof val === "string" && val.trim()) row[k] = val.trim().slice(0, 120);
+            }
+          }
+          return row;
+        })
+        // A size needs a NAME, not just a price. A row carrying only "1" renders as an
+        // unlabelled choice under the dish, which is worse than no choice at all - and it
+        // is exactly what a half-filled row in the editor produces.
+        .filter((v) => Object.keys(v).some((k) => k !== "price"))
+      : [],
   };
 
   let id = body.id;
