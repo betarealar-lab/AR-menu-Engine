@@ -106,8 +106,19 @@ def main() -> int:
 
     print("\n== nothing loads before the menu does ==")
     check("no stylesheet is fetched", "<link" not in html.lower())
-    check("no menu data is fetched by the page itself",
-          not re.search(r"fetch\(\s*['\"]/", html))
+    # The claim is that NOTHING THE PAGE SHOWS is fetched - the menu is complete in the
+    # HTML and no request stands between a diner and reading it. The event beacon is the
+    # one allowed outbound call and it is the opposite of that: fire-and-forget, after the
+    # fact, never awaited, and nothing on the page waits for or renders from it.
+    #
+    # Named explicitly rather than loosened to "no fetch of menu data", because a rule with
+    # a judgement call in it is a rule that erodes. Any OTHER path still fails this.
+    fetched = set(re.findall(r"fetch\(\s*['\"](/[^'\"]*)", html))
+    check("no menu data is fetched by the page itself", fetched <= {"/e"},
+          f"fetches: {sorted(fetched)}")
+    check("and the one call it does make cannot block a render",
+          "keepalive: true" in html and "navigator.sendBeacon" in html,
+          "the beacon must be sendBeacon with a keepalive fetch fallback")
     # The scripts sit after the markup, so the menu is readable before a line of them has
     # run. That ordering IS the no-flash claim; nothing else gives it.
     check("every script comes after the menu markup",

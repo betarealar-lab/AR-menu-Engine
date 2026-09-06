@@ -75,6 +75,10 @@ const RUNTIME_KEYS = [
 ];
 const runtimeCfg = Object.fromEntries(
   RUNTIME_KEYS.filter((k) => cfg[k]).map((k) => [k, cfg[k]]));
+// The one non-setting in here, and the only id a diner's page ever carries: which
+// restaurant to file its counts under (0009_events). It is not a secret - it is in the URL
+// as a slug already - and the sink refuses ids that are not real restaurants.
+runtimeCfg.tenant_id = menu.tenant.id;
 const buildMs = Date.now() - started;
 ---
 <!doctype html>

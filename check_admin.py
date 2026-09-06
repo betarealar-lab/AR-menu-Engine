@@ -531,6 +531,97 @@ def main() -> int:
             check("and no colour is stranded in its settings", not strays_in_settings,
                   str(strays_in_settings[:6]))
 
+        # ── a diner's beacon reaches the owner's funnel ──────────────────────
+        # End to end, through the real route with no auth at all - which is the whole
+        # point: a diner is anonymous, and the write path has to work for nobody in
+        # particular while the read path works only for the restaurant.
+        beacon = requests.post(f"{BASE}/e", timeout=30, json={
+            "tenant": str(tenant_id), "session": "checksession0001",
+            "events": [{"name": "view"}, {"name": "hero_pass"},
+                       {"name": "item_open", "item": item_id},
+                       {"name": "ar_open", "item": item_id},
+                       {"name": "not_a_real_event"},
+                       {"name": "item_open", "item": str(uuid.uuid4())}],
+        })
+        check("the event route accepts an anonymous beacon", beacon.status_code == 204,
+              f"HTTP {beacon.status_code}")
+
+        # A second session, so "sessions" and "hits" cannot accidentally agree.
+        requests.post(f"{BASE}/e", timeout=30, json={
+            "tenant": str(tenant_id), "session": "checksession0002",
+            "events": [{"name": "view"}, {"name": "item_open", "item": item_id}],
+        })
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select name, count(*) from events where tenant_id = %s "
+                        "group by name order by name", (tenant_id,))
+            counted = dict(cur.fetchall())
+            # 3 item_open, not 2: the first session sent one for a real dish and one for
+            # a dish id belonging to nobody. The bogus ID is stripped and the event is
+            # still stored, because "somebody opened a dish" is true regardless of whether
+            # the id attached to it was - and an event with no item is already a normal
+            # thing the platform's own viewer sends.
+            check("the funnel events land", counted.get("view") == 2
+                  and counted.get("item_open") == 3 and counted.get("ar_open") == 1,
+                  str(counted))
+            check("an event name we do not recognise is dropped",
+                  "not_a_real_event" not in counted, str(counted))
+
+            # A dish id from another restaurant must not be able to attach itself to this
+            # restaurant's analytics.
+            cur.execute("select count(*) from events where tenant_id = %s and item_id is null "
+                        "and name = 'item_open'", (tenant_id,))
+            check("a dish id that is not theirs is stripped, not stored",
+                  cur.fetchone()[0] == 1)
+
+        # A tenant that does not exist must write nothing rather than grow the table.
+        ghost = requests.post(f"{BASE}/e", timeout=30, json={
+            "tenant": str(uuid.uuid4()), "session": "checksession0003",
+            "events": [{"name": "view"}],
+        })
+        check("events for a restaurant that does not exist are dropped",
+              ghost.status_code == 204)
+
+        # The read side. Percentages are of SESSIONS: one diner opening two dishes is one
+        # person who opened 3D, and a funnel counted in hits flatters itself exactly where
+        # it should be honest.
+        head2 = {"apikey": anon_key, "Authorization": f"Bearer {access}",
+                 "Content-Type": "application/json"}
+        fn = requests.post(f"{url}/rest/v1/rpc/event_funnel", timeout=30, headers=head2,
+                           json={"p_tenant": str(tenant_id), "p_days": 30})
+        rows = {r["name"]: r for r in fn.json()} if fn.ok else {}
+        check("the owner can read their own funnel", fn.ok, fn.text[:140])
+        # The whole point, and the reason it is worth a check: 3 taps from 2 people is
+        # "2 diners opened 3D", not "3". A funnel counted in hits flatters itself at
+        # exactly the point where it should be honest.
+        check("and it counts sessions, not taps",
+              rows.get("item_open", {}).get("sessions") == 2
+              and rows.get("item_open", {}).get("hits") == 3, str(rows.get("item_open")))
+
+        # The security boundary is inside the function, so a stranger calling it with
+        # somebody else's id gets nothing rather than an error they could probe.
+        out_token = requests.post(f"{url}/auth/v1/token", timeout=30,
+                                  params={"grant_type": "password"},
+                                  headers={"apikey": anon_key,
+                                           "Content-Type": "application/json"},
+                                  json={"email": other_mail, "password": other_pw})
+        out_access = out_token.json().get("access_token") if out_token.ok else None
+        spy = requests.post(f"{url}/rest/v1/rpc/event_funnel", timeout=30,
+                            headers={"apikey": anon_key,
+                                     "Authorization": f"Bearer {out_access}",
+                                     "Content-Type": "application/json"},
+                            json={"p_tenant": str(tenant_id), "p_days": 30})
+        check("a stranger reading someone else's funnel gets nothing",
+              spy.ok and spy.json() == [], spy.text[:140])
+
+        # And nobody may write the table directly, signed in or not.
+        direct = requests.post(f"{url}/rest/v1/events", timeout=30,
+                               headers={**head2, "Prefer": "return=minimal"},
+                               json={"tenant_id": str(tenant_id), "session": "x" * 12,
+                                     "name": "view"})
+        check("even a signed-in owner cannot insert events directly",
+              direct.status_code in (401, 403, 404), f"HTTP {direct.status_code}")
+
         # ── the published page reflects the edit ─────────────────────────────
         r = requests.get(f"{BASE}/{slug}", timeout=60)
         check("the restaurant's own page renders the new dish",

@@ -106,7 +106,10 @@ export function menuItem(item, i, lang) {
   const live = item.is_3d && item.thumb_3d && item.model;
 
   const data =
-    ` data-idx="${i}" data-name="${e(item.name_en)}"` +
+    // `data-idx` is the viewer's own array position and `data-id` is the dish's real id.
+    // Both, because the ported code counts in positions and the event sink stores ids -
+    // and a position is meaningless the moment a dish is hidden or reordered.
+    ` data-idx="${i}" data-id="${e(item.id ?? "")}" data-name="${e(item.name_en)}"` +
     (item.name_ka ? ` data-name-ka="${e(item.name_ka)}"` : "") +
     ` data-price="${e(item.price)}"` +
     (item.category_id ? ` data-cat="${e(item.category_id)}"` : "") +
