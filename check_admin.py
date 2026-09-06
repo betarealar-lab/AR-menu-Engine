@@ -69,7 +69,8 @@ def main() -> int:
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     secret = os.environ.get("SUPABASE_SERVICE_KEY", "")
     db = os.environ.get("SUPABASE_DB_URL", "")
-    if not (url and secret and db):
+    anon_key = os.environ.get("SUPABASE_ANON_KEY", "")
+    if not (url and secret and db and anon_key):
         print("Needs SUPABASE_URL, SUPABASE_SERVICE_KEY and SUPABASE_DB_URL in .env.")
         return 2
 
@@ -217,6 +218,13 @@ def main() -> int:
         })
         check("a dish can be priced more than one way", r.ok, r.text[:120])
 
+        # That save deliberately carried no i18n. A partial save from one screen must not
+        # erase what another screen wrote - which is what it did until this check existed.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select i18n->'ka'->>'name' from items where id = %s", (item_id,))
+            check("a save that omits the translations does not wipe them",
+                  cur.fetchone()[0], "the Georgian name was blanked by a partial save")
+
         r = s.post(f"{BASE}/api/item", timeout=45,
                    json={"slug": slug, "order": [item_id]})
         check("dishes can be reordered", r.ok, r.text[:120])
@@ -256,6 +264,59 @@ def main() -> int:
             cur.execute("select view_orbit from models where id = %s", (model_id,))
             check("the angle is stored as the platform writes it",
                   cur.fetchone()[0] == "45 60 110")
+
+        # ── the query the Next admin's menu screen actually issues ──────────
+        # Not a paraphrase of it: the exact select string from admin/lib/data/menu.ts,
+        # through PostgREST, with a real user's token. An embedded resource whose name is
+        # wrong does not error - it comes back absent - so a dish would simply lose its
+        # model and its camera angle with nothing anywhere saying why.
+        MENU_SELECT = (
+            "id,name,description,i18n,price_minor,price_text,category_id,position,"
+            "visible,photo_key,model_id,is_3d,thumb_3d,text_only,featured,variants,"
+            "models(id,draco_key,usdz_key,view_orbit,scale_cm)"
+        )
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("update items set model_id = %s where id = %s",
+                        (model_id, item_id))
+            conn.commit()
+
+        signed = requests.post(f"{url}/auth/v1/token", timeout=30,
+                               params={"grant_type": "password"},
+                               headers={"apikey": anon_key,
+                                        "Content-Type": "application/json"},
+                               json={"email": owner_mail, "password": owner_pw})
+        access = signed.json().get("access_token") if signed.ok else None
+        check("a password sign-in returns a usable token", access, signed.text[:120])
+
+        rest = requests.get(f"{url}/rest/v1/items", timeout=30,
+                            headers={"apikey": anon_key,
+                                     "Authorization": f"Bearer {access}"},
+                            params={"tenant_id": f"eq.{tenant_id}", "select": MENU_SELECT})
+        rows = rest.json() if rest.ok else []
+        check("the menu screen's own query runs", rest.ok and isinstance(rows, list),
+              rest.text[:160])
+        joined = [r for r in rows if r.get("models")]
+        check("and a dish carries its model through the embed", joined,
+              "the embed name is wrong - dishes would silently lose their 3D")
+        if joined:
+            m = joined[0]["models"]
+            m = m[0] if isinstance(m, list) else m
+            check("the embed carries the keys the screen reads",
+                  "draco_key" in m and "view_orbit" in m, str(m)[:160])
+        check("the language bag comes back whole",
+              any(((r.get("i18n") or {}).get("ka") or {}).get("name") for r in rows),
+              "the Georgian name would be missing in the admin")
+        check("sizes come back as a list",
+              any(isinstance(r.get("variants"), list) and r["variants"] for r in rows))
+
+        # service_role is deliberately granted NOTHING in this schema (0002_grants). The
+        # ported admin has server routes that reach for it, and they must fail loudly
+        # rather than quietly become a way around every policy.
+        srv = requests.get(f"{url}/rest/v1/tenants", timeout=30,
+                           headers={"apikey": secret, "Authorization": f"Bearer {secret}"},
+                           params={"select": "id"})
+        check("the service key still cannot read tenants over the API",
+              srv.status_code == 403, f"HTTP {srv.status_code}")
 
         # ── asking for a 3D model, which is the only thing here that costs ──
         # No credits are spent by any of this: a request is a row, and nothing reads it

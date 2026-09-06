@@ -59,29 +59,40 @@ export async function POST({ request, cookies }) {
     is_3d: !!body.is_3d,
     thumb_3d: !!body.thumb_3d,
     featured: !!body.featured,
-    i18n: body.i18n || {},
+  };
+
+  // **Only written when the caller actually sent them.** These two are the whole content
+  // of a dish in a second language and the whole of its sizes, and an update that always
+  // replaced them would mean any caller omitting the field silently wipes it - a partial
+  // save from one screen erasing the work of another. `check_admin.py` caught exactly
+  // that: a save carrying only a name and a price blanked the Georgian name.
+  if (body.i18n && typeof body.i18n === "object") row.i18n = body.i18n;
+
+  if (Array.isArray(body.variants)) {
     // The platform's shape, unchanged: [{en, ka, price}] with the price as TEXT including
     // the currency, because that is what the live menus hold and what their renderer
     // reads. Bounded and shape-checked here rather than trusted - it is jsonb, so an
     // unchecked write is an unbounded write.
-    variants: Array.isArray(body.variants)
-      ? body.variants.slice(0, 12).map((v) => {
-          const row = {};
-          for (const [k, val] of Object.entries(v || {})) {
-            if (/^[a-z]{2}$/.test(k) || k === "price") {
-              if (typeof val === "string" && val.trim()) row[k] = val.trim().slice(0, 120);
-            }
-          }
-          return row;
-        })
-        // A size needs a NAME, not just a price. A row carrying only "1" renders as an
-        // unlabelled choice under the dish, which is worse than no choice at all - and it
-        // is exactly what a half-filled row in the editor produces.
-        .filter((v) => Object.keys(v).some((k) => k !== "price"))
-      : [],
-  };
+    row.variants = body.variants.slice(0, 12).map((v) => {
+      const out = {};
+      for (const [k, val] of Object.entries(v || {})) {
+        if (/^[a-z]{2}$/.test(k) || k === "price") {
+          if (typeof val === "string" && val.trim()) out[k] = val.trim().slice(0, 120);
+        }
+      }
+      return out;
+    })
+      // A size needs a NAME, not just a price. A row carrying only "1" renders as an
+      // unlabelled choice under the dish, which is worse than no choice at all - and it
+      // is exactly what a half-filled row in the editor produces.
+      .filter((v) => Object.keys(v).some((k) => k !== "price"));
+  }
 
   let id = body.id;
+  if (!id) {
+    row.i18n = row.i18n || {};
+    row.variants = row.variants || [];
+  }
   if (id) {
     const { error } = await supa.from("items").update(row).eq("id", id);
     if (error) return jsonError(error.message, 400);

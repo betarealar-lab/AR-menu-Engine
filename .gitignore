@@ -9,3 +9,9 @@ app/node_modules/
 app/.astro/
 app/dist/
 app/.env
+
+# The Next admin. Same rules as app/ - secrets and build output never committed.
+admin/node_modules/
+admin/.next/
+admin/.env.local
+admin/tsconfig.tsbuildinfo
