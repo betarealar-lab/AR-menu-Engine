@@ -79,7 +79,33 @@ def finish() -> int:
     return 1 if bad else 0
 
 
+def no_shadowed_modules() -> None:
+    """No file may be named after a module the scripts beside it import.
+
+    Python puts a script's own directory FIRST on sys.path, so `menu/requests.py` makes
+    `import requests` resolve to it for every other script in `menu/` - and the error,
+    "module 'requests' has no attribute 'get'", names the symptom and hides the cause
+    completely. It cost a real user-facing failure on 2026-09-06: the one script somebody
+    had to run to get an account at all.
+
+    Cheap, static, and it runs before anything else because it costs nothing.
+    """
+    forbidden = {"requests", "json", "types", "email", "logging", "queue", "select",
+                 "code", "copy", "io", "time", "random", "string", "socket", "signal",
+                 "test", "abc", "enum", "uuid", "hashlib", "secrets", "csv", "platform",
+                 "statistics", "operator", "parser", "token", "tokenize", "keyword"}
+    clashes = [f"{folder.name}/{f.name}"
+               for folder in (REPO, REPO / "menu", REPO / "engines") if folder.is_dir()
+               for f in folder.glob("*.py") if f.stem in forbidden]
+    check("no file shadows a module the scripts beside it import", not clashes,
+          f"{clashes} - rename them; every script in that folder importing the same "
+          f"name gets the file instead of the library")
+
+
 def main() -> int:
+    print("== nothing shadows a module the scripts import ==")
+    no_shadowed_modules()
+
     master = None
     if "--master" in sys.argv:
         master = Path(sys.argv[sys.argv.index("--master") + 1])

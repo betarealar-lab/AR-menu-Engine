@@ -467,7 +467,7 @@ app/src/lib/fields.js   the ONLY list of settings keys the admin may write. The
                    one and not the other. The names are the live restaurants' own
 menu/make_admin.py      creates an account and prints a one-time set-password
                    link. No password is ever chosen, printed or stored by us
-menu/requests.py   THE BRIDGE, and the only file that knows both halves. Approved
+menu/model_requests.py   THE BRIDGE, and the only file that knows both halves. Approved
                    requests -> frames in the dataset -> a generate job; then
                    finished work -> a `models` row the owner can approve.
                    --once / --watch / --status. It never approves anything:

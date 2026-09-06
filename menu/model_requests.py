@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """The bridge: a restaurant's request becomes engine work, and the result becomes a model.
 
-    python menu/requests.py --once      # one pass, then exit
-    python menu/requests.py --watch     # keep going
-    python menu/requests.py --status    # what is in flight, spend nothing
+    python menu/model_requests.py --once      # one pass, then exit
+    python menu/model_requests.py --watch     # keep going
+    python menu/model_requests.py --status    # what is in flight, spend nothing
+
+Named after the table and NOT `requests.py`, which is what it was called for about an
+hour. Python puts a script's own directory first on `sys.path`, so a module called
+`requests` sitting in `menu/` shadows the HTTP library for every other script in this
+folder - `make_admin.py` and `import_live.py` both died on
+`module 'requests' has no attribute 'get'`, which names the symptom and hides the cause
+completely. Nothing in here may be called `requests`, `json`, `types`, `email` or
+`logging`.
 
 This is the ONLY file that knows both halves of the system. On one side, `model_requests`
 in Postgres - what a restaurant asked for. On the other, `dataset` and `jobs` - how a model

@@ -784,7 +784,7 @@ and wrong in the way that costs a year.
 
 **`model_requests` is the entire contract.** The platform writes what a restaurant asked
 for. The engine reads it with the service key, decides how it gets made, and writes back
-what happened. `menu/requests.py` is the only file that has heard of both halves.
+what happened. `menu/model_requests.py` is the only file that has heard of both halves.
 
 The word "Meshy" appears nowhere in the schema and nowhere in `app/`. That is the whole
 point: the engine is going to be replaced — a second one, a self-hosted one at a fraction

@@ -259,7 +259,7 @@ def main() -> int:
 
         # ── asking for a 3D model, which is the only thing here that costs ──
         # No credits are spent by any of this: a request is a row, and nothing reads it
-        # until `menu/requests.py` runs. That separation is the reason this is testable.
+        # until `menu/model_requests.py` runs. That separation is the reason this is testable.
         r = s.post(f"{BASE}/api/model-request", timeout=45, json={
             "slug": slug, "item_id": item_id,
             "photo_keys": [f"t/x/capture/aaaa-{a}.jpg"
