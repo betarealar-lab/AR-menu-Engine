@@ -12,9 +12,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { uploadAsset } from '@/lib/upload'
+import SizeInput from '@/components/SizeInput'
 import {
   loadCaptures, saveCapture, removeCapture, requestMultiview, loadCaptureTasks,
-  requestBuild, SHAPES, type Capture, type CaptureTask,
+  requestBuild, SHAPES, EMPTY_DIMS, hasDims, type Capture, type CaptureTask, type Dims,
 } from '@/lib/data/studio'
 
 // dataset.SLOTS, in the engine's order. The first frame is what the generator builds
@@ -54,8 +55,9 @@ export default function Plate(props: {
   const [frames, setFrames] = useState<(Capture | null)[]>([null, null, null, null])
   const [tasks, setTasks] = useState<CaptureTask[]>([])
   const [busySlot, setBusySlot] = useState<number | null>(null)
-  const [shape, setShape] = useState<string>('flat-plated')
-  const [customCm, setCustomCm] = useState('')
+  // A flat plate by default: it is what most dishes are, and a default that is usually
+  // right beats an empty box an owner skips.
+  const [dims, setDims] = useState<Dims>({ ...SHAPES[0].dims })
   const [sending, setSending] = useState(false)
   const fileRefs = useRef<(HTMLInputElement | null)[]>([])
 
@@ -133,19 +135,16 @@ export default function Plate(props: {
   const predictedOnce = tasks.length > 0
   const canPredict = filled === 1 && !predictedOnce
 
-  const chosenShape = SHAPES.find(s => s.id === shape)
-  const cm = customCm ? Number(customCm) : chosenShape?.cm ?? null
-  const axis = chosenShape?.axis ?? 'width'
-
   async function send() {
     if (!filled) return props.onError('Add at least one photo of the dish')
-    if (cm !== null && (cm < 1 || cm > 200)) return props.onError('A dish is between 1 and 200 cm')
+    const bad = Object.values(dims).some(v => v !== null && (v < 1 || v > 200))
+    if (bad) return props.onError('A dish is between 1 and 200 cm')
     setSending(true)
     const name = title.trim() || dishes.find(d => d.id === itemId)?.name || ''
     const { data, error } = await requestBuild({
       tenantId, dish: dishKey, variant, itemId: itemId || null, title: name,
       photoKeys: frames.filter(Boolean).map(f => f!.key),
-      scaleCm: cm, scaleAxis: cm !== null ? axis : null,
+      dims: hasDims(dims) ? dims : EMPTY_DIMS,
     })
     setSending(false)
     if (error) return props.onError(error.message)
@@ -261,25 +260,9 @@ export default function Plate(props: {
         <div className="card p-5">
           <label className="eyebrow block mb-1.5">How big is it</label>
           <p className="text-[11px] mb-3" style={{ color: 'var(--dim)' }}>
-            One measurement is enough. Wrong size is the number one reason a model looks
-            wrong in AR, and it is fixable later for free.
+            Wrong size is the number one reason a model looks wrong in AR.
           </p>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            {SHAPES.map(s => (
-              <button key={s.id} type="button" onClick={() => { setShape(s.id); setCustomCm('') }}
-                      className="text-left rounded-lg px-3 py-2.5 text-xs transition-colors"
-                      style={{ border: `1px solid ${shape === s.id && !customCm ? 'var(--gold)' : 'var(--border)'}`,
-                               background: shape === s.id && !customCm ? 'var(--gold-dim)' : 'var(--bg)' }}>
-                <div className="font-semibold">{s.label}</div>
-                <div style={{ color: 'var(--dim)' }}>{s.cm} cm {s.axis === 'height' ? 'tall' : 'across'}</div>
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="number" min={1} max={200} value={customCm} placeholder="or exactly"
-                   inputMode="decimal" onChange={e => setCustomCm(e.target.value)} />
-            <span className="text-xs shrink-0" style={{ color: 'var(--dim)' }}>cm {axis === 'height' ? 'tall' : 'across'}</span>
-          </div>
+          <SizeInput value={dims} onChange={setDims} />
         </div>
 
         <div className="card p-5">

@@ -29,15 +29,21 @@ export type CaptureTask = {
   note: string
 }
 
-/** The plate sizes, from dataset.SHAPES. One real-world dimension is enough: the model
- *  supplies the aspect ratio for the others. "Flat plated, 28 cm" is what most dishes are,
- *  and it is the answer an owner can give without a tape measure. */
-export const SHAPES = [
-  { id: 'flat-plated',  label: 'Flat plate',          axis: 'width',  cm: 28 },
-  { id: 'deep-bowl',    label: 'Bowl',                axis: 'width',  cm: 18 },
-  { id: 'wide-flat',    label: 'Sharing platter',     axis: 'width',  cm: 35 },
-  { id: 'tall-stacked', label: 'Tall (burger, cake)', axis: 'height', cm: 12 },
-] as const
+/** Sizes an owner can give without a tape measure. Each fills the three boxes; any of
+ *  them can then be corrected. The engine bakes ONE of the three - width first, because a
+ *  photo measures it best - and the model's own proportions give the rest; the others are
+ *  kept so the optimiser can compare and warn one day (0013). */
+export type Dims = { width: number | null; length: number | null; height: number | null }
+
+export const SHAPES: { id: string; label: string; dims: Dims }[] = [
+  { id: 'flat-plated',  label: 'Flat plate',          dims: { width: 28, length: 28, height: 3 } },
+  { id: 'deep-bowl',    label: 'Bowl',                dims: { width: 18, length: 18, height: 8 } },
+  { id: 'wide-flat',    label: 'Sharing platter',     dims: { width: 35, length: 25, height: 3 } },
+  { id: 'tall-stacked', label: 'Tall (burger, cake)', dims: { width: 12, length: 12, height: 12 } },
+]
+
+export const EMPTY_DIMS: Dims = { width: null, length: null, height: null }
+export const hasDims = (d: Dims) => d.width !== null || d.length !== null || d.height !== null
 
 const assetUrl = (key: string) =>
   key.startsWith('http') ? key : `${process.env.NEXT_PUBLIC_MENU_ORIGIN || ''}/a/${key}`
@@ -101,14 +107,15 @@ export async function requestBuild(args: {
   itemId: string | null
   title: string
   photoKeys: string[]
-  scaleCm: number | null
-  scaleAxis: 'width' | 'height' | 'length' | null
+  dims: Dims
 }) {
   const supabase = createClient()
+  // The three as given. Which one the engine bakes is the gate trigger's decision (0013),
+  // so no client can send an inconsistent primary.
   const { data, error } = await supabase.from('model_requests').insert({
     tenant_id: args.tenantId, item_id: args.itemId, dish: args.dish, variant: args.variant,
     title: args.title.trim(), photo_keys: args.photoKeys, kind: 'generate',
-    scale_cm: args.scaleCm, scale_axis: args.scaleAxis,
+    width_cm: args.dims.width, length_cm: args.dims.length, height_cm: args.dims.height,
   }).select('id, state, note').single()
   if (error?.code === '23505') {
     return { data: null, error: { message: 'This dish already has a model on the way.' } }
@@ -125,14 +132,13 @@ export async function requestRescale(args: {
   variant: string
   itemId: string | null
   title: string
-  scaleCm: number
-  scaleAxis: 'width' | 'height' | 'length'
+  dims: Dims
 }) {
   const supabase = createClient()
   const { error } = await supabase.from('model_requests').insert({
     tenant_id: args.tenantId, item_id: args.itemId, dish: args.dish, variant: args.variant,
     title: args.title, photo_keys: [], kind: 'rescale',
-    scale_cm: args.scaleCm, scale_axis: args.scaleAxis,
+    width_cm: args.dims.width, length_cm: args.dims.length, height_cm: args.dims.height,
   })
   if (error?.code === '23505') {
     return { message: 'This model is already being resized.' }

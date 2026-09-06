@@ -400,24 +400,37 @@ def main() -> int:
             cur.execute("update tenants set model_quota = 3 where id = %s", (tenant_id,))
             cur.execute("delete from model_requests where tenant_id = %s", (tenant_id,))
             conn.commit()
+        # Three numbers in, the way a person says it. Which one the engine bakes is the
+        # trigger's choice - width first - so a client sends the three and never a primary.
         r = sb.post(tok, "model_requests", {
             "tenant_id": str(tenant_id), "item_id": item_id, "dish": item_id,
             "title": "Khachapuri", "photo_keys": [f"t/{tenant_id}/photo/f2-front.jpg"],
-            "scale_cm": 28, "scale_axis": "width"})
+            "width_cm": 28, "length_cm": 26, "height_cm": 3})
         gen = r.json()[0] if r.ok else {}
-        check("a build carries its size", r.ok and float(gen.get("scale_cm") or 0) == 28.0,
+        check("a build carries width, length and height", r.ok
+              and float(gen.get("width_cm") or 0) == 28 and float(gen.get("height_cm") or 0) == 3,
+              r.text[:160])
+        check("and the engine's primary is derived, width first",
+              float(gen.get("scale_cm") or 0) == 28 and gen.get("scale_axis") == "width",
+              f"{gen.get('scale_cm')} {gen.get('scale_axis')}")
+        r = sb.post(tok, "model_requests", {
+            "tenant_id": str(tenant_id), "dish": str(uuid.uuid4()), "title": "Tall thing",
+            "photo_keys": ["t/x/capture/dddd-front.jpg"], "height_cm": 12})
+        tall = r.json()[0] if r.ok else {}
+        check("height alone becomes the primary when it is all there is",
+              r.ok and tall.get("scale_axis") == "height" and float(tall.get("scale_cm") or 0) == 12,
               r.text[:120])
         r = sb.post(tok, "model_requests", {
             "tenant_id": str(tenant_id), "item_id": item_id, "dish": item_id,
             "title": "Khachapuri", "photo_keys": [], "kind": "rescale",
-            "scale_cm": 32, "scale_axis": "width"})
+            "width_cm": 32})
         resc = r.json()[0] if r.ok else {}
         check("a resize can be asked for while a build is open - different work",
               r.ok and resc.get("kind") == "rescale", r.text[:120])
         check("and it is approved outright, quota or not", resc.get("state") == "approved")
         r = sb.rpc(tok, "model_requests_used", {"t": str(tenant_id)})
         check("a resize does not count against the free models",
-              r.ok and r.json() == 1, r.text[:60])
+              r.ok and r.json() == 2, r.text[:60])
 
         # Hiding, not deleting.
         r = sb.patch(tok, "models", {"archived": True}, id=f"eq.{model_id}")

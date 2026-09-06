@@ -98,7 +98,7 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
     with _conn() as conn, conn.cursor() as cur:
         cur.execute("""
             select id, tenant_id, dish, variant, title, photo_keys,
-                   kind, scale_cm, scale_axis
+                   kind, scale_cm, scale_axis, width_cm, length_cm, height_cm
               from model_requests
              where state = 'approved'
              order by requested_utc
@@ -107,7 +107,7 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
         rows = cur.fetchall()
 
         for (req_id, tenant_id, dish, variant, title, photo_keys,
-             kind, scale_cm, scale_axis) in rows:
+             kind, scale_cm, scale_axis, width_cm, length_cm, height_cm) in rows:
             if verbose:
                 print(f"  {title or dish} ({kind})")
 
@@ -118,6 +118,11 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
                 rec = dataset.record(dish, variant)
                 rec["scale"] = {"axis": scale_axis or "width", "cm": float(scale_cm),
                                 "shape": "", "set_by": WHO, "set_utc": dataset._now()}
+                # All three, as the owner said them. The optimiser bakes the primary; the
+                # rest wait for the day it compares and warns (0013).
+                rec["dims"] = {k: float(v) for k, v in
+                               (("width", width_cm), ("length", length_cm),
+                                ("height", height_cm)) if v}
                 dataset.write(rec)
 
             if kind == "rescale":
@@ -240,17 +245,22 @@ def collect(verbose: bool = True) -> int:
                 continue
 
             scale = rec.get("scale") or {}
+            dims = rec.get("dims") or {}
             cur.execute("""
                 insert into models (tenant_id, title, dish, variant,
                                     draco_key, usdz_key, poster_key,
-                                    scale_cm, scale_axis, tenant_state)
-                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft')
+                                    scale_cm, scale_axis, width_cm, length_cm, height_cm,
+                                    tenant_state)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'draft')
                 on conflict (tenant_id, dish, variant) do update
                    set draco_key = excluded.draco_key,
                        usdz_key = excluded.usdz_key,
                        poster_key = excluded.poster_key,
                        scale_cm = excluded.scale_cm,
                        scale_axis = excluded.scale_axis,
+                       width_cm = excluded.width_cm,
+                       length_cm = excluded.length_cm,
+                       height_cm = excluded.height_cm,
                        -- A rebuilt model goes back to draft. It is a different model, and
                        -- an owner who approved the last one has not seen this one.
                        tenant_state = 'draft',
@@ -259,7 +269,8 @@ def collect(verbose: bool = True) -> int:
             """, (tenant_id, title or rec.get("title") or "", dish, variant,
                   catalog.get("draco"), catalog.get("usdz"),
                   (rec.get("master_keys") or {}).get("png"),
-                  scale.get("cm"), scale.get("axis")))
+                  scale.get("cm"), scale.get("axis"),
+                  dims.get("width"), dims.get("length"), dims.get("height")))
             model_id = cur.fetchone()[0]
 
             cur.execute("""update model_requests
