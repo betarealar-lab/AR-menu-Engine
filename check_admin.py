@@ -22,6 +22,7 @@ generated here, used once, never printed.
 """
 from __future__ import annotations
 
+import json
 import os
 import secrets
 import sys
@@ -257,6 +258,31 @@ def main() -> int:
               r.ok and r.json()[0]["settings"].get("site_address") == "1 Test St")
         r = requests.get(f"{MENU}/{slug}", timeout=60)
         check("and the diner page follows it", 'data-template="elegant_black"' in r.text)
+
+        # The preview is the REAL page with the palette posted in, not a mock of it. That
+        # is the whole accuracy claim, so it is checked on the served bytes: present in
+        # preview, absent for a diner, and locked to an origin we name.
+        prev = requests.get(f"{MENU}/{slug}?preview=1", timeout=60).text
+        plain = requests.get(f"{MENU}/{slug}", timeout=60).text
+        check("the preview listener is on the page in preview mode", "br-theme" in prev)
+        check("and is absent from a diner's page entirely", "br-theme" not in plain,
+              "any window with a handle on the page could repaint it")
+        check("it only accepts messages from an origin we name",
+              "ALLOWED.indexOf(e.origin)" in prev)
+        check("and applies nothing but custom properties",
+              'k.slice(0, 2) !== "--"' in prev)
+
+        # Only templates we can actually RENDER may be offered. The editor used to list 22
+        # presets as "templates" while app/src/lib/css/ held two stylesheets, so picking
+        # one of the other twenty set a key the renderer silently fell back from - and the
+        # old mock preview showed the preset's colours regardless, so the preview and the
+        # published page disagreed with nobody to notice.
+        shipped = set(json.loads((Path(__file__).resolve().parent / "app" / "src" / "lib"
+                                  / "css" / "index.json").read_text())["templates"])
+        r = sb.get(tok, "templates", listed="eq.true", select="id")
+        offered = {row["id"] for row in r.json()} if r.ok else set()
+        check("every template on offer has a stylesheet we ship", offered <= shipped,
+              f"offered without CSS: {sorted(offered - shipped)}")
 
         with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
             cur.execute("""select slug, (select count(*) from jsonb_object_keys(settings))

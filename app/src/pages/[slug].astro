@@ -53,6 +53,11 @@ try {
 if (!menu && !error) return new Response(`No menu for "${slug}"`, { status: 404 });
 if (error) return new Response(`Menu unavailable: ${error}`, { status: 503 });
 
+// Is this the theme editor looking at itself? The listener below is emitted ONLY then,
+// so a diner's page never contains a way to repaint it from another window - not gated at
+// runtime, absent from the bytes.
+const isPreview = Astro.url.searchParams.has("preview");
+
 const cfg = menu.config;
 const mode = themeMode(cfg);
 const lang = (menu.tenant.languages || ["en"])[0];
@@ -79,6 +84,12 @@ const runtimeCfg = Object.fromEntries(
 // restaurant to file its counts under (0009_events). It is not a secret - it is in the URL
 // as a slug already - and the sink refuses ids that are not real restaurants.
 runtimeCfg.tenant_id = menu.tenant.id;
+
+// Who may repaint this page in preview. The admin, and nothing else. Configured rather
+// than inferred from the referrer, because a referrer is whatever the other side says.
+const previewOrigins = (import.meta.env.PREVIEW_ORIGINS || process.env.PREVIEW_ORIGINS
+  || "http://127.0.0.1:3001,http://localhost:3001")
+  .split(",").map((s) => s.trim()).filter(Boolean);
 const buildMs = Date.now() - started;
 ---
 <!doctype html>
@@ -134,5 +145,46 @@ const buildMs = Date.now() - started;
       data-lang={lang}
       data-build-ms={String(buildMs)}
     />
+
+    {/* The theme editor's live preview, and nothing else.
+     *
+     * The admin used to draw its own mock of this page - hand-written markup, emoji
+     * instead of dishes, and about twenty-five of the forty-one custom properties
+     * re-implemented by hand. It could not show a template's own CSS rules at all, so an
+     * owner was tuning colours against a drawing of their menu rather than their menu.
+     *
+     * This is the real page. The editor puts it in a frame and posts the palette as it is
+     * typed; every value is a CSS custom property already, so applying one live is exactly
+     * what the renderer does at publish time.
+     *
+     * Only present when `?preview` is in the URL, and only accepts messages from an origin
+     * we name. A page that can be repainted by any window that gets a handle on it is a
+     * page that can be made to say anything. */}
+    {isPreview && (
+      <script is:inline set:html={`(function(){
+  var ALLOWED = ${JSON.stringify(previewOrigins)};
+  var root = document.documentElement;
+  addEventListener("message", function (e) {
+    if (ALLOWED.indexOf(e.origin) < 0) return;
+    var m = e.data;
+    if (!m || m.type !== "br-theme") return;
+    if (m.mode === "day" || m.mode === "night") root.setAttribute("data-theme", m.mode);
+    if (m.template) root.setAttribute("data-template", m.template);
+    var vars = m.vars || {};
+    for (var k in vars) {
+      if (!Object.prototype.hasOwnProperty.call(vars, k)) continue;
+      // Names are ours (the varMap) and values are bounded by the sender. Anything that
+      // is not a custom property is ignored rather than cleaned: a half-sanitised
+      // gradient renders wrong, which is worse than one that never arrives.
+      if (k.slice(0, 2) !== "--") continue;
+      if (vars[k]) root.style.setProperty(k, vars[k]);
+      else root.style.removeProperty(k);
+    }
+    if (m.reload) location.reload();
+  });
+  // Tell the editor the page is ready for values, so it does not post into a blank frame.
+  try { parent.postMessage({ type: "br-preview-ready" }, "*"); } catch (_) {}
+})();`} />
+    )}
   </body>
 </html>

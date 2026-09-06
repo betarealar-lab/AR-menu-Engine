@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo, type CSSProperties } from 'react'
-import { loadThemeConfig, saveThemeConfig } from '@/lib/data/theme'
+import { loadThemeConfig, saveThemeConfig, setTemplate, loadTemplates } from '@/lib/data/theme'
+import ThemePreview, { type PreviewMode } from '@/components/ThemePreview'
 import { uploadAsset } from '@/lib/upload'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
@@ -231,6 +232,15 @@ export default function ThemePage() {
   const [saving, setSaving]   = useState(false)
   const [msg, setMsg]         = useState('')
   const [tab, setTab]         = useState<ThemeTabId>('templates')
+  // The palette being edited. The preview follows it, and the night/day tabs set it, so
+  // there is one answer to "which mode am I looking at" rather than two that can disagree.
+  const [mode, setMode]       = useState<PreviewMode>('night')
+  // Only the templates we can actually RENDER. The preset list below has twenty-two
+  // entries; `app/src/lib/css/` has two stylesheets. Picking any of the other twenty set a
+  // template_key the renderer does not know, so it silently fell back to Monday Greens -
+  // and the old mock preview happily showed the preset's colours on its own markup, so the
+  // preview and the published page disagreed with nobody to notice.
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([])
   const [flashKey, setFlashKey]       = useState<string | null>(null)
   const [pendingPick, setPendingPick] = useState<string | null>(null)
   const text = useCallback((template: string, values: Record<string, string | number>) => (
@@ -261,6 +271,11 @@ export default function ThemePage() {
   }, [plan.canUseTheme, plan.loading, plan.restaurantId, supabase])
 
   useEffect(() => { void Promise.resolve().then(load) }, [load])
+
+  useEffect(() => {
+    loadTemplates(config.template_key || '').then(rows =>
+      setTemplates(rows.map(r => ({ id: r.id as string, name: r.name as string }))))
+  }, [config.template_key])
   useEffect(() => {
     queueMicrotask(() => {
       setTab(current => normalizeThemeTabForRole(current, plan.role) as ThemeTabId)
@@ -292,13 +307,9 @@ export default function ThemePage() {
     return () => document.removeEventListener('click', onClick, true)
   }, [dirty, T])
 
-  // Click-to-edit: a preview element asks to edit `field` in `m` (night/day).
-  // Switch to that tab, then (after it renders) scroll the row into view, flash
-  // it, and open its color picker.
-  const pickField = useCallback((m: 'night' | 'day', field: string) => {
-    setTab(m)
-    setPendingPick(`${m}_${field}`)
-  }, [])
+  // Click-to-edit. The mock preview called this with a field name; the real page in a
+  // frame cannot, without a message it does not send yet - so nothing calls it today and
+  // the machinery below stays because it is what a `br-preview-pick` message would drive.
   useEffect(() => {
     if (!pendingPick) return
     const raf = requestAnimationFrame(() => {
@@ -534,55 +545,40 @@ export default function ThemePage() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold page-title" style={{ color: 'var(--gold)' }}>{T.themeTitle}</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--dim)' }}>{T.themeDesc}</p>
-          <p className="text-xs mt-1" style={{ color: 'var(--dim)' }}>
-            {T.tenantLabel}: <span style={{ color: 'var(--text)' }}>{plan.restaurantName}</span>
+      <div className="flex items-center gap-3 flex-wrap mb-5">
+        <div className="mr-auto">
+          <h1 className="page-title">{T.themeTitle}</h1>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--dim)' }}>
+            {dirty ? 'Unsaved changes — the preview is showing them' : 'Everything saved'}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {msg && (
-            <span className="text-sm px-3 py-1.5 rounded-lg"
-                  style={{ background: 'rgba(76,175,125,0.15)', color: 'var(--success)' }}>
-              {msg}
-            </span>
-          )}
-          {dirty && !msg && (
-            <span className="text-sm px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5"
-                  style={{ background: 'rgba(231,177,90,0.15)', color: 'var(--gold)' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--gold)' }} />
-              {T.unsavedChanges}
-            </span>
-          )}
-          <button onClick={reset}
-                  className="px-4 py-2 rounded-lg text-sm"
-                  style={{ color: 'var(--danger)', border: '1px solid rgba(224,82,82,0.3)' }}>
-            {T.reset}
-          </button>
-          <button onClick={save} disabled={saving}
-                  className="px-5 py-2 rounded-lg text-sm font-semibold"
-                  style={{ background: 'var(--gold)', color: 'var(--gold-ink)',
-                           opacity: saving ? 0.6 : dirty ? 1 : 0.65,
-                           boxShadow: dirty && !saving ? '0 0 0 3px rgba(231,177,90,0.28)' : undefined,
-                           transition: 'box-shadow .2s, opacity .2s' }}>
-            {saving ? T.saving : T.saveChanges}
-          </button>
-        </div>
+        {msg && <span className="pill pill-on">{msg}</span>}
+        {dirty && !msg && <span className="pill pill-wait">unsaved</span>}
+        <button onClick={reset} className="btn btn-ghost btn-danger">{T.reset}</button>
+        <button onClick={save} disabled={saving || !dirty} className="btn btn-primary">
+          {saving ? T.saving : T.saveChanges}
+        </button>
       </div>
 
       <div className="flex flex-col xl:flex-row gap-6 items-start">
         {/* ── Left: editor controls (unchanged behaviour) ─────────────── */}
         <div className="w-full xl:flex-1 xl:min-w-0 xl:max-w-2xl">
 
-      <div className="flex gap-1 mb-6 p-1 rounded-lg w-fit"
-           style={{ background: 'var(--card)' }}>
+      <div className="flex gap-0.5 mb-5 p-0.5 rounded-lg w-fit flex-wrap"
+           style={{ background: 'var(--card2)' }}>
         {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-                  className="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
-                  style={{ background: tab === t.id ? 'var(--gold)' : 'transparent',
-                           color: tab === t.id ? 'var(--gold-ink)' : 'var(--dim)' }}>
+          <button key={t.id}
+                  onClick={() => {
+                    setTab(t.id)
+                    // The preview follows the palette being edited. Set here rather than
+                    // in an effect on `tab`: it is derived from a click, and deriving it
+                    // in an effect is a second render that can also disagree for a frame.
+                    if (t.id === 'day' || t.id === 'night') setMode(t.id)
+                  }}
+                  className="px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors"
+                  style={{ background: tab === t.id ? 'var(--card)' : 'transparent',
+                           color: tab === t.id ? 'var(--text)' : 'var(--dim)',
+                           boxShadow: tab === t.id ? 'var(--shadow)' : 'none' }}>
             {t.label}
           </button>
         ))}
@@ -593,14 +589,51 @@ export default function ThemePage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 max-w-2xl">
           {tab === 'templates' && templateActionsAllowed && (
-            <div className="grid grid-cols-1 gap-3">
+            <div className="grid gap-3">
+              {/* SHAPE. Which stylesheet the page is rendered with - and only the ones we
+                  ship, read from the catalogue rather than from the preset list below. */}
+              <div className="card p-4">
+                <div className="eyebrow mb-1">Layout</div>
+                <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
+                  The shape of the page. Colours, fonts and photos sit on top of it and
+                  carry across when you switch.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {templates.map(tpl => {
+                    const on = (config.template_key || '') === tpl.id
+                    return (
+                      <button key={tpl.id} type="button"
+                              onClick={async () => {
+                                setConfig(c => ({ ...c, template_key: tpl.id }))
+                                // Written straight through: the template is a column the
+                                // renderer joins on, not a value in the palette bag, and
+                                // the preview has to reload to pick up a new stylesheet.
+                                if (plan.restaurantId) await setTemplate(plan.restaurantId, tpl.id)
+                                setMsg(text(T.templateLoaded, { name: tpl.name }))
+                              }}
+                              className="text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors"
+                              style={{ border: `1px solid ${on ? 'var(--gold)' : 'var(--border)'}`,
+                                       background: on ? 'var(--gold-dim)' : 'var(--bg)',
+                                       color: on ? 'var(--gold)' : 'var(--text)' }}>
+                        {tpl.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* PALETTE. A starting set of colours, applied ON TOP of whatever layout is
+                  chosen - so these stopped carrying a template_key with them. That was the
+                  bug: twenty-two "templates" for two stylesheets. */}
+              <div className="eyebrow px-1 pt-2">Colour palettes</div>
               {TEMPLATE_PRESETS.map(preset => (
                 <button
                   key={preset.key}
                   type="button"
                   onClick={() => {
                     if (!templateActionsAllowed) return
-                    setConfig(current => ({ ...current, ...preset.values }))
+                    const { template_key: _drop, ...colours } = preset.values
+                    setConfig(current => ({ ...current, ...colours }))
                     setMsg(text(T.templateLoaded, { name: preset.label }))
                   }}
                   className="text-left p-4 rounded-xl transition-colors"
@@ -773,7 +806,8 @@ export default function ThemePage() {
         </div>
 
         {/* ── Right: live preview ─────────────────────────────────────── */}
-        <ThemePreview config={config} activeTab={tab} onPick={pickField} />
+        <ThemePreview slug={plan.restaurantSlug} config={config} mode={mode}
+                      onMode={setMode} template={config.template_key || ''} />
       </div>
     </div>
   )
@@ -993,246 +1027,6 @@ function BrandRow({ label, value, onChange }: { label: string; value: string; on
          style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
       <div className="text-xs mb-2 uppercase tracking-widest" style={{ color: 'var(--dim)' }}>{label}</div>
       <input value={value} onChange={e => onChange(e.target.value)} />
-    </div>
-  )
-}
-
-// ── Live preview ──────────────────────────────────────────────────────
-// Renders a faithful mock of the customer menu by scoping the SAME CSS
-// variables the live site sets (see index.html → applyRemoteTheme varMap)
-// onto a wrapper, from the current unsaved `config`. Read-only: it only
-// consumes config, never writes it.
-
-type PreviewMode = 'night' | 'day'
-type PreviewDevice = 'desktop' | 'phone'
-
-// Fallbacks for the 10 base color keys when a tenant hasn't set one — mirror
-// the generic index.html :root so the mock is never blank.
-const PREVIEW_DEFAULTS = {
-  night: {
-    bg: '#14100b', card: '#211a12', card2: '#2b2218', border: 'rgba(231,177,90,0.20)',
-    text: '#f1e7d4', dim: '#9a8a70', accent: '#e7b15a', accent_text: '#14100b',
-    thumb_bg: '#0d0a07', modal_bg: '#14100b',
-  },
-  day: {
-    bg: '#f3e9d6', card: '#fbf4e4', card2: '#ecdcc0', border: 'rgba(176,122,30,0.22)',
-    text: '#221a0e', dim: '#6b5a3c', accent: '#8c6014', accent_text: '#ffffff',
-    thumb_bg: '#c8b898', modal_bg: '#f3e9d6',
-  },
-} as const
-
-function ThemePreview({ config, activeTab, onPick }:
-  { config: ThemeConfig; activeTab: string; onPick: (mode: PreviewMode, field: string) => void }) {
-  const [T] = useLang()
-  const [device, setDevice] = useState<PreviewDevice>('desktop')
-  const [mode, setMode]     = useState<PreviewMode>('night')
-
-  // Follow the editor into the palette being edited (night/day tabs).
-  useEffect(() => {
-    queueMicrotask(() => {
-      if (activeTab === 'day') setMode('day')
-      else if (activeTab === 'night') setMode('night')
-    })
-  }, [activeTab])
-
-  // Load the chosen Google Fonts so the preview types in the real faces.
-  const fontBody    = config.font_body    || 'Nunito'
-  const fontHeading = config.font_heading || 'Bebas Neue'
-  useEffect(() => {
-    const fams = Array.from(new Set([fontBody, fontHeading])).filter(Boolean)
-    const links = fams.map(fam => {
-      const l = document.createElement('link')
-      l.rel = 'stylesheet'
-      l.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam)}:wght@400;600;700&display=swap`
-      document.head.appendChild(l)
-      return l
-    })
-    return () => { links.forEach(l => l.remove()) }
-  }, [fontBody, fontHeading])
-
-  const d = PREVIEW_DEFAULTS[mode]
-  const V = (k: string) => config[`${mode}_${k}`]
-  const base = (k: keyof typeof d) => V(k) || d[k]
-  const accent = base('accent')
-  const card = base('card'), card2 = base('card2')
-
-  // Same CSS variables index.html applies, scoped to this subtree only.
-  const vars = {
-    '--bg': base('bg'),
-    '--bg-image': V('bg_image') || 'none',
-    '--bg-size': V('bg_size') || 'auto',
-    '--bg-repeat': V('bg_repeat') || 'no-repeat',
-    '--card': card,
-    '--card2': card2,
-    '--card-bg': V('card_bg') || `linear-gradient(158deg, ${card} 0%, ${card2} 100%)`,
-    '--card-radius': V('card_radius') || '16px',
-    '--border': base('border'),
-    '--text': base('text'),
-    '--dim': base('dim'),
-    '--accent': accent,
-    '--accent-text': base('accent_text'),
-    '--thumb-bg': base('thumb_bg'),
-    '--thumb-vignette': V('thumb_vignette') || 'none',
-    '--cta-bg': V('cta_bg') || accent,
-    '--pill-bg': V('pill_bg') || 'transparent',
-    '--pill-active-bg': V('pill_active_bg') || accent,
-    '--hero-color': V('hero_color') || accent,
-    '--badge-bg': V('badge_bg') || V('cta_bg') || accent,
-    '--price-color': V('price_color') || V('hero_color') || accent,
-    '--add-btn-color': V('add_btn_color') || accent,
-    '--divider-bg': V('divider_bg') || `linear-gradient(90deg, transparent, ${accent}, transparent)`,
-    '--item-shadow': V('item_shadow') || '0 4px 14px rgba(0,0,0,0.28)',
-    '--modal-bg': base('modal_bg'),
-  } as CSSProperties
-
-  const brand = config.site_name || T.previewRestaurant
-  const logoUrl = config.logo_url || ''
-  const cols = device === 'desktop' ? 2 : 1
-  const frameW = device === 'desktop' ? 560 : 300
-
-  const items = [
-    { emoji: '🥗', name: T.previewItemSeasonalName, desc: T.previewItemSeasonalDesc, price: '24 ₾' },
-    { emoji: '🍽️', name: T.previewItemSignatureName, desc: T.previewItemSignatureDesc, price: '29 ₾' },
-    { emoji: '🍟', name: T.previewItemSideName, desc: T.previewItemSideDesc, price: '12 ₾' },
-    { emoji: '🥤', name: T.previewItemDrinkName, desc: T.previewItemDrinkDesc, price: '7 ₾'  },
-  ]
-  const shown = device === 'desktop' ? items : items.slice(0, 3)
-
-  return (
-    <div className="w-full xl:w-auto xl:sticky xl:top-4 shrink-0">
-      <style>{`.pv-hot{cursor:pointer;outline:2px solid transparent;outline-offset:2px;border-radius:4px;transition:outline-color .12s}.pv-hot:hover{outline-color:#38bdf8}`}</style>
-      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <span className="text-xs uppercase tracking-widest" style={{ color: 'var(--dim)' }}>
-          {T.previewLabel}
-        </span>
-        <div className="flex gap-2">
-          <Segmented value={device} onChange={v => setDevice(v as PreviewDevice)}
-                     options={[{ id: 'desktop', label: T.previewDesktop }, { id: 'phone', label: T.previewPhone }]} />
-          <Segmented value={mode} onChange={v => setMode(v as PreviewMode)}
-                     options={[{ id: 'night', label: T.tabNight }, { id: 'day', label: T.tabDay }]} />
-        </div>
-      </div>
-
-      <div className="rounded-2xl p-3 flex justify-center"
-           style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-        <div style={{ width: frameW, maxWidth: '100%' }}>
-          <div className="overflow-hidden shadow-xl"
-               onClick={e => {
-                 const el = (e.target as HTMLElement).closest<HTMLElement>('[data-field]')
-                 if (el?.dataset.field) onPick(mode, el.dataset.field)
-               }}
-               style={{
-                 ...vars,
-                 borderRadius: device === 'phone' ? 34 : 12,
-                 border: device === 'phone' ? '9px solid #0c0a08' : '1px solid rgba(0,0,0,0.35)',
-               }}>
-            {device === 'desktop' ? (
-              <div className="flex items-center gap-1.5 px-3 py-2" style={{ background: '#141210' }}>
-                <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#ff5f57' }} />
-                <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#febc2e' }} />
-                <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#28c840' }} />
-                <span className="ml-2 text-[10px] px-2 py-0.5 rounded" style={{ background: '#26221d', color: '#9a8a70' }}>
-                  menu.betareal.ge
-                </span>
-              </div>
-            ) : (
-              <div className="flex justify-center py-1.5" style={{ background: '#0c0a08' }}>
-                <span className="w-16 h-1.5 rounded-full" style={{ background: '#2a2622' }} />
-              </div>
-            )}
-
-            <div className="pv-hot" data-field="bg" title={`✎ ${T.colorBg}`} style={{
-              background: 'var(--bg-image, none)',
-              backgroundColor: 'var(--bg)',
-              backgroundSize: 'var(--bg-size, auto)',
-              backgroundRepeat: 'var(--bg-repeat, no-repeat)',
-              fontFamily: `'${fontBody}', sans-serif`,
-              padding: device === 'phone' ? '18px 14px 14px' : '22px 20px 18px',
-              maxHeight: 470, overflowY: 'auto',
-            }}>
-              <div className="text-center mb-4">
-                {logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={logoUrl} alt={brand}
-                       style={{ maxWidth: device === 'phone' ? 150 : 190, maxHeight: 70, margin: '0 auto', objectFit: 'contain' }} />
-                ) : (
-                  <div style={{
-                    fontFamily: `'${fontHeading}', sans-serif`, color: 'var(--hero-color)',
-                    letterSpacing: 3, fontSize: device === 'phone' ? 22 : 28, lineHeight: 1.1,
-                    textTransform: 'uppercase', fontWeight: 700,
-                  }}>{brand}</div>
-                )}
-                <div style={{ height: 3, width: 66, margin: '10px auto 0', borderRadius: 3, background: 'var(--divider-bg)' }} />
-              </div>
-
-              <div className="flex gap-2 mb-4 justify-center flex-wrap">
-                {[T.previewCategoryMains, T.previewCategorySides, T.previewCategoryDrinks].map((c, i) => (
-                  <span key={c} className={`text-[11px] px-3 py-1 rounded-full${i === 0 ? ' pv-hot' : ''}`}
-                        data-field={i === 0 ? 'accent' : undefined} title={i === 0 ? `✎ ${T.colorAccent}` : undefined} style={{
-                    background: i === 0 ? 'var(--pill-active-bg)' : 'var(--pill-bg)',
-                    color: i === 0 ? 'var(--accent-text)' : 'var(--dim)',
-                    border: i === 0 ? 'none' : '1px solid var(--border)',
-                  }}>{c}</span>
-                ))}
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 12 }}>
-                {shown.map((it, i) => (
-                  <div key={i} className="pv-hot" data-field="card" title={`✎ ${T.colorCard}`} style={{
-                    background: 'var(--card-bg)', border: '1px solid var(--border)',
-                    borderRadius: 'var(--card-radius, 16px)', boxShadow: 'var(--item-shadow)',
-                    padding: 12, display: 'flex', flexDirection: 'column', gap: 8,
-                  }}>
-                    <div className="relative flex items-center justify-center pv-hot" data-field="thumb_bg" title={`✎ ${T.colorThumbBg}`}
-                         style={{ background: 'var(--thumb-bg)', borderRadius: 12, height: device === 'phone' ? 84 : 96, fontSize: 34 }}>
-                      <span style={{ position: 'absolute', inset: 0, borderRadius: 12, background: 'var(--thumb-vignette, none)' }} />
-                      <span style={{ position: 'relative' }}>{it.emoji}</span>
-                      <span className="absolute top-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 rounded pv-hot" data-field="badge_bg" title={`✎ ${T.colorBadge}`}
-                            style={{ background: 'var(--badge-bg)', color: 'var(--accent-text)', letterSpacing: 0.5 }}>3D</span>
-                    </div>
-                    <div className="pv-hot" data-field="text" title={`✎ ${T.colorText}`} style={{ color: 'var(--text)', fontWeight: 700, fontSize: 14 }}>{it.name}</div>
-                    <div className="pv-hot" data-field="dim" title={`✎ ${T.colorDim}`} style={{ color: 'var(--dim)', fontSize: 11, lineHeight: 1.4 }}>{it.desc}</div>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="pv-hot" data-field="price_color" title={`✎ ${T.colorPrice}`} style={{ color: 'var(--price-color)', fontWeight: 700, fontSize: 15 }}>{it.price}</span>
-                      <button className="pv-hot" data-field="add_btn_color" title={`✎ ${T.colorAddBtn}`} style={{ background: 'transparent', color: 'var(--add-btn-color)', border: '1.5px solid var(--add-btn-color)', fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 999 }}>
-                        {T.previewAdd}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between px-4 py-3 pv-hot" data-field="modal_bg" title={`✎ ${T.colorModalBg}`}
-                 style={{ background: 'var(--modal-bg)', borderTop: '1px solid var(--border)', fontFamily: `'${fontBody}', sans-serif` }}>
-              <span style={{ color: 'var(--dim)', fontSize: 12 }}>{T.previewCartCount}</span>
-              <span className="px-4 py-1.5 rounded-full text-xs font-bold" style={{ background: 'var(--cta-bg)', color: 'var(--accent-text)' }}>
-                {T.previewViewCart}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <p className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--dim)' }}>
-        {T.previewHint}
-      </p>
-    </div>
-  )
-}
-
-function Segmented({ value, onChange, options }:
-  { value: string; onChange: (v: string) => void; options: { id: string; label: string }[] }) {
-  return (
-    <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--card)' }}>
-      {options.map(o => (
-        <button key={o.id} onClick={() => onChange(o.id)}
-                className="px-3 py-1 rounded-md text-xs font-medium transition-all"
-                style={{ background: value === o.id ? 'var(--gold)' : 'transparent',
-                         color: value === o.id ? 'var(--gold-ink)' : 'var(--dim)' }}>
-          {o.label}
-        </button>
-      ))}
     </div>
   )
 }
