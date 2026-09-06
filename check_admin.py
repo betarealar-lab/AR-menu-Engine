@@ -406,6 +406,34 @@ def main() -> int:
         check("over quota, a request waits for us instead of running",
               over.get("state") == "pending", str(over))
 
+        # ── the queries the 3D screen issues ─────────────────────────────────
+        # The engine is on the other side of model_requests and the admin never crosses it.
+        # What the admin DOES need is that its own three reads work as the signed-in user,
+        # and that the quota function is callable from a browser - it decides what number
+        # the screen shows an owner, and an RPC nobody granted comes back as an error the
+        # UI would render as "0 left".
+        head = {"apikey": anon_key, "Authorization": f"Bearer {access}"}
+        lib = requests.get(f"{url}/rest/v1/models", timeout=30, headers=head,
+                           params={"tenant_id": f"eq.{tenant_id}",
+                                   "select": "id,title,dish,variant,poster_key,draco_key,"
+                                             "usdz_key,view_orbit,scale_cm,tenant_state,"
+                                             "created_utc"})
+        check("the 3D library query runs", lib.ok and isinstance(lib.json(), list),
+              lib.text[:140])
+
+        rq = requests.get(f"{url}/rest/v1/model_requests", timeout=30, headers=head,
+                          params={"tenant_id": f"eq.{tenant_id}",
+                                  "select": "id,title,state,note,item_id,photo_keys,"
+                                            "requested_utc"})
+        check("and so does the one for what is on the way",
+              rq.ok and isinstance(rq.json(), list), rq.text[:140])
+
+        rpc = requests.post(f"{url}/rest/v1/rpc/model_requests_used", timeout=30,
+                            headers={**head, "Content-Type": "application/json"},
+                            json={"t": str(tenant_id)})
+        check("an owner can read their own usage", rpc.ok and isinstance(rpc.json(), int),
+              rpc.text[:140])
+
         # ── the two jsonb bags stay on their own sides ───────────────────────
         # The theme screen loads a merged bag of ~104 keys and saves it split again. If
         # that split is ever wrong the symptom is silent and slow: a closing time

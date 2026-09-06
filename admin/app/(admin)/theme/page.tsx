@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback, useMemo, type CSSProperties } from 'react'
 import { loadThemeConfig, saveThemeConfig } from '@/lib/data/theme'
+import { uploadAsset } from '@/lib/upload'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
 import type { Translations } from '@/lib/i18n'
@@ -355,16 +356,7 @@ export default function ThemePage() {
     setUploadingKey(key)
     try {
       const blob = await toWebP(file)
-      const filename = file.name.replace(/\.[^.]+$/i, '.webp')
-      const res = await fetch('/api/r2-presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename, restaurantId: plan.restaurantId, restaurantSlug: plan.restaurantSlug }),
-      })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Server error ${res.status}`)
-      const { uploadUrl, publicUrl } = await res.json()
-      const up = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: blob })
-      if (!up.ok) throw new Error(`R2 upload failed: ${up.status}`)
+      const publicUrl = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
       set(key, publicUrl)
       setMsg(T.imageUploaded)
     } catch (e) {
@@ -399,16 +391,7 @@ export default function ThemePage() {
     try {
       for (const file of picked) {
         const blob = await toWebP(file)
-        const filename = file.name.replace(/\.[^.]+$/i, '.webp')
-        const res = await fetch('/api/r2-presign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename, restaurantId: plan.restaurantId, restaurantSlug: plan.restaurantSlug }),
-        })
-        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Server error ${res.status}`)
-        const { uploadUrl, publicUrl } = await res.json()
-        const up = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: blob })
-        if (!up.ok) throw new Error(`R2 upload failed: ${up.status}`)
+        const publicUrl = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
         added.push(publicUrl)
       }
       appendHeroImages(added)
@@ -436,15 +419,9 @@ export default function ThemePage() {
     }
     setUploadingKey(key)
     try {
-      const res = await fetch('/api/r2-presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, restaurantId: plan.restaurantId, restaurantSlug: plan.restaurantSlug }),
-      })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Server error ${res.status}`)
-      const { uploadUrl, publicUrl } = await res.json()
-      const up = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'video/mp4' }, body: file })
-      if (!up.ok) throw new Error(`R2 upload failed: ${up.status}`)
+      // Ours to upload, not an owner's: nothing in a browser trims a video, and a phone
+      // hands over tens of megabytes at the top of the page. The route enforces it.
+      const publicUrl = await uploadAsset(file, 'video', plan.restaurantId, file.name)
       set(key, publicUrl)
       setMsg(T.heroVideoUploaded)
     } catch (e) {
@@ -471,16 +448,7 @@ export default function ThemePage() {
     setUploadingKey(key)
     try {
       const blob = await toWebP(file)
-      const filename = file.name.replace(/\.[^.]+$/i, '.webp')
-      const res = await fetch('/api/r2-presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename, restaurantId: plan.restaurantId, restaurantSlug: plan.restaurantSlug }),
-      })
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Server error ${res.status}`)
-      const { uploadUrl, publicUrl } = await res.json()
-      const up = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: blob })
-      if (!up.ok) throw new Error(`R2 upload failed: ${up.status}`)
+      const publicUrl = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
       set(key, `url("${publicUrl}")`)
       set(`${mode}_bg_size`, 'cover')
       set(`${mode}_bg_repeat`, 'no-repeat')

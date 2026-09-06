@@ -79,6 +79,9 @@ export default function Sidebar({ open, onClose }: Props) {
     plan.canUseAnalytics ? { href: tenantHref('/dashboard'), match: '/dashboard', label: T.navAnalytics, icon: 'Data' } : null,
     plan.canUseDeveloperAnalytics ? { href: '/dev-analytics', match: '/dev-analytics', label: T.navDeveloperAnalytics, icon: 'Dev' } : null,
     plan.canUseTheme ? { href: tenantHref('/theme'), match: '/theme', label: T.navTheme, icon: 'Theme' } : null,
+    // The 3D library. Not gated on canUploadModels: an owner does not upload models, they
+    // ask for one and then approve it, and the screen is where they see what they have.
+    { href: tenantHref('/models'), match: '/models', label: '3D models', icon: '3D' },
     // History covers both theme and menu edits, so show it to anyone who can edit either.
     plan.canUseMenu || plan.canUseTheme ? { href: tenantHref('/history'), match: '/history', label: T.navHistory, icon: 'Undo' } : null,
   ].filter((item): item is { href: string; match?: string; label: string; icon: string } => Boolean(item))

@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
 import { usePlan } from '@/lib/usePlan'
+import { uploadAsset } from '@/lib/upload'
 import {
   loadMenu,
   saveItem as saveItemRow,
@@ -463,23 +464,7 @@ export default function MenuPage() {
       return
     }
     try {
-      const filename = file.name.replace(/\.[^.]+$/i, '.webp')
-      const res = await fetch('/api/r2-presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename, restaurantId: plan.restaurantId, restaurantSlug: plan.restaurantSlug }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `Server error ${res.status}`)
-      }
-      const { uploadUrl, publicUrl } = await res.json()
-      const upload = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'image/webp' },
-        body: blob,
-      })
-      if (!upload.ok) throw new Error(`R2 upload failed: ${upload.status}`)
+      const publicUrl = await uploadAsset(blob, 'photo', plan.restaurantId, file.name)
       setItemForm(f => ({ ...f, thumbnail_url: publicUrl, text_only: false }))
       setThumbProgress(text(T.uploadedFile, { name: file.name }))
     } catch (e) {
@@ -497,23 +482,10 @@ export default function MenuPage() {
     setUploading(true)
     setUploadProgress(T.uploading)
     try {
-      const res = await fetch('/api/r2-presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, restaurantId: plan.restaurantId, restaurantSlug: plan.restaurantSlug }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `Server error ${res.status}`)
-      }
-      const { uploadUrl, publicUrl } = await res.json()
-
-      const upload = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': kind === 'usdz' ? 'model/vnd.usdz+zip' : 'model/gltf-binary' },
-        body: file,
-      })
-      if (!upload.ok) throw new Error(`R2 upload failed: ${upload.status}`)
+      // Hand-uploading a model stays OURS - the route enforces it. An owner gets one
+      // through "Make a 3D model", where the photos are kept, the quota applies and the
+      // result is something we can rebuild. A file dropped in here has none of that.
+      const publicUrl = await uploadAsset(file, kind, plan.restaurantId, file.name)
 
       setItemForm(f => kind === 'usdz' ? { ...f, model_usdz: publicUrl, text_only: false } : { ...f, model: publicUrl, text_only: false, is_3d: true })
       setUploadProgress(text(T.uploadedFile, { name: file.name }))

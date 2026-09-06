@@ -54,10 +54,13 @@ export type MenuSettings = {
   itemViews: Record<string, string>
 }
 
-/** A private R2 key is served by the menu app, which owns the buckets. An absolute URL is
- *  left alone - the live restaurants still carry r2.dev links in their imported data. */
+/** A private R2 key is served by the MENU APP, which owns the buckets, the cache headers
+ *  and the CORS a 3D viewer needs. The admin is a different origin, so a bare `/a/<key>`
+ *  would 404 here - it has to be absolute. An absolute URL is left alone: the live
+ *  restaurants still carry r2.dev links in their imported data. */
 const assetUrl = (key: string | null | undefined) =>
-  !key ? '' : key.startsWith('http') ? key : `/a/${key}`
+  !key ? '' : key.startsWith('http') ? key
+    : `${process.env.NEXT_PUBLIC_MENU_ORIGIN || ''}/a/${key}`
 
 /** Minor units to what a person reads. `price_text` wins when it is set, because a dish
  *  priced "16 / 70" is a dish no integer can describe. */
