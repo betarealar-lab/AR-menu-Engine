@@ -1,0 +1,136 @@
+'use client'
+// Home. The screen an owner sees every time, so it has to say "things are working" in
+// two seconds and then get out of the way.
+//
+// Four things, in the order they matter:
+//   is the menu live, and where            the thing they are paying for
+//   what is being built right now          the thing they are waiting on
+//   the number                             dishes with 3D vs without - the reason to stay
+//   three actions                          the things they actually come here to do
+
+import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { usePlan } from '@/lib/usePlan'
+import { createClient } from '@/lib/supabase/client'
+import { loadLibrary, type ModelRequest, type TenantModel } from '@/lib/data/models'
+
+const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
+
+export default function HomePage() {
+  const plan = usePlan()
+  const router = useRouter()
+  const [dishes, setDishes] = useState(0)
+  const [with3d, setWith3d] = useState(0)
+  const [requests, setRequests] = useState<ModelRequest[]>([])
+  const [waiting, setWaiting] = useState<TenantModel[]>([])
+  const [opens, setOpens] = useState<{ with3d: number; without: number } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    if (plan.loading || !plan.restaurantId) { setLoading(plan.loading); return }
+    const supabase = createClient()
+    const [{ data: t }, lib, { data: items }, { data: cmp }] = await Promise.all([
+      supabase.from('tenants').select('setup_done').eq('id', plan.restaurantId).single(),
+      loadLibrary(plan.restaurantId),
+      supabase.from('items').select('id, model_id, is_3d, visible').eq('tenant_id', plan.restaurantId),
+      supabase.rpc('event_3d_lift', { p_tenant: plan.restaurantId, p_days: 30 }),
+    ])
+    // Setup not finished and nothing here yet: this is a brand-new restaurant, and the
+    // guided flow is a better first screen than four empty cards.
+    if (t && !t.setup_done && (items || []).length === 0) {
+      router.replace(`/setup?tenant=${plan.restaurantSlug}`)
+      return
+    }
+    const visible = (items || []).filter(i => i.visible)
+    setDishes(visible.length)
+    setWith3d(visible.filter(i => i.model_id && i.is_3d).length)
+    setRequests(lib.requests.filter(r => r.state !== 'failed'))
+    setWaiting(lib.models.filter(m => m.state === 'draft'))
+    const row = Array.isArray(cmp) ? cmp[0] : cmp
+    setOpens(row ? { with3d: Number(row.with_3d), without: Number(row.without_3d) } : null)
+    setLoading(false)
+  }, [plan.loading, plan.restaurantId, plan.restaurantSlug, router])
+
+  useEffect(() => { void load() }, [load])
+
+  if (loading) return <p style={{ color: 'var(--dim)' }}>Loading…</p>
+  if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>Pick a restaurant first.</p>
+
+  const url = `${MENU_ORIGIN}/${plan.restaurantSlug}`
+  const q = `?tenant=${plan.restaurantSlug}`
+  const lift = opens && opens.without > 0 ? opens.with3d / opens.without : null
+
+  return (
+    <div className="page-content">
+      <h1 className="page-title mb-6">{plan.restaurantName}</h1>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="card p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="w-2 h-2 rounded-full" style={{ background: 'var(--success)' }} />
+            <span className="eyebrow">Live</span>
+          </div>
+          <a href={url} target="_blank" rel="noreferrer" className="font-semibold break-all"
+             style={{ color: 'var(--gold)' }}>{url.replace(/^https?:\/\//, '')}</a>
+          <p className="text-xs mt-2" style={{ color: 'var(--dim)' }}>
+            {dishes} dish{dishes === 1 ? '' : 'es'} on the menu · {with3d} in 3D
+          </p>
+          <Link href={`/share${q}`} className="btn btn-sm mt-4">QR code</Link>
+        </div>
+
+        <div className="card p-5">
+          <div className="eyebrow mb-2">Building</div>
+          {requests.length === 0 && waiting.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--dim)' }}>Nothing in progress.</p>
+          ) : (
+            <div className="grid gap-1 text-sm">
+              {requests.map(r => (
+                <div key={r.id} className="flex gap-2">
+                  <span className="flex-1 truncate">{r.title || 'Dish'}</span>
+                  <span className="text-xs" style={{ color: 'var(--dim)' }}>
+                    {r.state === 'running' ? 'building' : r.state === 'pending' ? 'waiting for us' : 'queued'}
+                  </span>
+                </div>
+              ))}
+              {waiting.length > 0 && (
+                <Link href={`/models${q}`} className="text-xs mt-1 underline" style={{ color: 'var(--gold)' }}>
+                  {waiting.length} model{waiting.length === 1 ? '' : 's'} ready for you to approve
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="card p-5 md:col-span-2">
+          <div className="eyebrow mb-2">What 3D is doing for you</div>
+          {lift === null ? (
+            <p className="text-sm" style={{ color: 'var(--dim)' }}>
+              Once diners have opened both kinds of dish, this shows how much more often
+              they open the ones in 3D.
+            </p>
+          ) : (
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="text-3xl font-bold" style={{ color: 'var(--gold)' }}>
+                {lift.toFixed(1)}×
+              </span>
+              <span className="text-sm">
+                Dishes with a 3D model get opened {lift.toFixed(1)} times more often than
+                dishes without one, in the last 30 days.
+              </span>
+            </div>
+          )}
+          <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>
+            Counted per dish, per session, by your own diners. <Link href={`/dashboard${q}`} className="underline">All the numbers</Link>
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3 mt-4">
+        <Link href={`/menu${q}`} className="btn">Edit the menu</Link>
+        <Link href={`/models${q}`} className="btn btn-primary">Make a 3D model</Link>
+        <Link href={`/theme${q}`} className="btn">Change the look</Link>
+      </div>
+    </div>
+  )
+}

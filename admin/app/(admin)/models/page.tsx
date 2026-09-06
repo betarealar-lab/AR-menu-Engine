@@ -20,23 +20,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePlan } from '@/lib/usePlan'
 import { useLang } from '@/lib/useLang'
-import { uploadAsset } from '@/lib/upload'
+import Plate from '@/components/Plate'
 import {
-  loadLibrary, setVerdict, renameModel, setOrbit, attachModel, requestModel,
+  loadLibrary, setVerdict, renameModel, setOrbit, attachModel,
   cancelRequest, type TenantModel, type ModelRequest,
 } from '@/lib/data/models'
-
-// dataset.SLOTS, in the engine's order, with dataset.SLOT_ROLE's reason for each. The
-// order is not cosmetic: the first frame is what the generator reconstructs from, and
-// four photos of the same side make a confident, wrong model.
-const SLOTS = [
-  { key: 'front', label: 'Front',
-    help: 'Straight on, at about the height a diner sees it. The model is built from this one first.' },
-  { key: 'right', label: 'Right', help: 'A quarter turn clockwise. Same distance, same light.' },
-  { key: 'back',  label: 'Back',
-    help: 'The opposite side. Even if it looks the same — it is what stops the far side being invented.' },
-  { key: 'left',  label: 'Left',  help: 'A quarter turn the other way, and you are done.' },
-]
 
 const WAITING: Record<string, string> = {
   pending:  'Waiting for us to approve it',
@@ -56,15 +44,6 @@ export default function ModelsPage() {
   const [used, setUsed] = useState(0)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
-
-  // The plate. Four slots, each either empty or holding an uploaded key.
-  const [frames, setFrames] = useState<(string | null)[]>([null, null, null, null])
-  const [previews, setPreviews] = useState<(string | null)[]>([null, null, null, null])
-  const [busySlot, setBusySlot] = useState<number | null>(null)
-  const [title, setTitle] = useState('')
-  const [forItem, setForItem] = useState('')
-  const [sending, setSending] = useState(false)
-  const fileRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 4000) }
 
@@ -91,65 +70,7 @@ export default function ModelsPage() {
     return () => clearInterval(id)
   }, [requests, load])
 
-  async function shrink(file: File): Promise<Blob> {
-    // 2048px, JPEG, quality high. Bigger than a menu photo on purpose: this is engine
-    // input, and whatever detail is thrown away here is the ceiling on the model forever.
-    // Still resized, because a modern phone hands over 12 MB and none of it past 2048
-    // reaches the generator.
-    const bmp = await createImageBitmap(file)
-    const w = Math.min(2048, bmp.width)
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = Math.round(bmp.height * (w / bmp.width))
-    canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
-    return new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('Could not read that photo'))),
-                    'image/jpeg', 0.92))
-  }
-
-  async function putFrame(slot: number, file: File) {
-    setBusySlot(slot)
-    try {
-      const blob = await shrink(file)
-      // The slot name is in the filename so a frame is identifiable on its own in a bucket
-      // listing - which is what you want when a model came out wrong and the question is
-      // which photo it came from.
-      const url = await uploadAsset(blob, 'photo', plan.restaurantId,
-                                    `${SLOTS[slot].key}.jpg`)
-      const key = url.split('/a/')[1] || url
-      setFrames(f => { const next = [...f]; next[slot] = key; return next })
-      setPreviews(p => { const next = [...p]; next[slot] = url; return next })
-    } catch (e) {
-      flash(e instanceof Error ? e.message : String(e))
-    }
-    setBusySlot(null)
-  }
-
-  function clearFrame(slot: number) {
-    setFrames(f => { const next = [...f]; next[slot] = null; return next })
-    setPreviews(p => { const next = [...p]; next[slot] = null; return next })
-  }
-
-  const filled = frames.filter(Boolean).length
   const left = Math.max(0, quota - used)
-
-  async function send() {
-    if (!filled) return flash('Add at least one photo of the dish')
-    setSending(true)
-    const name = title.trim() || dishes.find(d => d.id === forItem)?.name || ''
-    const { data, error } = await requestModel(
-      plan.restaurantId!, frames.filter(Boolean) as string[], name, forItem || null)
-    setSending(false)
-    if (error) return flash(error.message)
-    setFrames([null, null, null, null])
-    setPreviews([null, null, null, null])
-    setTitle(''); setForItem('')
-    flash(data?.state === 'pending'
-      ? 'Sent. We will approve it shortly.'
-      : 'Sent. It is being built now.')
-    setTab('library')
-    void load()
-  }
 
   if (!plan.loading && !plan.restaurantId) {
     return (
@@ -187,125 +108,21 @@ export default function ModelsPage() {
       )}
 
       {tab === 'new' ? (
-        <NewModel
-          slots={SLOTS} previews={previews} busySlot={busySlot} filled={filled}
-          fileRefs={fileRefs} onPick={putFrame} onClear={clearFrame}
-          title={title} setTitle={setTitle}
-          dishes={dishes} forItem={forItem} setForItem={setForItem}
-          left={left} sending={sending} onSend={send}
-        />
+        <Plate tenantId={plan.restaurantId!} dishes={dishes} left={left} quota={quota}
+               onError={flash}
+               onSent={state => {
+                 flash(state === 'pending'
+                   ? 'Sent. We will approve it shortly.'
+                   : 'Sent. It is being built now.')
+                 setTab('library')
+                 void load()
+               }} />
       ) : (
         <Library
           loading={loading} models={models} requests={requests} dishes={dishes}
           onChanged={load} onFlash={flash} onStart={() => setTab('new')}
         />
       )}
-    </div>
-  )
-}
-
-// ── the plate ────────────────────────────────────────────────────────────────
-
-function NewModel(props: {
-  slots: typeof SLOTS
-  previews: (string | null)[]
-  busySlot: number | null
-  filled: number
-  fileRefs: React.RefObject<(HTMLInputElement | null)[]>
-  onPick: (slot: number, file: File) => void
-  onClear: (slot: number) => void
-  title: string; setTitle: (v: string) => void
-  dishes: { id: string; name: string }[]
-  forItem: string; setForItem: (v: string) => void
-  left: number; sending: boolean; onSend: () => void
-}) {
-  const { slots, previews, busySlot, filled, fileRefs, onPick, onClear } = props
-  const card = { background: 'var(--card)', border: '1px solid var(--border)' }
-
-  return (
-    <div className="grid gap-5 lg:grid-cols-[2fr_1fr]">
-      <div className="rounded-xl p-5" style={card}>
-        <div className="flex items-baseline gap-3 mb-1">
-          <h2 className="font-semibold">The plate</h2>
-          <span className="text-xs ml-auto" style={{ color: 'var(--dim)' }}>
-            {filled === 0 ? 'need at least one'
-              : filled < 4 ? `${filled} of 4 — more frames, better model`
-              : 'ready'}
-          </span>
-        </div>
-        <p className="text-xs mb-4" style={{ color: 'var(--dim)' }}>
-          Even light, no hands in shot, the plate filling most of the frame.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3">
-          {slots.map((slot, i) => (
-            <div key={slot.key} className="rounded-lg overflow-hidden relative"
-                 style={{ border: i === 0 ? '1px solid var(--gold)' : '1px solid var(--border)',
-                          background: 'var(--bg)' }}>
-              <div className="flex items-center gap-2 px-3 pt-2 text-[11px]"
-                   style={{ color: i === 0 ? 'var(--gold)' : 'var(--dim)' }}>
-                <span className="font-mono">0{i + 1}</span>
-                <span className="uppercase tracking-wide">
-                  {slot.label}{i === 0 ? ' · primary' : ''}
-                </span>
-              </div>
-
-              <button type="button"
-                      onClick={() => fileRefs.current?.[i]?.click()}
-                      className="w-full aspect-[4/3] flex items-center justify-center text-xs"
-                      style={{ color: 'var(--dim)' }}>
-                {busySlot === i ? 'Uploading…'
-                  : previews[i]
-                    ? <img src={previews[i]!} alt="" className="w-full h-full object-cover" />
-                    : 'add photo'}
-              </button>
-
-              <input ref={el => { if (fileRefs.current) fileRefs.current[i] = el }}
-                     type="file" accept="image/*" capture="environment" className="hidden"
-                     onChange={e => { const f = e.target.files?.[0]; if (f) onPick(i, f) }} />
-
-              {previews[i] && (
-                <button type="button" onClick={() => onClear(i)}
-                        className="absolute top-8 right-2 text-[11px] px-2 py-1 rounded"
-                        style={{ background: 'rgba(0,0,0,.6)', color: '#fff' }}>Clear</button>
-              )}
-              <p className="px-3 pb-3 text-[11px] leading-4" style={{ color: 'var(--dim)' }}>
-                {slot.help}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-xl p-5 h-fit" style={card}>
-        <h2 className="font-semibold mb-4">This model</h2>
-
-        <label className="block text-xs mb-1" style={{ color: 'var(--dim)' }}>For which dish</label>
-        <select value={props.forItem} onChange={e => props.setForItem(e.target.value)}
-                className="w-full mb-4 rounded-lg px-3 py-2 text-sm"
-                style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-          <option value="">Not on the menu yet</option>
-          {props.dishes.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-
-        <label className="block text-xs mb-1" style={{ color: 'var(--dim)' }}>Name</label>
-        <input value={props.title} onChange={e => props.setTitle(e.target.value)}
-               placeholder="Khachapuri"
-               className="w-full mb-4 rounded-lg px-3 py-2 text-sm"
-               style={{ background: 'var(--bg)', border: '1px solid var(--border)' }} />
-
-        <button type="button" onClick={props.onSend} disabled={props.sending || !filled}
-                className="w-full rounded-lg py-3 text-sm font-semibold disabled:opacity-40"
-                style={{ background: 'var(--gold)', color: '#000' }}>
-          {props.sending ? 'Sending…' : 'Build it'}
-        </button>
-
-        <p className="text-[11px] mt-3 leading-4" style={{ color: 'var(--dim)' }}>
-          {props.left > 0
-            ? 'A few minutes. It lands in your library for you to approve before any diner sees it.'
-            : 'You have used all your models. Send it and we will look at it — it will not start until we say yes.'}
-        </p>
-      </div>
     </div>
   )
 }

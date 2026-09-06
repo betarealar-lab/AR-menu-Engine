@@ -151,6 +151,9 @@ export default function TenantsPage() {
           ))}
         </div>
 
+        <div className="grid gap-5">
+        {plan.canManageTenants && <Invites onSay={say} />}
+
         <div className="card p-5">
           <h2 className="font-semibold mb-1">New restaurant</h2>
           <p className="text-xs mb-4" style={{ color: 'var(--dim)' }}>
@@ -190,7 +193,72 @@ export default function TenantsPage() {
             {creating ? 'Creating…' : 'Create'}
           </button>
         </div>
+        </div>
       </div>
+    </div>
+  )
+}
+
+// ── invite codes ─────────────────────────────────────────────────────────────
+// The door. You hand a restaurant a code; without one, signup does not exist.
+
+type Invite = { code: string; note: string; uses_left: number; used_utc: string | null }
+
+function Invites({ onSay }: { onSay: (m: string, bad?: boolean) => void }) {
+  const [list, setList] = useState<Invite[]>([])
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    const { data } = await createClient().from('invites')
+      .select('code, note, uses_left, used_utc').order('created_utc', { ascending: false }).limit(30)
+    setList((data || []) as Invite[])
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  async function make() {
+    setBusy(true)
+    // Unambiguous alphabet: no 0/O, no 1/I/L. A code gets read out over the phone and
+    // typed from a napkin, and "is that a zero or an O" is a support call.
+    const A = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+    const part = () => Array.from({ length: 4 }, () => A[Math.floor(Math.random() * A.length)]).join('')
+    const code = `${part()}-${part()}`
+    const { error } = await createClient().from('invites').insert({ code, note: note.trim() })
+    setBusy(false)
+    if (error) return onSay(error.message, true)
+    setNote('')
+    onSay(`Invite ${code} ready`)
+    void load()
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="font-semibold mb-1">Invite codes</h2>
+      <p className="text-xs mb-4" style={{ color: 'var(--dim)' }}>
+        Give one to a restaurant and they can sign themselves up at <code>/start</code>.
+        Nobody gets in without one.
+      </p>
+      <div className="flex gap-2 mb-4">
+        <input value={note} onChange={e => setNote(e.target.value)}
+               placeholder="Who this is for" className="flex-1" />
+        <button className="btn btn-primary" onClick={make} disabled={busy}>New code</button>
+      </div>
+      {list.length > 0 && (
+        <div className="grid gap-1 text-xs">
+          {list.map(i => (
+            <div key={i.code} className="flex items-center gap-2">
+              <code className="font-mono tracking-wider font-semibold"
+                    style={{ color: i.uses_left > 0 ? 'var(--gold)' : 'var(--dim)' }}>
+                {i.code}
+              </code>
+              <span className="flex-1 truncate" style={{ color: 'var(--dim)' }}>{i.note}</span>
+              <span className={`pill ${i.uses_left > 0 ? 'pill-on' : 'pill-mute'}`}>
+                {i.uses_left > 0 ? 'unused' : 'used'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

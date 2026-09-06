@@ -445,6 +445,7 @@ def main() -> int:
         except requests.RequestException:
             print("  --   Next admin not running; skipped "
                   f"({next_base}; cd admin && npm run dev)")
+            next_base = None
         else:
             for path in ("/", "/menu", "/theme", "/models", "/tenants", "/dashboard",
                          "/history", "/dev-analytics"):
@@ -454,6 +455,83 @@ def main() -> int:
             r = requests.get(f"{next_base}/login", timeout=20, allow_redirects=False)
             check("admin /login is still reachable", r.status_code == 200,
                   f"got {r.status_code}")
+
+        # ── the front door: a stranger with a code becomes an owner ──────────
+        # The whole self-serve promise in one flow, through the real routes. Also the
+        # negative: without a code the door does not exist, and a used code is a used code.
+        if 'next_base' in dir() and next_base:
+            with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+                code = "CHEK-" + uuid.uuid4().hex[:4].upper().replace("0", "Z").replace("1", "Y")
+                cur.execute("insert into invites (code, note) values (%s, 'check_admin')", (code,))
+                conn.commit()
+
+            new_mail = f"check-door-{uuid.uuid4().hex[:8]}@betareal.test"
+            new_pw = secrets.token_urlsafe(18)
+            new_slug = None
+            new_uid = None
+            try:
+                bad_code = requests.post(f"{next_base}/api/signup", timeout=45, json={
+                    "code": "ZZZZ-ZZZZ", "email": new_mail, "password": new_pw,
+                    "name": "Door Test", "country": "GE"})
+                check("signup without a valid code is refused", bad_code.status_code == 400,
+                      f"HTTP {bad_code.status_code}")
+
+                door = requests.Session()
+                r = door.post(f"{next_base}/api/signup", timeout=60, json={
+                    "code": code, "email": new_mail, "password": new_pw,
+                    "name": "Door Test Cafe", "country": "DE"})
+                body = r.json() if r.ok else {}
+                new_slug, new_uid = body.get("slug"), body.get("userId")
+                check("a stranger with a code gets a restaurant", r.ok and new_slug,
+                      r.text[:160])
+                check("and is signed in when it finishes",
+                      any(c.startswith("sb-") for c in door.cookies.keys()),
+                      "no Supabase session cookie was set")
+
+                with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+                    cur.execute("select id, country, currency, setup_done from tenants "
+                                "where slug = %s", (new_slug,))
+                    row = cur.fetchone()
+                    check("the restaurant carries its country and currency from day one",
+                          row and row[1] == "DE" and row[2] == "EUR", str(row))
+                    check("and starts with setup not done", row and row[3] is False)
+                    cur.execute("select count(*) from tenant_members where tenant_id = %s "
+                                "and user_id = %s", (row[0], new_uid))
+                    check("the person who signed up owns it", cur.fetchone()[0] == 1)
+                    cur.execute("select uses_left, used_tenant from invites where code = %s",
+                                (code,))
+                    inv = cur.fetchone()
+                    check("the code is burned and points at what it made",
+                          inv and inv[0] == 0 and str(inv[1]) == str(row[0]), str(inv))
+
+                again = requests.post(f"{next_base}/api/signup", timeout=45, json={
+                    "code": code, "email": f"x{new_mail}", "password": new_pw,
+                    "name": "Second", "country": "GE"})
+                check("a used code cannot be used twice", again.status_code == 400,
+                      f"HTTP {again.status_code}")
+
+                r = door.get(f"{next_base}/setup?tenant={new_slug}", timeout=30,
+                             allow_redirects=False)
+                check("the new owner can open setup", r.status_code == 200, f"HTTP {r.status_code}")
+                r = door.get(f"{next_base}/share?tenant={new_slug}", timeout=30,
+                             allow_redirects=False)
+                check("and the QR screen", r.status_code == 200, f"HTTP {r.status_code}")
+
+                # The menu app renders it, which is what the setup preview and the QR code
+                # both point at. A restaurant that exists but does not render is a signup
+                # that lied.
+                r = requests.get(f"{BASE}/{new_slug}", timeout=60)
+                check("the new restaurant's menu page renders",
+                      r.status_code == 200 and "Door Test Cafe" in r.text,
+                      f"HTTP {r.status_code}")
+            finally:
+                with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+                    if new_slug:
+                        cur.execute("delete from tenants where slug = %s", (new_slug,))
+                    cur.execute("delete from invites where code = %s", (code,))
+                    conn.commit()
+                if new_uid:
+                    admin_api("DELETE", f"/users/{new_uid}", url, secret)
 
         # ── letting somebody else in ─────────────────────────────────────────
         # The rule that matters: being an owner of one restaurant must not be a way to

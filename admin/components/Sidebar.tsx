@@ -65,6 +65,7 @@ export default function Sidebar({ open, onClose }: Props) {
   const NAV = [
     plan.canManageTenants ? { href: '/tenants', label: T.navTenants, icon: '▦' } : null,
     !plan.canManageTenants && plan.canManageBranches ? { href: '/tenants', label: T.navBranches, icon: '▦' } : null,
+    { href: tenantHref('/home'), match: '/home', label: 'Home', icon: 'Home' },
     plan.canUseMenu ? { href: tenantHref('/menu'), match: '/menu', label: T.navMenu, icon: 'Menu' } : null,
     plan.canUseAnalytics ? { href: tenantHref('/dashboard'), match: '/dashboard', label: T.navAnalytics, icon: 'Data' } : null,
     plan.canUseDeveloperAnalytics ? { href: '/dev-analytics', match: '/dev-analytics', label: T.navDeveloperAnalytics, icon: 'Dev' } : null,
@@ -73,6 +74,7 @@ export default function Sidebar({ open, onClose }: Props) {
     // ask for one and then approve it, and the screen is where they see what they have.
     { href: tenantHref('/models'), match: '/models', label: '3D models', icon: '3D' },
     // History covers both theme and menu edits, so show it to anyone who can edit either.
+    { href: tenantHref('/share'), match: '/share', label: 'QR & share', icon: 'QR' },
     plan.canUseMenu || plan.canUseTheme ? { href: tenantHref('/history'), match: '/history', label: T.navHistory, icon: 'Undo' } : null,
   ].filter((item): item is { href: string; match?: string; label: string; icon: string } => Boolean(item))
 
