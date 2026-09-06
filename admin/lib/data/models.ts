@@ -27,6 +27,8 @@ export type TenantModel = {
   view_orbit: string | null
   scale_cm: number | null
   state: 'draft' | 'approved' | 'rejected'
+  archived: boolean
+  scale_axis: string | null
   created_utc: string
   /** Which dish is using it, if any. The pointer lives on the item (MENU-PLATFORM §3), so
    *  this is the only place the relationship can be read from. */
@@ -36,6 +38,9 @@ export type TenantModel = {
 export type ModelRequest = {
   id: string
   title: string
+  kind: 'generate' | 'rescale'
+  dish: string
+  variant: string
   state: 'pending' | 'approved' | 'running' | 'done' | 'failed' | 'cancelled'
   note: string
   item_id: string | null
@@ -50,8 +55,8 @@ const assetUrl = (key: string | null | undefined) =>
 type ModelRow = {
   id: string; title: string | null; dish: string; variant: string
   poster_key: string | null; draco_key: string | null; usdz_key: string | null
-  view_orbit: string | null; scale_cm: number | null
-  tenant_state: 'draft' | 'approved' | 'rejected'; created_utc: string
+  view_orbit: string | null; scale_cm: number | null; scale_axis: string | null
+  tenant_state: 'draft' | 'approved' | 'rejected'; archived: boolean; created_utc: string
 }
 
 export async function loadLibrary(tenantId: string) {
@@ -61,11 +66,11 @@ export async function loadLibrary(tenantId: string) {
     await Promise.all([
       supabase.from('models')
         .select('id, title, dish, variant, poster_key, draco_key, usdz_key, view_orbit, ' +
-                'scale_cm, tenant_state, created_utc')
+                'scale_cm, scale_axis, tenant_state, archived, created_utc')
         .eq('tenant_id', tenantId).order('created_utc', { ascending: false }),
       supabase.from('items').select('id, name, model_id').eq('tenant_id', tenantId),
       supabase.from('model_requests')
-        .select('id, title, state, note, item_id, photo_keys, requested_utc')
+        .select('id, title, kind, dish, variant, state, note, item_id, photo_keys, requested_utc')
         .eq('tenant_id', tenantId)
         .in('state', ['pending', 'approved', 'running', 'failed'])
         .order('requested_utc', { ascending: false }),
@@ -87,7 +92,9 @@ export async function loadLibrary(tenantId: string) {
     usdz: assetUrl(r.usdz_key),
     view_orbit: r.view_orbit,
     scale_cm: r.scale_cm,
+    scale_axis: r.scale_axis,
     state: r.tenant_state,
+    archived: !!r.archived,
     created_utc: r.created_utc,
     usedBy: usedBy.get(r.id) ?? null,
   }))

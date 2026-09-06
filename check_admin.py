@@ -356,6 +356,75 @@ def main() -> int:
         r = sb.rpc(tok, "model_requests_used", {"t": str(tenant_id)})
         check("an owner can read their own usage", r.ok and isinstance(r.json(), int))
 
+        # ── the studio: photos, multiview, size, resize ──────────────────────
+        print("\n== the studio ==")
+        # The photo library. A frame is a row now, not just a key inside one request, so
+        # an owner can close the tab and come back to it.
+        r = sb.post(tok, "captures", {"tenant_id": str(tenant_id), "dish": item_id,
+                                      "variant": "default", "slot": 0,
+                                      "key": f"t/{tenant_id}/photo/f1-front.jpg"})
+        cap = r.json()[0] if r.ok else {}
+        check("a photo lands in the library", r.ok and cap.get("slot") == 0, r.text[:120])
+        # on_conflict names the unique key, exactly as supabase-js sends it for saveCapture.
+        r = requests.post(f"{url}/rest/v1/captures", timeout=30,
+                          params={"on_conflict": "tenant_id,dish,variant,slot"},
+                          headers=sb._h(tok, Prefer="return=representation,resolution=merge-duplicates"),
+                          json={"tenant_id": str(tenant_id), "dish": item_id,
+                                "variant": "default", "slot": 0,
+                                "key": f"t/{tenant_id}/photo/f2-front.jpg"})
+        check("replacing the front photo is an upsert, not a second row",
+              r.ok and r.json()[0]["key"].endswith("f2-front.jpg"), r.text[:120])
+        r = sb.get(tok, "captures", tenant_id=f"eq.{tenant_id}", select="slot,key")
+        check("and the library holds exactly one frame for that slot",
+              r.ok and len(r.json()) == 1, r.text[:120])
+        r = sb.get(otok, "captures", tenant_id=f"eq.{tenant_id}", select="id")
+        check("a stranger sees none of it", r.ok and r.json() == [])
+
+        # Multiview: once per dish, and once means once - a failed one still counts.
+        r = sb.post(tok, "capture_tasks", {"tenant_id": str(tenant_id), "dish": item_id,
+                                           "variant": "default", "source_slot": 0,
+                                           "state": "done", "credits": 99})
+        task = r.json()[0] if r.ok else {}
+        check("the other angles can be asked for", r.ok, r.text[:120])
+        check("and the client did not get to pick the state or the cost",
+              task.get("state") == "queued" and task.get("credits") == 0, str(task))
+        r = sb.post(tok, "capture_tasks", {"tenant_id": str(tenant_id), "dish": item_id,
+                                           "variant": "default", "source_slot": 0})
+        check("a second multiview for the same dish is refused", r.status_code == 409,
+              f"HTTP {r.status_code}")
+        r = sb.patch(tok, "capture_tasks", {"state": "done"}, id=f"eq.{task.get('id')}")
+        check("an owner cannot mark their own multiview done", (not r.ok) or r.json() == [])
+
+        # The size travels with the request, and a resize is free.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("update tenants set model_quota = 3 where id = %s", (tenant_id,))
+            cur.execute("delete from model_requests where tenant_id = %s", (tenant_id,))
+            conn.commit()
+        r = sb.post(tok, "model_requests", {
+            "tenant_id": str(tenant_id), "item_id": item_id, "dish": item_id,
+            "title": "Khachapuri", "photo_keys": [f"t/{tenant_id}/photo/f2-front.jpg"],
+            "scale_cm": 28, "scale_axis": "width"})
+        gen = r.json()[0] if r.ok else {}
+        check("a build carries its size", r.ok and float(gen.get("scale_cm") or 0) == 28.0,
+              r.text[:120])
+        r = sb.post(tok, "model_requests", {
+            "tenant_id": str(tenant_id), "item_id": item_id, "dish": item_id,
+            "title": "Khachapuri", "photo_keys": [], "kind": "rescale",
+            "scale_cm": 32, "scale_axis": "width"})
+        resc = r.json()[0] if r.ok else {}
+        check("a resize can be asked for while a build is open - different work",
+              r.ok and resc.get("kind") == "rescale", r.text[:120])
+        check("and it is approved outright, quota or not", resc.get("state") == "approved")
+        r = sb.rpc(tok, "model_requests_used", {"t": str(tenant_id)})
+        check("a resize does not count against the free models",
+              r.ok and r.json() == 1, r.text[:60])
+
+        # Hiding, not deleting.
+        r = sb.patch(tok, "models", {"archived": True}, id=f"eq.{model_id}")
+        check("a model can be hidden", r.ok and r.json()[0]["archived"] is True)
+        r = sb.get(tok, "models", id=f"eq.{model_id}", select="id")
+        check("and it still exists", r.ok and len(r.json()) == 1)
+
         # ── the team ─────────────────────────────────────────────────────────
         print("\n== the team ==")
         with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:

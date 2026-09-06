@@ -27,10 +27,16 @@ to nothing in `app/`.
 **It never approves anything.** A request reaches `approved` through the quota trigger in
 0007 and no other way, so a bug here can waste a pass, not 30 credits.
 
-Two passes, on purpose:
+Four passes, on purpose:
 
+    multiview() queued capture task -> three predicted frames -> captures rows -> done
     pull()      approved -> frames in the dataset -> a generate job -> running
+                approved rescale -> size on the record -> an optimise job -> running
     collect()   running  -> reads what the engine produced -> a models row -> done
+
+Multiview and rescale are here and not in the admin because the image-model key and the
+optimiser live on this side. The admin asks by writing a row, the same way it asks for a
+model, and never learns what either costs.
 
 Split because they fail differently. `pull` failing means we have not started; `collect`
 failing means we have already paid and must not lose the result. Neither can leave a
@@ -91,7 +97,8 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
     started = 0
     with _conn() as conn, conn.cursor() as cur:
         cur.execute("""
-            select id, tenant_id, dish, variant, title, photo_keys
+            select id, tenant_id, dish, variant, title, photo_keys,
+                   kind, scale_cm, scale_axis
               from model_requests
              where state = 'approved'
              order by requested_utc
@@ -99,9 +106,43 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
         """, (limit,))
         rows = cur.fetchall()
 
-        for req_id, tenant_id, dish, variant, title, photo_keys in rows:
+        for (req_id, tenant_id, dish, variant, title, photo_keys,
+             kind, scale_cm, scale_axis) in rows:
             if verbose:
-                print(f"  {title or dish}")
+                print(f"  {title or dish} ({kind})")
+
+            # The size, onto the engine's record before anything runs. The optimiser bakes
+            # it into the shipped file (optimize.py), so it has to be there first - and it
+            # is the single most common reason a model has to be remade.
+            if scale_cm:
+                rec = dataset.record(dish, variant)
+                rec["scale"] = {"axis": scale_axis or "width", "cm": float(scale_cm),
+                                "shape": "", "set_by": WHO, "set_utc": dataset._now()}
+                dataset.write(rec)
+
+            if kind == "rescale":
+                # Wrong size is an optimise problem, not a generation problem. No photos to
+                # pull, no credits to spend: the master exists, and it is re-optimised at
+                # the new size. Five seconds, free.
+                rec = dataset.record(dish, variant)
+                if not rec.get("model_key"):
+                    cur.execute("""update model_requests
+                                      set state = 'failed', finished_utc = now(),
+                                          note = 'There is no model to resize yet.'
+                                    where id = %s""", (req_id,))
+                    conn.commit()
+                    continue
+                if not jobs.exists("optimise", dish, variant):
+                    rec.update(status="optimising", stage="queued",
+                               optimising_since=dataset._now())
+                    dataset.write(rec)
+                    jobs.enqueue("optimise", dish, variant, who=WHO,
+                                 triangles=int(rec.get("master_triangles") or 0))
+                cur.execute("update model_requests set state = 'running' where id = %s",
+                            (req_id,))
+                conn.commit()
+                started += 1
+                continue
 
             # Idempotent by construction. A crash after enqueue and before the update
             # leaves the request `approved`, and this is what stops the next pass paying
@@ -114,6 +155,15 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
                 conn.commit()
                 started += 1
                 continue
+
+            # The admin's studio keeps frames in `captures` and sends the request with the
+            # keys copied in; older requests carried keys only. Either is fine, and the
+            # library is consulted when the request itself is empty.
+            if not photo_keys:
+                cur.execute("""select key from captures
+                                where tenant_id = %s and dish = %s and variant = %s
+                                order by slot""", (tenant_id, dish, variant))
+                photo_keys = [r[0] for r in cur.fetchall()]
 
             b = storage.backend()
             saved = 0
@@ -161,13 +211,18 @@ def collect(verbose: bool = True) -> int:
     done = 0
     with _conn() as conn, conn.cursor() as cur:
         cur.execute("""
-            select id, tenant_id, item_id, dish, variant, title
+            select id, tenant_id, item_id, dish, variant, title, kind
               from model_requests where state = 'running'
         """)
-        for req_id, tenant_id, item_id, dish, variant, title in cur.fetchall():
+        for req_id, tenant_id, item_id, dish, variant, title, kind in cur.fetchall():
             rec = dataset.record(dish, variant)
             catalog = rec.get("catalog_keys") or {}
             status = rec.get("status") or ""
+
+            # A rescale is still optimising until its status says otherwise; a fresh
+            # catalogue from BEFORE it ran would otherwise be mistaken for the result.
+            if kind == "rescale" and status == "optimising":
+                continue
 
             if status in ("failed", "cancelled"):
                 if verbose:
@@ -220,6 +275,91 @@ def collect(verbose: bool = True) -> int:
     return done
 
 
+def multiview(verbose: bool = True) -> int:
+    """Queued capture tasks -> three predicted frames -> captures rows the owner can see.
+
+    Free for the owner and once per dish (0012: the unique index has no state filter).
+    The image model's own cost - three to twelve credits - is ours, and it is recorded on
+    the task so we know what "free" is costing.
+    """
+    from engines import images
+
+    done = 0
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            select t.id, t.tenant_id, t.dish, t.variant, t.source_slot
+              from capture_tasks t where t.state = 'queued'
+             order by t.requested_utc
+             limit 5
+        """)
+        for task_id, tenant_id, dish, variant, source in cur.fetchall():
+            cur.execute("update capture_tasks set state = 'running' where id = %s",
+                        (task_id,))
+            conn.commit()
+
+            cur.execute("""select slot, key from captures
+                            where tenant_id = %s and dish = %s and variant = %s""",
+                        (tenant_id, dish, variant))
+            frames = dict(cur.fetchall())
+            if source not in frames:
+                cur.execute("""update capture_tasks set state = 'failed', finished_utc = now(),
+                                  note = 'The photo it was meant to work from is gone.'
+                                where id = %s""", (task_id,))
+                conn.commit()
+                continue
+            # A real photograph beats a predicted one every time, and this must never
+            # quietly overwrite one. Only EMPTY slots are filled.
+            empty = [i for i in range(4) if i not in frames]
+            if not empty:
+                cur.execute("""update capture_tasks set state = 'failed', finished_utc = now(),
+                                  note = 'All four angles already have photos.'
+                                where id = %s""", (task_id,))
+                conn.commit()
+                continue
+
+            b = storage.backend()
+            blob = b.get(dataset.PHOTOS, frames[source])
+            if not blob:
+                cur.execute("""update capture_tasks set state = 'failed', finished_utc = now(),
+                                  note = 'The photo could not be read.' where id = %s""",
+                            (task_id,))
+                conn.commit()
+                continue
+
+            views, err = images.multiview(blob)
+            if err or not views:
+                if verbose:
+                    print(f"  multiview {dish}: {err}")
+                cur.execute("""update capture_tasks set state = 'failed', finished_utc = now(),
+                                  note = %s where id = %s""",
+                            ("We could not predict the other angles from that photo. "
+                             "Try a clearer one, or add the photos yourself.", task_id))
+                conn.commit()
+                continue
+
+            # Into the tenant's own capture prefix, keyed like the admin keys its uploads,
+            # so a predicted frame and a photographed one live side by side and the
+            # library can show both - with `generated` telling them apart.
+            import hashlib
+            for slot, view in zip(empty, views):
+                digest = hashlib.sha256(view).hexdigest()[:16]
+                key = f"t/{tenant_id}/photo/{digest}-{dataset.SLOTS[slot]}.jpg"
+                b.put(dataset.PHOTOS, key, view, "image/jpeg")
+                cur.execute("""
+                    insert into captures (tenant_id, dish, variant, slot, key, generated)
+                    values (%s, %s, %s, %s, %s, true)
+                    on conflict (tenant_id, dish, variant, slot) do nothing
+                """, (tenant_id, dish, variant, slot, key))
+
+            cur.execute("""update capture_tasks set state = 'done', finished_utc = now()
+                            where id = %s""", (task_id,))
+            conn.commit()
+            done += 1
+            if verbose:
+                print(f"  multiview {dish}: {min(len(views), len(empty))} angle(s) predicted")
+    return done
+
+
 def status() -> None:
     with _conn() as conn, conn.cursor() as cur:
         cur.execute("""select state, count(*) from model_requests
@@ -258,11 +398,13 @@ def main() -> int:
         ap.error("pick --once, --watch or --status")
 
     while True:
+        print("multiview")
+        predicted = multiview()
         print("pulling")
         started = pull(limit=a.limit)
         print("collecting")
         finished = collect()
-        print(f"{started} started, {finished} finished")
+        print(f"{predicted} predicted, {started} started, {finished} finished")
         if a.once:
             return 0
         time.sleep(a.every)
