@@ -4,51 +4,31 @@ import { loadThemeConfig, saveThemeConfig, setTemplate, loadTemplates } from '@/
 import ThemePreview, { type PreviewMode } from '@/components/ThemePreview'
 import { PALETTE_GROUPS } from '@/lib/palette'
 import { uploadAsset } from '@/lib/upload'
-import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
-import type { Translations } from '@/lib/i18n'
 import { usePlan } from '@/lib/usePlan'
 import LockedCard from '@/components/LockedCard'
 import { TEMPLATE_PRESETS, type ThemeConfig } from '@/lib/themePresets'
 import { isThemeTemplateActionAllowed, normalizeThemeTabForRole, themeTabsForRole } from '@/lib/adminUx'
 
 // Per-tenant editorial copy rendered by templates that have hero/visit sections.
-// Kept in one list so the editor rows, the preserve-on-template-switch set and the
-// customer app's token names cannot drift apart.
-const CONTENT_FIELDS = [
-  { key: 'hero_kicker',              label: 'contentHeroKicker' },
-  { key: 'hero_kicker_ka',           label: 'contentHeroKickerKa' },
-  { key: 'hero_copy',                label: 'contentHeroCopy' },
-  { key: 'hero_copy_ka',             label: 'contentHeroCopyKa' },
-  { key: 'hero_cta',                 label: 'contentHeroCta' },
-  { key: 'hero_cta_ka',              label: 'contentHeroCtaKa' },
-  { key: 'info_kicker',              label: 'contentInfoKicker' },
-  { key: 'info_kicker_ka',           label: 'contentInfoKickerKa' },
-  { key: 'info_title',               label: 'contentInfoTitle' },
-  { key: 'info_title_ka',            label: 'contentInfoTitleKa' },
-  { key: 'location_address',         label: 'contentLocationAddress' },
-  { key: 'location_address_ka',      label: 'contentLocationAddressKa' },
-  { key: 'info_text',                label: 'contentInfoText' },
-  { key: 'info_text_ka',             label: 'contentInfoTextKa' },
-  { key: 'info_directions_label',    label: 'contentDirectionsLabel' },
-  { key: 'info_directions_label_ka', label: 'contentDirectionsLabelKa' },
-  { key: 'info_directions_url',      label: 'contentDirectionsUrl' },
-  { key: 'info_instagram_label',     label: 'contentInstagramLabel' },
-  { key: 'info_instagram_url',       label: 'contentInstagramUrl' },
-  { key: 'info_map_query',           label: 'contentMapQuery' },
-  { key: 'info_map_link',            label: 'contentMapLink' },
-  { key: 'venue_links',              label: 'contentVenueLinks' },
-] as const
-
-// Templates that render the editorial copy above.
-const CONTENT_TEMPLATES = new Set(['baoma', 'burger_bar', 'mugsy_street_diner', 'pipes_fabrika'])
-
-const MUGSY_CONFIG_FIELDS = [
-  { key: 'mugsy_order_links', label: 'Mugsy order links JSON' },
-  { key: 'mugsy_locations', label: 'Mugsy locations JSON' },
-] as const
-
-const CONTENT_KEYS = [...CONTENT_FIELDS.map(f => f.key), 'info_image_url', ...MUGSY_CONFIG_FIELDS.map(f => f.key)]
+// Editorial copy - hero kicker, info title, venue links - for four templates the
+// platform has and we do not: baoma, burger_bar, mugsy_street_diner, pipes_fabrika. The
+// whole section was gated on `CONTENT_TEMPLATES.has(template_key)`, and since our
+// catalogue holds two stylesheets, none of it could ever render. Twenty-six field
+// definitions and about forty translation keys behind a condition that is always false.
+//
+// The KEYS stay in the preserve-on-switch list below, deliberately. A restaurant imported
+// from the platform may carry these values, nothing here renders them, and quietly
+// deleting somebody's data because our UI cannot show it is not a tidy-up. When one of
+// those templates gets a stylesheet, the editor comes back with it.
+const CONTENT_KEYS = [
+  'hero_kicker', 'hero_kicker_ka', 'hero_copy', 'hero_copy_ka', 'hero_cta', 'hero_cta_ka',
+  'info_kicker', 'info_kicker_ka', 'info_title', 'info_title_ka',
+  'location_address', 'location_address_ka', 'info_text', 'info_text_ka',
+  'info_directions_label', 'info_directions_label_ka', 'info_directions_url',
+  'info_instagram_label', 'info_instagram_url', 'info_map_query', 'info_map_link',
+  'venue_links', 'info_image_url', 'mugsy_order_links', 'mugsy_locations',
+]
 
 // The hero clip is footage of this restaurant's food, so it belongs to the tenant
 // the same way the hero photos do and survives a template switch with them.
@@ -84,10 +64,18 @@ function parseHeroImages(raw?: string): string[] {
 // That file also owns which part of the real menu maps to which row, so the preview's
 // click-to-edit and these labels cannot describe different colours.
 
-const GOOGLE_FONTS = [
-  'Nunito', 'Bebas Neue', 'Inter', 'Roboto', 'Lato', 'Poppins',
-  'Playfair Display', 'Montserrat', 'Raleway', 'Open Sans',
-  'Source Sans 3', 'Oswald', 'PT Serif', 'Merriweather',
+// Two lists, because the two jobs are different. A heading font can have character; a
+// body font has to survive a dish description at 14px on a phone in a dim restaurant, and
+// a display face like Bebas Neue is unreadable there - which is what it was defaulted to.
+// Every one of these is on Google Fonts and is loaded by the renderer the same way.
+const HEADING_FONTS = [
+  'Fraunces', 'Playfair Display', 'Bebas Neue', 'Oswald', 'Cormorant Garamond',
+  'Libre Baskerville', 'Marcellus', 'Unbounded', 'Space Grotesk',
+  'Montserrat', 'Poppins', 'Inter',
+]
+const BODY_FONTS = [
+  'Nunito', 'Inter', 'Lato', 'Open Sans', 'Source Sans 3', 'Roboto',
+  'Work Sans', 'Karla', 'Manrope', 'PT Serif', 'Merriweather', 'Montserrat',
 ]
 
 type ThemeTabId = 'templates' | 'night' | 'day' | 'background' | 'fonts' | 'branding'
@@ -200,7 +188,6 @@ function rowWarnRatio(fieldKey: string, config: ThemeConfig): number | null {
 }
 
 export default function ThemePage() {
-  const supabase = createClient()
   const [T] = useLang()
   const plan = usePlan()
   const [config, setConfig]   = useState<ThemeConfig>({})
@@ -245,7 +232,7 @@ export default function ThemePage() {
     setConfig(map)
     setSavedConfig(map)
     setLoading(false)
-  }, [plan.canUseTheme, plan.loading, plan.restaurantId, supabase])
+  }, [plan.canUseTheme, plan.loading, plan.restaurantId])
 
   useEffect(() => { void Promise.resolve().then(load) }, [load])
 
@@ -620,7 +607,8 @@ export default function ThemePage() {
                   type="button"
                   onClick={() => {
                     if (!templateActionsAllowed) return
-                    const { template_key: _drop, ...colours } = preset.values
+                    const colours = { ...preset.values }
+                    delete colours.template_key
                     setConfig(current => ({ ...current, ...colours }))
                     setMsg(text(T.templateLoaded, { name: preset.label }))
                   }}
@@ -670,25 +658,27 @@ export default function ThemePage() {
           )}
           {tab === 'background' && (
             <>
-              <div className="p-4 rounded-xl text-sm leading-6"
-                   style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--dim)' }}>
-                {T.bgHint}
-              </div>
-              {(['night', 'day'] as const).map(mode => (
-                <div key={mode} className="p-3 rounded-xl"
-                     style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-                  <div className="text-xs mb-3 uppercase tracking-widest" style={{ color: 'var(--gold)' }}>
-                    {mode === 'night' ? T.tabNight : T.tabDay}
-                  </div>
-                  <ColorRow label={T.bgColor} value={config[`${mode}_bg`] ?? ''}
-                            onChange={v => setColor(`${mode}_bg`, v)} />
+              <p className="text-xs px-1" style={{ color: 'var(--dim)' }}>{T.bgHint}</p>
+              {(['night', 'day'] as const).map(m => (
+                <div key={m} className="card p-4">
+                  <div className="eyebrow mb-0.5">{m === 'night' ? T.tabNight : T.tabDay}</div>
+                  <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
+                    {m === 'night'
+                      ? 'What most diners see: the menu opens dark unless you say otherwise.'
+                      : 'The lighter palette, for daytime or a bright room.'}
+                  </p>
+                  <ColorRow label="Page colour" what="Behind everything on the page."
+                            value={config[`${m}_bg`] ?? ''}
+                            onChange={v => setColor(`${m}_bg`, v)} />
                   <div className="mt-3">
-                    <ImageUploadRow label={T.bgImageLabel} hint="" value={bgImageUrl(config[`${mode}_bg_image`])}
-                                    uploading={uploadingKey === `${mode}_bg_image`}
+                    <ImageUploadRow label={T.bgImageLabel}
+                                    hint="Optional. A texture or photo behind the dishes — keep it quiet, it sits under everything."
+                                    value={bgImageUrl(config[`${m}_bg_image`])}
+                                    uploading={uploadingKey === `${m}_bg_image`}
                                     uploadLabel={T.uploadThumb} clearLabel={T.bgClearImage}
                                     previewAlt={T.imagePreviewAlt}
-                                    onPick={f => uploadBgImage(mode, f)}
-                                    onClear={() => set(`${mode}_bg_image`, 'none')} />
+                                    onPick={f => uploadBgImage(m, f)}
+                                    onClear={() => set(`${m}_bg_image`, 'none')} />
                   </div>
                 </div>
               ))}
@@ -696,50 +686,92 @@ export default function ThemePage() {
           )}
           {tab === 'fonts' && (
             <>
-              <FontRow label={T.fontBody} preview={T.fontPreview} value={config.font_body ?? 'Nunito'}
-                       onChange={v => set('font_body', v)} />
-              <FontRow label={T.fontHeading} preview={T.fontPreview} value={config.font_heading ?? 'Bebas Neue'}
-                       onChange={v => set('font_heading', v)} />
-              <div className="mt-4 p-4 rounded-xl text-sm"
-                   style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--dim)' }}>
+              <div className="card p-4">
+                <div className="eyebrow mb-0.5">Headings</div>
+                <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
+                  The restaurant name and the category names. This one can have character.
+                </p>
+                <FontRow label={T.fontHeading} preview={T.fontPreview} fonts={HEADING_FONTS}
+                         value={config.font_heading ?? 'Fraunces'}
+                         onChange={v => set('font_heading', v)} />
+              </div>
+
+              <div className="card p-4">
+                <div className="eyebrow mb-0.5">Body</div>
+                <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
+                  Dish names, descriptions and prices. It has to stay readable at 14px on a
+                  phone in a dim room, so plainer is better here.
+                </p>
+                <FontRow label={T.fontBody} preview={T.fontPreview} fonts={BODY_FONTS}
+                         value={config.font_body ?? 'Nunito'}
+                         onChange={v => set('font_body', v)} />
+              </div>
+
+              <p className="text-xs px-1" style={{ color: 'var(--dim)' }}>
                 {T.fontNote}
                 <a href="https://fonts.google.com" target="_blank" rel="noreferrer"
                    style={{ color: 'var(--gold)' }}>{T.fontNoteLink}</a>
                 {T.fontNoteEnd}
-              </div>
+              </p>
             </>
           )}
           {tab === 'branding' && (
             <>
-              <BrandRow label={T.brandNameEn} value={config.site_name ?? ''}
-                        onChange={v => set('site_name', v)} />
-              <BrandRow label={T.brandNameKa} value={config.site_name_ka ?? ''}
-                        onChange={v => set('site_name_ka', v)} />
-              <ImageUploadRow label={T.brandLogo} hint={T.brandLogoHint} value={config.logo_url ?? ''}
-                              uploading={uploadingKey === 'logo_url'} uploadLabel={T.uploadThumb} clearLabel={T.clearThumb}
-                              previewAlt={T.imagePreviewAlt}
-                              onPick={f => uploadImage('logo_url', f)} onClear={() => set('logo_url', '')} />
-              {/* The old single "Hero image" row was removed: the gallery replaces it
-                  (one photo = a still hero, two or more crossfade). hero_image_url is
-                  still written automatically from the first gallery photo, so the menu
-                  fallback and older builds keep working. */}
-              <HeroGalleryRow label={T.brandHeroGallery} hint={T.brandHeroGalleryHint}
-                              images={heroImages} uploading={uploadingKey === 'hero_images'}
-                              addLabel={T.heroAddImages} removeLabel={T.heroRemove}
-                              upLabel={T.heroMoveUp} downLabel={T.heroMoveDown}
-                              emptyLabel={T.heroEmpty} previewAlt={T.imagePreviewAlt}
-                              onPick={uploadHeroImages} onRemove={removeHeroImage} onMove={moveHeroImage} />
-              {/* BetaReal-only, matching the 3D model rule and enforced again in
-                  /api/r2-presign. A photo the browser re-encodes to WebP can only
-                  get smaller; a clip straight off a phone is tens of megabytes
-                  sitting on top of the guest's first screen, and nothing in the
-                  browser trims it. We grade and encode these. */}
+              <div className="card p-4">
+                <div className="eyebrow mb-0.5">Name</div>
+                <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
+                  What diners see at the top of the menu.
+                </p>
+                <BrandRow label={T.brandNameEn} value={config.site_name ?? ''}
+                          onChange={v => set('site_name', v)} />
+                <BrandRow label={T.brandNameKa} value={config.site_name_ka ?? ''}
+                          onChange={v => set('site_name_ka', v)} />
+              </div>
+
+              <div className="card p-4">
+                <div className="eyebrow mb-0.5">Logo</div>
+                <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
+                  Sits in the header, above the dishes. A transparent PNG or WebP reads
+                  best on both the day and night palettes.
+                </p>
+                <ImageUploadRow label={T.brandLogo} hint={T.brandLogoHint} value={config.logo_url ?? ''}
+                                uploading={uploadingKey === 'logo_url'} uploadLabel={T.uploadThumb}
+                                clearLabel={T.clearThumb} previewAlt={T.imagePreviewAlt}
+                                onPick={f => uploadImage('logo_url', f)} onClear={() => set('logo_url', '')} />
+              </div>
+
+              <div className="card p-4">
+                <div className="eyebrow mb-0.5">Hero</div>
+                <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
+                  The first thing a diner sees. One photo is a still hero; two or more
+                  crossfade. About three quarters of diners scroll past this - it is the
+                  single most looked-at thing on the menu.
+                </p>
+                {/* The old single "Hero image" row was removed: the gallery replaces it
+                    (one photo = a still hero, two or more crossfade). hero_image_url is
+                    still written from the first gallery photo, so the fallback keeps
+                    working. */}
+                <HeroGalleryRow label={T.brandHeroGallery} hint={T.brandHeroGalleryHint}
+                                images={heroImages} uploading={uploadingKey === 'hero_images'}
+                                addLabel={T.heroAddImages} removeLabel={T.heroRemove}
+                                upLabel={T.heroMoveUp} downLabel={T.heroMoveDown}
+                                emptyLabel={T.heroEmpty} previewAlt={T.imagePreviewAlt}
+                                onPick={uploadHeroImages} onRemove={removeHeroImage} onMove={moveHeroImage} />
+              </div>
+
+              {/* Ours to upload, and the server says so too (api/asset). A photo the
+                  browser re-encodes to WebP can only get smaller; a clip straight off a
+                  phone is tens of megabytes on top of a diner's first screen and nothing
+                  in a browser trims it. We grade and encode these. */}
               {plan.canUploadModels && (
-                <>
-                  <div className="pt-2">
-                    <div className="text-sm font-semibold" style={{ color: 'var(--gold)' }}>{T.heroVideoHeading}</div>
-                    <div className="text-xs mt-1" style={{ color: 'var(--dim)' }}>{T.heroVideoHint}</div>
-                  </div>
+                <div className="card p-4">
+                  <div className="eyebrow mb-0.5">Hero video · BetaReal</div>
+                  <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
+                    Plays behind the hero instead of a photo. Keep it under
+                    {' '}{HERO_VIDEO_MAX_MB} MB — the live ones are about 1.5 MB. The
+                    poster is what shows while it loads, and on any device that will not
+                    autoplay.
+                  </p>
                   <VideoUploadRow label={T.heroVideoWide} hint={T.heroVideoWideHint}
                                   value={config.hero_video_url ?? ''}
                                   uploading={uploadingKey === 'hero_video_url'}
@@ -759,34 +791,7 @@ export default function ThemePage() {
                                   previewAlt={T.imagePreviewAlt}
                                   onPick={f => uploadImage('hero_video_poster_url', f)}
                                   onClear={() => set('hero_video_poster_url', '')} />
-                </>
-              )}
-              {/* Templates that render editorial copy of their own expose it here, so a
-                  tenant's wording, address and links are data the owner controls rather
-                  than strings baked into the customer app. Only shown for templates that
-                  actually have these sections. */}
-              {CONTENT_TEMPLATES.has(config.template_key ?? '') && (
-                <>
-                  <div className="pt-2">
-                    <div className="text-sm font-semibold" style={{ color: 'var(--gold)' }}>{T.contentHeading}</div>
-                    <div className="text-xs mt-1" style={{ color: 'var(--dim)' }}>{T.contentHint}</div>
-                  </div>
-                  {CONTENT_FIELDS.map(f => (
-                    <BrandRow key={f.key} label={T[f.label]} value={config[f.key] ?? ''}
-                              onChange={v => set(f.key, v)} />
-                  ))}
-                  {config.template_key === 'mugsy_street_diner' && MUGSY_CONFIG_FIELDS.map(f => (
-                    <BrandRow key={f.key} label={f.label} value={config[f.key] ?? ''}
-                              onChange={v => set(f.key, v)} />
-                  ))}
-                  <ImageUploadRow label={T.contentInfoImage} hint={T.contentInfoImageHint}
-                                  value={config.info_image_url ?? ''}
-                                  uploading={uploadingKey === 'info_image_url'}
-                                  uploadLabel={T.uploadThumb} clearLabel={T.clearThumb}
-                                  previewAlt={T.imagePreviewAlt}
-                                  onPick={f => uploadImage('info_image_url', f)}
-                                  onClear={() => set('info_image_url', '')} />
-                </>
+                </div>
               )}
             </>
           )}
@@ -887,25 +892,43 @@ function TemplateSwatch({ values }: { values: ThemeConfig }) {
   )
 }
 
-function FontRow({ label, value, preview, onChange }: { label: string; value: string; preview: string; onChange: (v: string) => void }) {
-  const [T] = useLang()
+/** One font. The list is the job's list - headings and body have different needs - and
+ *  the sample is set in the face itself, loaded on demand, because a font name means
+ *  nothing to anybody until they see it. */
+function FontRow({ label, value, preview, fonts, onChange }: {
+  label: string; value: string; preview: string
+  fonts: readonly string[]; onChange: (v: string) => void
+}) {
+  useEffect(() => {
+    const links = fonts.map(fam => {
+      const l = document.createElement('link')
+      l.rel = 'stylesheet'
+      l.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam)}:wght@400;600&display=swap`
+      document.head.appendChild(l)
+      return l
+    })
+    return () => { links.forEach(l => l.remove()) }
+  }, [fonts])
 
   return (
-    <div className="p-3 rounded-xl"
-         style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-      <div className="text-xs mb-2 uppercase tracking-widest" style={{ color: 'var(--dim)' }}>{label}</div>
-      <div className="flex gap-3">
-        <select value={GOOGLE_FONTS.includes(value) ? value : 'custom'}
-                onChange={e => { if (e.target.value !== 'custom') onChange(e.target.value) }}
-                style={{ flex: '0 0 200px' }}>
-          {GOOGLE_FONTS.map(f => <option key={f} value={f}>{f}</option>)}
-          <option value="custom">{T.customFontOption}</option>
-        </select>
-        <input value={value} onChange={e => onChange(e.target.value)}
-               placeholder={T.fontPlaceholder} style={{ flex: 1 }} />
-      </div>
-      <div className="mt-2 text-lg" style={{ fontFamily: `'${value}', sans-serif`, color: 'var(--text)' }}>
-        {preview}{value}
+    <div>
+      <div className="text-sm font-semibold mb-2">{label}</div>
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))' }}>
+        {fonts.map(f => {
+          const on = value === f
+          return (
+            <button key={f} type="button" onClick={() => onChange(f)}
+                    className="text-left px-3 py-2 rounded-lg transition-colors"
+                    style={{ border: `1px solid ${on ? 'var(--gold)' : 'var(--border)'}`,
+                             background: on ? 'var(--gold-dim)' : 'var(--bg)' }}>
+              <div style={{ fontFamily: `'${f}', system-ui, sans-serif`, fontSize: 17,
+                            color: on ? 'var(--gold)' : 'var(--text)', lineHeight: 1.25 }}>
+                {preview}
+              </div>
+              <div className="text-[10px] mt-0.5" style={{ color: 'var(--dim)' }}>{f}</div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
