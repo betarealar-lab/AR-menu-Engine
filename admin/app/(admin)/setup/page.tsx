@@ -130,30 +130,28 @@ function FirstModel({ plan, onSay, onSent, onSkip }: {
     <div>
       <div className="grid gap-6 lg:grid-cols-[1fr_300px] items-start mb-6">
         <div>
-          <h1 className="text-2xl font-bold mb-2">Start with the part that matters.</h1>
+          <h1 className="text-2xl font-bold mb-2">Your first 3D model</h1>
           <p className="text-sm mb-3" style={{ color: 'var(--dim)' }}>
-            Four photos of one dish, from four sides. A phone is fine. It takes a few
-            minutes to build — you will set up the rest of your menu while it does, and it
-            will be waiting on it when you are done.
+            Four photos of one dish, from four sides. A phone is fine. It builds in a few
+            minutes, and you can set up the rest of the menu while it does.
           </p>
           <ul className="text-sm grid gap-1.5" style={{ color: 'var(--dim)' }}>
             <li>· Your first {quota} models are free.</li>
-            <li>· You approve every model before a diner sees it. Nothing goes live without you.</li>
-            <li>· Diners open dishes with 3D two to three times more often than dishes without.</li>
+            <li>· Nothing goes on the menu until you approve it.</li>
           </ul>
         </div>
         <div className="card p-3">
-          <SampleDish height={200} caption="Built from four phone photos" />
+          <SampleDish height={200} />
         </div>
       </div>
 
       <Plate tenantId={plan.restaurantId!} dishes={[]} left={Math.max(0, quota - used)}
              quota={quota} compact
              onError={onSay}
-             onSent={() => { onSay('Building. Let’s set up the menu while it does.'); onSent() }} />
+             onSent={() => { onSay('Building. Set up the menu while it does.'); onSent() }} />
 
       <div className="mt-5">
-        <button className="btn btn-ghost" onClick={onSkip}>I’ll do this later</button>
+        <button className="btn btn-ghost" onClick={onSkip}>Skip for now</button>
       </div>
     </div>
   )
@@ -268,8 +266,7 @@ function Dishes({ tenantId, onNext, onSay }: {
     <div>
       <h1 className="text-xl font-bold mb-1">Your first dishes</h1>
       <p className="text-sm mb-5" style={{ color: 'var(--dim)' }}>
-        Three is enough to start. There is a full editor for the rest, with photos, sizes
-        and translations.
+        Three is enough to start. The full editor has photos, sizes and translations.
       </p>
       <div className="card p-4">
         <div className="hidden sm:grid grid-cols-[1fr_120px_160px] gap-2 mb-2 px-1">
@@ -328,7 +325,7 @@ function Done({ plan, landed, building, onFinish }: {
             <div className="flex-1">
               <div className="font-semibold">Your first 3D model is ready.</div>
               <p className="text-xs" style={{ color: 'var(--dim)' }}>
-                Turn it around, check it on your table, and approve it — then it is on the menu.
+                Turn it around, check the size, approve it.
               </p>
             </div>
             <a href={`/models${q}`} className="btn btn-primary btn-sm">See it</a>
@@ -339,7 +336,7 @@ function Done({ plan, landed, building, onFinish }: {
             <div>
               <div className="font-semibold">Your first model is still building.</div>
               <p className="text-xs" style={{ color: 'var(--dim)' }}>
-                A few more minutes. It lands in your 3D Studio, waiting for you to approve.
+                A few more minutes. It will be in the 3D Studio, waiting for you.
               </p>
             </div>
           </div>
@@ -353,7 +350,7 @@ function Done({ plan, landed, building, onFinish }: {
       </div>
       <div className="card p-4 text-center">
         <QrCode value={url} size={200} label={plan.restaurantSlug} />
-        <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>Put it on the tables tonight. Print sizes are under QR &amp; share.</p>
+        <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>Print sizes are under QR &amp; share.</p>
       </div>
     </div>
   )

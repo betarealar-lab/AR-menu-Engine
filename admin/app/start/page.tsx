@@ -65,22 +65,20 @@ function StartForm() {
     <div className="min-h-screen flex items-center justify-center px-4 py-10"
          style={{ background: 'var(--bg)' }}>
       <div className="w-full max-w-4xl grid gap-10 lg:grid-cols-[1fr_400px] items-center">
-        {/* The ending, at the start. A real dish, built from four phone photos, turning -
-            the thing they are signing up for, visible before a single field is filled. */}
+        {/* The thing they are signing up for, turning, before a single field is filled.
+            No caption: it explains itself. */}
         <div className="order-2 lg:order-1">
           <div className="eyebrow mb-2">BetaReal</div>
           <h1 className="text-3xl font-bold leading-tight mb-3" style={{ color: 'var(--text)' }}>
             Your dishes, in 3D,<br />on the menu diners scan.
           </h1>
           <p className="text-sm mb-6" style={{ color: 'var(--dim)' }}>
-            Four phone photos become a model a diner can turn around and put on their
-            table. A minute to sign up. Ten to have a menu with a QR code on it.
+            Four phone photos become a model a diner can turn around and put on their table.
           </p>
-          <SampleDish height={280} caption="Built from four phone photos — this is what you get" />
+          <SampleDish height={280} />
           <ul className="text-sm grid gap-1.5 mt-6" style={{ color: 'var(--dim)' }}>
             <li>· The first three models are free.</li>
-            <li>· You approve every model before a diner sees it.</li>
-            <li>· Live at Monday Greens and Corner at Tabidze, Tbilisi.</li>
+            <li>· Nothing goes on your menu until you approve it.</li>
           </ul>
         </div>
 

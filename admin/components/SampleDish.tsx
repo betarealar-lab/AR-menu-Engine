@@ -1,19 +1,18 @@
 'use client'
-// A real dish, rotating. The product in the corner of the eye.
+// A real dish, rotating.
 //
-// Replaces the spinner while a model builds, sits on the signup page, and fills every
-// empty state - because a rotating burger says "this is what you get" in a way no
-// sentence about 3D models can. It cycles through SAMPLES when there is more than one.
+// It replaces the spinner while a model builds, sits on the signup page, and fills empty
+// states. Deliberately unlabelled: a turning dish is self-explanatory, and a caption
+// telling somebody what to think about it is worse than silence.
 //
 // Loaded on demand, one viewer at a time. It is 220 KB and one WebGL context, which is
-// fine everywhere; twenty of them would not be.
+// fine anywhere; twenty of them would not be.
 
 import { useEffect, useRef, useState } from 'react'
 import { ensureViewer, SAMPLES, sampleUrl } from '@/lib/viewer'
 
-export default function SampleDish({ height = 220, caption, cycleSeconds = 12, className = '' }: {
+export default function SampleDish({ height = 220, cycleSeconds = 12, className = '' }: {
   height?: number
-  caption?: string
   cycleSeconds?: number
   className?: string
 }) {
@@ -46,6 +45,7 @@ export default function SampleDish({ height = 220, caption, cycleSeconds = 12, c
       el.setAttribute('disable-zoom', '')
       el.setAttribute('shadow-intensity', '0.7')
       el.setAttribute('exposure', '1.05')
+      el.setAttribute('alt', sample.name)
       if (sample.orbit) el.setAttribute('camera-orbit', sample.orbit)
       el.style.cssText = `width:100%;height:${height}px;background:transparent`
       mount.appendChild(el)
@@ -53,12 +53,5 @@ export default function SampleDish({ height = 220, caption, cycleSeconds = 12, c
     return () => { dead = true }
   }, [sample, height])
 
-  return (
-    <div className={className}>
-      <div ref={host} style={{ height }} />
-      {caption && (
-        <p className="text-xs text-center mt-1" style={{ color: 'var(--dim)' }}>{caption}</p>
-      )}
-    </div>
-  )
+  return <div ref={host} className={className} style={{ height }} />
 }
