@@ -535,9 +535,17 @@ export default function ThemePage() {
         </button>
       </div>
 
+      {/* The preview comes FIRST in the document, and stays on the right on a wide screen
+          via `order`. On anything narrower there is no room for two columns, and an editor
+          that puts its controls first makes you scroll past every field to find out what
+          they did - worst of all on the branding tab, which is the longest one. Seeing the
+          menu before you touch it is most of knowing what to touch. */}
       <div className="flex flex-col xl:flex-row gap-6 items-start">
-        {/* ── Left: editor controls (unchanged behaviour) ─────────────── */}
-        <div className="w-full xl:flex-1 xl:min-w-0 xl:max-w-2xl">
+        <ThemePreview slug={plan.restaurantSlug} config={config} mode={mode}
+                      onMode={setMode} template={config.template_key || ''}
+                      onPick={pickField} />
+
+        <div className="w-full xl:flex-1 xl:min-w-0 xl:max-w-2xl xl:order-first">
 
       <div className="flex gap-0.5 mb-5 p-0.5 rounded-lg w-fit flex-wrap"
            style={{ background: 'var(--card2)' }}>
@@ -815,10 +823,6 @@ export default function ThemePage() {
       </div>
         </div>
 
-        {/* ── Right: live preview ─────────────────────────────────────── */}
-        <ThemePreview slug={plan.restaurantSlug} config={config} mode={mode}
-                      onMode={setMode} template={config.template_key || ''}
-                      onPick={pickField} />
       </div>
     </div>
   )

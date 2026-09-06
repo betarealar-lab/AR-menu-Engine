@@ -76,8 +76,12 @@ export default function ThemePreview({ slug, config, mode, onMode, template, onP
   useEffect(() => { if (ready) send() }, [ready, send])
 
   return (
-    <div className="w-full xl:w-[420px] shrink-0 xl:sticky xl:top-4">
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
+    // Sticky on BOTH: pinned to the right of a wide screen, and pinned to the top of a
+    // narrow one so it stays in sight while the controls scroll underneath it. A preview
+    // you have to scroll back to is a preview you stop looking at.
+    <div className="w-full xl:w-[420px] shrink-0 sticky top-0 xl:top-4 z-10 pb-3 xl:pb-0"
+         style={{ background: 'var(--bg)' }}>
+      <div className="flex items-center gap-2 mb-3 flex-wrap pt-3 xl:pt-0">
         <span className="eyebrow mr-auto">Preview</span>
 
         <div className="flex rounded-lg p-0.5" style={{ background: 'var(--card2)' }}>
@@ -110,13 +114,19 @@ export default function ThemePreview({ slug, config, mode, onMode, template, onP
 
       <div className="card overflow-hidden mx-auto transition-all"
            style={{ width: device === 'phone' ? 390 : '100%', maxWidth: '100%' }}>
+        {/* Shorter on a narrow screen. A 680px frame pinned to the top of a laptop
+            window leaves no room for the controls it is meant to help with. */}
+        {/* Shorter on a narrow screen. A 680px frame pinned to the top of a laptop
+            window leaves no room for the controls it is meant to help with. Two classes
+            rather than an inline height, because the breakpoint cannot be expressed
+            inline and a JS width listener would be a resize handler for a constant. */}
         <iframe
           key={nonce}
           ref={frame}
           title="Your menu"
           src={`${MENU_ORIGIN}/${slug}?preview=1`}
-          className="w-full border-0 block"
-          style={{ height: device === 'phone' ? 680 : 620 }}
+          className={`w-full border-0 block h-[340px] ${
+            device === 'phone' ? 'xl:h-[680px]' : 'xl:h-[620px]'}`}
           onLoad={() => send()}
         />
       </div>
