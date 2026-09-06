@@ -38,11 +38,17 @@ export default function DashboardPage() {
   const [items, setItems] = useState<TopItem[]>([])
   const [series, setSeries] = useState<Point[]>([])
   const [tables, setTables] = useState<TableRow[]>([])
-  const [loading, setLoading] = useState(true)
+  // `loading` is DERIVED, not set inside the effect. Every one of these screens used to
+  // open with `setLoading(plan.loading)` in the effect body, which is a synchronous state
+  // write during an effect and so a second render before the first has painted - on every
+  // screen, on every navigation. Tracking which restaurant the data belongs to says the
+  // same thing without the extra render, and correctly shows loading again when somebody
+  // switches restaurant.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const loading = plan.loading || (!!plan.restaurantId && loadedFor !== plan.restaurantId)
 
   const load = useCallback(async () => {
-    if (plan.loading || !plan.restaurantId) { setLoading(plan.loading); return }
-    setLoading(true)
+    if (plan.loading || !plan.restaurantId) return
     const supabase = createClient()
     const args = { p_tenant: plan.restaurantId, p_minutes: minutes }
     const [f, i, s, tb] = await Promise.all([
@@ -55,7 +61,7 @@ export default function DashboardPage() {
     setItems((i.data as TopItem[]) || [])
     setSeries((s.data as Point[]) || [])
     setTables((tb.data as TableRow[]) || [])
-    setLoading(false)
+    setLoadedFor(plan.restaurantId)
   }, [plan.loading, plan.restaurantId, minutes])
 
   useEffect(() => { void load() }, [load])

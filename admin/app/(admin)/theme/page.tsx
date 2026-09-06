@@ -192,7 +192,14 @@ export default function ThemePage() {
   const plan = usePlan()
   const [config, setConfig]   = useState<ThemeConfig>({})
   const [savedConfig, setSavedConfig] = useState<ThemeConfig>({})
-  const [loading, setLoading] = useState(true)
+  // `loading` is DERIVED, not set inside the effect. Every one of these screens used to
+  // open with `setLoading(plan.loading)` in the effect body, which is a synchronous state
+  // write during an effect and so a second render before the first has painted - on every
+  // screen, on every navigation. Tracking which restaurant the data belongs to says the
+  // same thing without the extra render, and correctly shows loading again when somebody
+  // switches restaurant.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const loading = plan.loading || (!!plan.restaurantId && loadedFor !== plan.restaurantId)
   const [saving, setSaving]   = useState(false)
   const [msg, setMsg]         = useState('')
   const [tab, setTab]         = useState<ThemeTabId>('templates')
@@ -222,16 +229,13 @@ export default function ThemePage() {
   )
 
   const load = useCallback(async () => {
-    if (plan.loading || !plan.canUseTheme || !plan.restaurantId) {
-      setLoading(plan.loading)
-      return
-    }
+    if (plan.loading || !plan.canUseTheme || !plan.restaurantId) return
     // 104 key/value rows became one row of two jsonb columns. Which side each key lands
     // on is isPaletteKey - the same rule that split the live restaurants on import.
     const map = await loadThemeConfig(plan.restaurantId)
     setConfig(map)
     setSavedConfig(map)
-    setLoading(false)
+    setLoadedFor(plan.restaurantId)
   }, [plan.canUseTheme, plan.loading, plan.restaurantId])
 
   useEffect(() => { void Promise.resolve().then(load) }, [load])

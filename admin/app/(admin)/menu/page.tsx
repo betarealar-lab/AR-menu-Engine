@@ -91,7 +91,14 @@ export default function MenuPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems]           = useState<MenuItem[]>([])
   const [filters, setFilters]       = useState<MenuFilters>({ ...DEFAULT_MENU_FILTERS } as MenuFilters)
-  const [loading, setLoading]       = useState(true)
+  // `loading` is DERIVED, not set inside the effect. Every one of these screens used to
+  // open with `setLoading(plan.loading)` in the effect body, which is a synchronous state
+  // write during an effect and so a second render before the first has painted - on every
+  // screen, on every navigation. Tracking which restaurant the data belongs to says the
+  // same thing without the extra render, and correctly shows loading again when somebody
+  // switches restaurant.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const loading = plan.loading || (!!plan.restaurantId && loadedFor !== plan.restaurantId)
   const [tab, setTab]               = useState<'items' | 'categories'>('items')
   const [showFilters, setShowFilters] = useState(false)
 
@@ -131,11 +138,7 @@ export default function MenuPage() {
   ), [])
 
   const load = useCallback(async () => {
-    if (plan.loading || !plan.restaurantId) {
-      setLoading(plan.loading)
-      return
-    }
-    setLoading(true)
+    if (plan.loading || !plan.restaurantId) return
     // Six queries became three, and four of those six were theme_config key lookups that
     // are one `tenants` row now. Everything that maps the new schema onto the shape this
     // screen speaks lives in lib/data/menu.ts and nowhere else.
@@ -147,7 +150,7 @@ export default function MenuPage() {
     setSpinEnabled(settings.spinEnabled)
     setDrinkCategoryNames(parseDrinkCategories(settings.drinkCategories))
     setDrinkCategoriesConfigured(settings.drinkCategories != null)
-    setLoading(false)
+    setLoadedFor(plan.restaurantId)
   }, [plan.loading, plan.restaurantId])
 
   useEffect(() => { void Promise.resolve().then(load) }, [load])

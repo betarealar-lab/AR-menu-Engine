@@ -26,10 +26,17 @@ export default function HomePage() {
   const [waiting, setWaiting] = useState<TenantModel[]>([])
   const [opens, setOpens] = useState<{ with3d: number; without: number } | null>(null)
   const [next3d, setNext3d] = useState<{ item_id: string; name: string; opens: number }[]>([])
-  const [loading, setLoading] = useState(true)
+  // `loading` is DERIVED, not set inside the effect. Every one of these screens used to
+  // open with `setLoading(plan.loading)` in the effect body, which is a synchronous state
+  // write during an effect and so a second render before the first has painted - on every
+  // screen, on every navigation. Tracking which restaurant the data belongs to says the
+  // same thing without the extra render, and correctly shows loading again when somebody
+  // switches restaurant.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const loading = plan.loading || (!!plan.restaurantId && loadedFor !== plan.restaurantId)
 
   const load = useCallback(async () => {
-    if (plan.loading || !plan.restaurantId) { setLoading(plan.loading); return }
+    if (plan.loading || !plan.restaurantId) return
     const supabase = createClient()
     const [{ data: t }, lib, { data: items }, { data: cmp }, { data: top }] = await Promise.all([
       supabase.from('tenants').select('setup_done').eq('id', plan.restaurantId).single(),
@@ -56,7 +63,7 @@ export default function HomePage() {
     const has3d = new Set((items || []).filter(i => i.model_id && i.is_3d).map(i => i.id))
     setNext3d(((top || []) as { item_id: string; name: string; opens: number }[])
       .filter(x => x.item_id && !has3d.has(x.item_id) && x.opens > 0).slice(0, 3))
-    setLoading(false)
+    setLoadedFor(plan.restaurantId)
   }, [plan.loading, plan.restaurantId, plan.restaurantSlug, router])
 
   useEffect(() => { void load() }, [load])

@@ -56,13 +56,20 @@ export default function HistoryPage() {
 
   const [rows, setRows]       = useState<Change[]>([])
   const [picked, setPicked]   = useState<Set<number>>(new Set())
-  const [loading, setLoading] = useState(true)
+  // `loading` is DERIVED, not set inside the effect. Every one of these screens used to
+  // open with `setLoading(plan.loading)` in the effect body, which is a synchronous state
+  // write during an effect and so a second render before the first has painted - on every
+  // screen, on every navigation. Tracking which restaurant the data belongs to says the
+  // same thing without the extra render, and correctly shows loading again when somebody
+  // switches restaurant.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const loading = plan.loading || (!!plan.restaurantId && loadedFor !== plan.restaurantId)
   const [busy, setBusy]       = useState(false)
   const [msg, setMsg]         = useState('')
   const [setupErr, setSetupErr] = useState('')
 
   const load = useCallback(async () => {
-    if (plan.loading || !plan.restaurantId) { setLoading(plan.loading); return }
+    if (plan.loading || !plan.restaurantId) return
     const { data, error } = await supabase
       .from('change_history')
       .select('id,source,record_id,label,field,old_value,new_value,changed_at')
@@ -74,7 +81,7 @@ export default function HistoryPage() {
     setSetupErr(error ? error.message : '')
     setRows((data as Change[]) ?? [])
     setPicked(new Set())
-    setLoading(false)
+    setLoadedFor(plan.restaurantId)
   }, [plan.loading, plan.restaurantId, supabase])
 
   // Deferred like the other admin pages, so the first load doesn't setState

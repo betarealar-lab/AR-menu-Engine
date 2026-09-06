@@ -8,9 +8,8 @@
 // with the navigation for attention.
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { translations, type Lang } from '@/lib/i18n'
 import { usePlan } from '@/lib/usePlan'
 import TenantPicker from '@/components/TenantPicker'
@@ -26,6 +25,32 @@ function applyThemeVars(isDark: boolean) {
   document.documentElement.classList.toggle('light', !isDark)
 }
 
+type Row = { href: string; match?: string; label: string; icon: IconName }
+
+/** One row of navigation. Defined at module scope: inside the component it would be a
+ *  new function identity on every render, and React would remount every item. */
+function NavLink({ row, active, onClose }: {
+row: Row; active: boolean; onClose: () => void
+}) {
+  return (
+    <Link href={row.href} onClick={onClose} aria-current={active ? 'page' : undefined}
+          className="relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
+          style={{ background: active ? 'var(--gold-dim)' : 'transparent',
+                   color: active ? 'var(--gold)' : 'var(--dim)',
+                   fontWeight: active ? 600 : 500 }}
+          onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--card2)'; e.currentTarget.style.color = 'var(--text)' } }}
+          onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--dim)' } }}>
+      {active && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-r"
+              style={{ background: 'var(--gold)' }} />
+      )}
+      <Icon name={row.icon} />
+      <span className="truncate">{row.label}</span>
+    </Link>
+  )
+}
+
+
 interface Props {
   open: boolean
   onClose: () => void
@@ -33,7 +58,6 @@ interface Props {
 
 export default function Sidebar({ open, onClose }: Props) {
   const pathname = usePathname()
-  const router = useRouter()
   const plan = usePlan()
 
   const [lang, setLang] = useState<Lang>('en')
@@ -65,8 +89,6 @@ export default function Sidebar({ open, onClose }: Props) {
     : plan.restaurantSlug
       ? (menuOrigin ? `${menuOrigin}/${plan.restaurantSlug}` : `https://${plan.restaurantSlug}.betareal.ge/`)
       : (menuOrigin || 'https://betareal.ge')
-
-  type Row = { href: string; match?: string; label: string; icon: IconName }
 
   const NAV: Row[] = ([
     { href: tenantHref('/home'), match: '/home', label: 'Home', icon: 'home' },
@@ -104,32 +126,6 @@ export default function Sidebar({ open, onClose }: Props) {
     applyThemeVars(next)
     broadcast(lang, next)
   }
-  async function signOut() {
-    await createClient().auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
-
-  function NavLink({ row }: { row: Row }) {
-    const active = pathname.startsWith(row.match ?? row.href.split('?')[0])
-    return (
-      <Link href={row.href} onClick={onClose} aria-current={active ? 'page' : undefined}
-            className="relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
-            style={{ background: active ? 'var(--gold-dim)' : 'transparent',
-                     color: active ? 'var(--gold)' : 'var(--dim)',
-                     fontWeight: active ? 600 : 500 }}
-            onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--card2)'; e.currentTarget.style.color = 'var(--text)' } }}
-            onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--dim)' } }}>
-        {active && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-r"
-                style={{ background: 'var(--gold)' }} />
-        )}
-        <Icon name={row.icon} />
-        <span className="truncate">{row.label}</span>
-      </Link>
-    )
-  }
-
   return (
     <aside
       className={[
@@ -161,14 +157,16 @@ export default function Sidebar({ open, onClose }: Props) {
 
       <nav className="flex-1 min-h-0 px-3 py-3 overflow-y-auto">
         <div className="grid gap-0.5">
-          {NAV.map(row => <NavLink key={row.href} row={row} />)}
+          {NAV.map(row => <NavLink key={row.href} row={row} onClose={onClose}
+                                 active={pathname.startsWith(row.match ?? row.href.split('?')[0])} />)}
         </div>
 
         {STAFF.length > 0 && (
           <>
             <div className="eyebrow px-3 pt-5 pb-2">BetaReal</div>
             <div className="grid gap-0.5">
-              {STAFF.map(row => <NavLink key={row.href} row={row} />)}
+              {STAFF.map(row => <NavLink key={row.href} row={row} onClose={onClose}
+                                 active={pathname.startsWith(row.match ?? row.href.split('?')[0])} />)}
             </div>
           </>
         )}
@@ -184,14 +182,8 @@ export default function Sidebar({ open, onClose }: Props) {
           <span>{T.viewMenu}</span>
         </a>
 
-        <button onClick={signOut}
-                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm w-full text-left transition-colors"
-                style={{ color: 'var(--dim)' }}
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'rgba(240,104,95,.08)' }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'var(--dim)'; e.currentTarget.style.background = 'transparent' }}>
-          <Icon name="signout" />
-          <span>{T.signOut}</span>
-        </button>
+        <NavLink row={{ href: '/account', label: 'Account', icon: 'user' }}
+                 onClose={onClose} active={pathname.startsWith('/account')} />
 
         {/* Preferences, not navigation. Small and quiet, so they stop competing with the
             links above for attention. */}

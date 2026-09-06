@@ -194,14 +194,15 @@ def main() -> int:
         # ── every screen ─────────────────────────────────────────────────────
         print("\n== every screen ==")
         for path in ("/", "/home", "/menu", "/theme", "/models", "/tenants", "/dashboard",
-                     "/history", "/share", "/setup", "/dev-analytics"):
+                     "/history", "/share", "/setup", "/dev-analytics", "/account"):
             r = requests.get(f"{ADMIN}{path}", timeout=20, allow_redirects=False)
             check(f"signed out, {path} redirects to login", r.status_code in (302, 307),
                   f"got {r.status_code}")
         for path in ("/login", "/start", "/set-password"):
             r = requests.get(f"{ADMIN}{path}", timeout=20, allow_redirects=False)
             check(f"{path} is reachable signed out", r.status_code == 200, f"got {r.status_code}")
-        for path in ("/home", "/menu", "/theme", "/models", "/dashboard", "/share", "/setup"):
+        for path in ("/home", "/menu", "/theme", "/models", "/dashboard", "/share",
+                     "/setup", "/account"):
             r = owner.get(f"{ADMIN}{path}?tenant={slug}", timeout=30, allow_redirects=False)
             check(f"the owner can open {path}", r.status_code == 200, f"got {r.status_code}")
 
