@@ -193,7 +193,7 @@ def main() -> int:
         # ── every screen ─────────────────────────────────────────────────────
         print("\n== every screen ==")
         for path in ("/", "/home", "/menu", "/theme", "/models", "/tenants", "/dashboard",
-                     "/history", "/share", "/setup"):
+                     "/history", "/share", "/setup", "/dev-analytics"):
             r = requests.get(f"{ADMIN}{path}", timeout=20, allow_redirects=False)
             check(f"signed out, {path} redirects to login", r.status_code in (302, 307),
                   f"got {r.status_code}")
@@ -515,18 +515,73 @@ def main() -> int:
                   and got.get("ar_open") == 1, str(got))
             check("an event we do not recognise is dropped", "not_a_real_event" not in got)
 
-        r = sb.rpc(tok, "event_funnel", {"p_tenant": str(tenant_id), "p_days": 30})
+        # Time is minutes now, so "the last hour" is expressible - the question you ask on
+        # the evening the QR codes go on the tables.
+        r = sb.rpc(tok, "event_funnel", {"p_tenant": str(tenant_id), "p_minutes": 43200})
         f = {x["name"]: x for x in r.json()} if r.ok else {}
         check("the owner reads their funnel", r.ok, r.text[:120])
         check("and it counts sessions, not taps",
               f.get("item_open", {}).get("sessions") == 2 and f["item_open"]["hits"] == 3)
-        r = sb.rpc(otok, "event_funnel", {"p_tenant": str(tenant_id), "p_days": 30})
+        r = sb.rpc(tok, "event_funnel", {"p_tenant": str(tenant_id), "p_minutes": 60})
+        check("a one-hour window still sees just-now events", r.ok and r.json(), r.text[:120])
+        r = sb.rpc(tok, "event_funnel", {"p_tenant": str(tenant_id), "p_minutes": 1})
+        check("and the range genuinely filters", r.ok, r.text[:120])
+        r = sb.rpc(otok, "event_funnel", {"p_tenant": str(tenant_id), "p_minutes": 43200})
         check("a stranger reading someone else's funnel gets nothing", r.ok and r.json() == [])
-        r = sb.rpc(tok, "event_3d_lift", {"p_tenant": str(tenant_id), "p_days": 30})
+        r = sb.rpc(tok, "event_3d_lift", {"p_tenant": str(tenant_id), "p_minutes": 43200})
         check("the number on the home screen is readable", r.ok and r.json(), r.text[:120])
+        r = sb.rpc(tok, "event_series", {"p_tenant": str(tenant_id), "p_minutes": 1440})
+        check("the chart has points", r.ok and isinstance(r.json(), list), r.text[:120])
+
+        # Per table. The QR codes have carried ?t=<n> since they were first generated, so
+        # this needed no reprinting - only for the page to read it and the events to keep it.
+        r = requests.post(f"{MENU}/e", timeout=30, json={
+            "tenant": str(tenant_id), "session": "checktable000001",
+            "events": [{"name": "view", "meta": {"t": "7"}},
+                       {"name": "item_open", "item": item_id, "meta": {"t": "7"}}]})
+        check("a beacon carrying a table number is accepted", r.status_code == 204)
+        r = sb.rpc(tok, "event_by_table", {"p_tenant": str(tenant_id), "p_minutes": 43200})
+        rows = {x["table_no"]: x for x in r.json()} if r.ok else {}
+        check("the table shows up in its own row", r.ok and rows.get("7", {}).get("sessions") == 1,
+              str(rows)[:180])
+        check("and scans with no table are counted, not dropped",
+              rows.get("\u2014", {}).get("sessions") == 2, str(rows)[:180])
+
+        # The database can store it; this proves the PAGE SENDS it. Fetched from
+        # /viewer.js, not from the page HTML - the diner page inlines its markup and CSS
+        # but loads the interactive half as one cached script, and looking in the wrong
+        # place is how a check passes while the feature does nothing.
+        js = requests.get(f"{MENU}/viewer.js", timeout=60).text
+        check("the diner page reads ?t= off the QR",
+              'get("t")' in js and "meta.t = TABLE" in js,
+              "the table number would never reach the sink")
         r = sb.post(tok, "events", {"tenant_id": str(tenant_id), "session": "x" * 12,
                                     "name": "view"}, prefer="return=minimal")
         check("even a signed-in owner cannot insert events directly", not r.ok)
+
+        # ── ours, and only ours ─────────────────────────────────────────────
+        # The developer view is scoped inside the function, so an owner reaching the URL
+        # gets an empty set rather than an error that would confirm the function exists.
+        r = sb.rpc(tok, "admin_overview", {"p_minutes": 43200})
+        check("an owner calling the developer overview sees nothing",
+              r.ok and r.json() == [], r.text[:140])
+        r = sb.rpc(tok, "admin_queue", {})
+        check("nor the queue", r.ok and r.json() == [], r.text[:140])
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("insert into super_admins (user_id) values (%s) "
+                        "on conflict do nothing", (owner_id,))
+            conn.commit()
+        boss = sb.token(owner_mail, owner_pw)     # a fresh token, same person, now super
+        r = sb.rpc(boss, "admin_overview", {"p_minutes": 43200})
+        seen = r.json() if r.ok else []
+        check("a super admin sees every restaurant", r.ok and len(seen) >= 1, r.text[:140])
+        check("with the numbers the screen draws",
+              bool(seen) and {"slug", "dishes", "models_draft", "sessions", "quota_used"}
+              <= set(seen[0]), str(seen[:1])[:200])
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("delete from super_admins where user_id = %s", (owner_id,))
+            conn.commit()
 
         r = requests.get(f"{url}/rest/v1/tenants", timeout=30,
                          headers={"apikey": service, "Authorization": f"Bearer {service}"},

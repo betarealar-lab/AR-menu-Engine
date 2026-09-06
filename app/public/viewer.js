@@ -871,7 +871,6 @@
                 document.dispatchEvent(new CustomEvent('xr-session-start'));
             }
         };
-;
 /* ---- shim.js ---- */
 // shim.js — everything the ported viewer expects from the app it was lifted out of.
 //
@@ -958,10 +957,109 @@
   // (MENU-PLATFORM §2.5 - events go to an append-only sink, deliberately not built).
   // Queued rather than dropped so that when the sink exists, the calls are already in
   // the right places and nothing has to be re-instrumented.
+  // The sink exists now (0009_events), so these stop being stubs. The viewer's own
+  // `track()` calls are unchanged and stay where the platform put them - the whole reason
+  // they were queued rather than dropped was so that the day a sink existed, nothing had
+  // to be re-instrumented.
+  //
+  // Names are translated to OUR whitelist rather than passed through. The platform's
+  // vocabulary grew over two years and has several spellings of the same idea; an open
+  // name column becomes a junk drawer within a year and then no query can be trusted.
+  // Anything unrecognised is counted locally and never sent.
+  const EVENT_NAME = {
+    view: "view", page_view: "view", menu_view: "view",
+    hero_pass: "hero_pass", scroll_past_hero: "hero_pass",
+    category: "category", category_change: "category",
+    open_modal: "item_open", view_3d: "item_open", item_open: "item_open",
+    ar: "ar_open", ar_open: "ar_open", view_ar: "ar_open",
+    ar_placed: "ar_placed", ar_place: "ar_placed",
+    delivery: "delivery", order: "delivery",
+    lang: "lang", theme: "theme",
+  };
+
+  // Random, per tab, forgotten when it closes. Its only job is to tell one diner opening
+  // four dishes apart from four diners opening one each. Deliberately sessionStorage and
+  // not localStorage: a value that survives the tab is a value that follows somebody.
+  function sessionId() {
+    try {
+      let id = sessionStorage.getItem("br_s");
+      if (!id) {
+        id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()))
+          .replace(/-/g, "").slice(0, 24);
+        sessionStorage.setItem("br_s", id);
+      }
+      return id;
+    } catch (_) {
+      // Private mode, or storage blocked. Still countable as one visit; just not
+      // recognisable as the same one twice.
+      return String(Date.now()) + String(Math.random()).slice(2, 8);
+    }
+  }
+
+  const TENANT = (window.__CFG && window.__CFG.tenant_id) || "";
+
+  // Which table this code was on. The per-table QR codes carry `?t=<n>` (share/page.tsx),
+  // and it is read ONCE here rather than per event: a diner navigating within the menu
+  // keeps the same table, and re-reading the URL would lose it the moment anything
+  // touched the query string.
+  const TABLE = (function () {
+    try {
+      const t = new URLSearchParams(location.search).get("t") || "";
+      // Bounded and digits-only: it is printed on a card, not typed, so anything else is
+      // somebody playing with the URL and does not belong in a restaurant's numbers.
+      return /^\d{1,4}$/.test(t) ? t : "";
+    } catch (_) { return ""; }
+  })();
+  let pending = [];
+  let timer = null;
+
+  function flush() {
+    clearTimeout(timer);
+    timer = null;
+    if (!pending.length || !TENANT) return;
+    const body = JSON.stringify({
+      tenant: TENANT, session: sessionId(), events: pending.splice(0, 50),
+    });
+    try {
+      // sendBeacon survives the page being closed, which is exactly when the last and most
+      // interesting events happen. `fetch` with keepalive is the fallback; a plain fetch
+      // would be cancelled by the navigation that triggered it.
+      if (!(navigator.sendBeacon && navigator.sendBeacon("/e", body))) {
+        fetch("/e", { method: "POST", body, keepalive: true }).catch(function () {});
+      }
+    } catch (_) { /* never let a count break a menu */ }
+  }
+
   window.__events = [];
   window.track = function (event, itemIndex, extra) {
     window.__events.push({ event, itemIndex, extra, t: Date.now() });
+    const name = EVENT_NAME[event];
+    if (!name || !TENANT) return;
+
+    // The viewer counts in its own array positions; the sink wants the dish's real id,
+    // which the card already carries because the page was rendered complete.
+    let item = "";
+    const el = document.querySelector('.menu-item[data-idx="' + itemIndex + '"]');
+    if (el && el.dataset && el.dataset.id) item = el.dataset.id;
+
+    const meta = (extra && typeof extra === "object") ? Object.assign({}, extra) : {};
+    if (TABLE) meta.t = TABLE;
+    pending.push({ name: name, item: item, meta: meta });
+    // Batched. One beacon per burst rather than one per tap: opening a dish fires three
+    // events within a second and three requests to say so is three times the cost for the
+    // same information.
+    if (pending.length >= 20) flush();
+    else if (!timer) timer = setTimeout(flush, 4000);
   };
+
+  // The last flush, and the one that matters most - a diner who reached AR and then closed
+  // the tab is the whole funnel. `visibilitychange` fires where `unload` does not, which
+  // is every iOS browser.
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") flush();
+  });
+  window.addEventListener("pagehide", flush);
+
   window._trackFirstInteraction = function () {};
 
   window.idle = function (fn) {
@@ -1123,7 +1221,6 @@
   };
 })();
 
-;
 /* ---- viewer.js ---- */
         // ── Modal ──────────────────────────────────────────────────────
         const modal       = document.getElementById('modal');
@@ -1907,7 +2004,6 @@
             });
             return out;
         }
-;
 /* ---- hero.js ---- */
         /* ── Monday Greens hero gallery ──────────────────────────────────────────
            theme_config.hero_images holds a JSON array (or comma/newline list) of photo
@@ -2294,7 +2390,6 @@
             return true;
         }
 
-;
 /* ---- page.js ---- */
 // page.js — the menu page's own behaviour: category filtering and the language switch.
 //
@@ -2435,7 +2530,6 @@
   else addEventListener("load", start, { once: true });
 })();
 
-;
 /* ---- init.js ---- */
 // init.js — start the hero and venue features the way the platform starts them.
 //

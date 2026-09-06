@@ -82,6 +82,7 @@ export default function Sidebar({ open, onClose }: Props) {
   // Ours, not an owner's. Kept in their own group so the two are never confused.
   const STAFF: Row[] = ([
     plan.canManageTenants ? { href: '/tenants', label: T.navTenants, icon: 'grid' } : null,
+    plan.role === 'super_admin' ? { href: '/dev-analytics', label: T.navDeveloperAnalytics, icon: 'pulse' } : null,
     // History reads a change log that does not exist yet. Hidden rather than shown empty:
     // a screen that is always empty teaches people not to look at it.
     plan.role === 'super_admin' ? { href: tenantHref('/history'), match: '/history', label: T.navHistory, icon: 'history' } : null,

@@ -19,6 +19,12 @@ const nextConfig: NextConfig = {
   // form instead of localhost. Has no effect on production builds.
   allowedDevOrigins: ['127.0.0.1'],
 
+  // Next's dev overlay button defaults to bottom-left, which is exactly where the sidebar
+  // keeps its language and theme toggles - it sat on top of them. Dev-only either way, but
+  // an overlapped control is an overlapped control. Moved rather than disabled, so build
+  // and runtime errors still surface.
+  devIndicators: { position: 'bottom-right' },
+
   async headers() {
     return [
       {

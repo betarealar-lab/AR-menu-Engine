@@ -33,6 +33,7 @@ import os
 import re
 import subprocess
 import tempfile
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -178,6 +179,24 @@ def main() -> int:
     check("so is the WebXR overlay", 'id="xr-overlay"' in html)
     check("iOS AR goes through a rel=ar anchor", "setAttribute('rel', 'ar')" in html)
     check("Android AR has the Three.js carousel", "window.XR = {" in html)
+
+    print("\n== the file a diner actually loads ==")
+    # app/public/viewer.js is what the DINER page loads. Everything else in this suite
+    # renders through render.mjs/ported.mjs, which is a DIFFERENT renderer - so these
+    # checks went green for a whole session while the real page served stale bytes,
+    # because ported/shim.js had been edited and nothing rebuilt the concatenation. It has
+    # a generator now (build_viewer.py), and this is the check that somebody ran it.
+    served = ROOT / "app" / "public" / "viewer.js"
+    if served.is_file():
+        sys.path.insert(0, str(ROOT / "menu" / "render"))
+        import build_viewer
+        got = served.read_text(encoding="utf-8")
+        check("app/public/viewer.js matches its sources", build_viewer.build() == got,
+              "stale - run: python menu/render/build_viewer.py")
+        for probe, why in (("window.XR", "the AR carousel"),
+                           ("window.__bootViewer", "the boot hook"),
+                           ("sendBeacon", "the analytics beacon")):
+            check(f"and it carries {why}", probe in got)
 
     print("\n== one palette key list, in three languages ==")
     # `render_theme_keys.py` has said "check_render.py asserts the two stay in step" since

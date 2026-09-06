@@ -64,7 +64,8 @@ const EMPTY: PlanAccess = {
   canUseMenu: true,
   canUseAnalytics: true,
   canUseTheme: true,
-  // Was an iframe to the platform's production analytics. Deleted; never true again.
+  // Ours: every restaurant at once, and the queue behind them. Only a super admin, and
+  // the security boundary is in the database (admin_overview), not in this flag.
   canUseDeveloperAnalytics: false,
   canUploadModels: true,
   canManageTenants: false,
@@ -123,6 +124,7 @@ export function usePlan(): PlanAccess {
         role: isSuper ? 'super_admin' : 'brand_owner',
         label: isSuper ? 'BetaReal' : '',
         canManageTenants: isSuper,
+        canUseDeveloperAnalytics: isSuper,
         restaurantId: current?.id ?? null,
         restaurantSlug: current?.slug ?? '',
         restaurantName: current?.name ?? '',

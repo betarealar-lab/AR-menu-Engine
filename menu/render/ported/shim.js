@@ -123,6 +123,19 @@
   }
 
   const TENANT = (window.__CFG && window.__CFG.tenant_id) || "";
+
+  // Which table this code was on. The per-table QR codes carry `?t=<n>` (share/page.tsx),
+  // and it is read ONCE here rather than per event: a diner navigating within the menu
+  // keeps the same table, and re-reading the URL would lose it the moment anything
+  // touched the query string.
+  const TABLE = (function () {
+    try {
+      const t = new URLSearchParams(location.search).get("t") || "";
+      // Bounded and digits-only: it is printed on a card, not typed, so anything else is
+      // somebody playing with the URL and does not belong in a restaurant's numbers.
+      return /^\d{1,4}$/.test(t) ? t : "";
+    } catch (_) { return ""; }
+  })();
   let pending = [];
   let timer = null;
 
@@ -155,8 +168,9 @@
     const el = document.querySelector('.menu-item[data-idx="' + itemIndex + '"]');
     if (el && el.dataset && el.dataset.id) item = el.dataset.id;
 
-    pending.push({ name: name, item: item,
-                   meta: (extra && typeof extra === "object") ? extra : {} });
+    const meta = (extra && typeof extra === "object") ? Object.assign({}, extra) : {};
+    if (TABLE) meta.t = TABLE;
+    pending.push({ name: name, item: item, meta: meta });
     // Batched. One beacon per burst rather than one per tap: opening a dish fires three
     // events within a second and three requests to say so is three times the cost for the
     // same information.
