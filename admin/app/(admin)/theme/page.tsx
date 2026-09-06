@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useMemo, type CSSProperties } from 'react'
 import { loadThemeConfig, saveThemeConfig, setTemplate, loadTemplates } from '@/lib/data/theme'
 import ThemePreview, { type PreviewMode } from '@/components/ThemePreview'
+import { PALETTE_GROUPS } from '@/lib/palette'
 import { uploadAsset } from '@/lib/upload'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
@@ -76,36 +77,12 @@ function parseHeroImages(raw?: string): string[] {
   return out
 }
 
-const NIGHT_FIELDS: { key: string; tKey: keyof Translations }[] = [
-  { key: 'night_bg',          tKey: 'colorBg' },
-  { key: 'night_card',        tKey: 'colorCard' },
-  { key: 'night_card2',       tKey: 'colorCard2' },
-  { key: 'night_border',      tKey: 'colorBorder' },
-  { key: 'night_text',        tKey: 'colorText' },
-  { key: 'night_dim',         tKey: 'colorDim' },
-  { key: 'night_accent',      tKey: 'colorAccent' },
-  { key: 'night_accent_text', tKey: 'colorAccentText' },
-  { key: 'night_price_color', tKey: 'colorPrice' },
-  { key: 'night_badge_bg',    tKey: 'colorBadge' },
-  { key: 'night_add_btn_color', tKey: 'colorAddBtn' },
-  { key: 'night_thumb_bg',    tKey: 'colorThumbBg' },
-  { key: 'night_modal_bg',    tKey: 'colorModalBg' },
-]
-const DAY_FIELDS: { key: string; tKey: keyof Translations }[] = [
-  { key: 'day_bg',          tKey: 'colorBg' },
-  { key: 'day_card',        tKey: 'colorCard' },
-  { key: 'day_card2',       tKey: 'colorCard2' },
-  { key: 'day_border',      tKey: 'colorBorder' },
-  { key: 'day_text',        tKey: 'colorText' },
-  { key: 'day_dim',         tKey: 'colorDim' },
-  { key: 'day_accent',      tKey: 'colorAccent' },
-  { key: 'day_accent_text', tKey: 'colorAccentText' },
-  { key: 'day_price_color', tKey: 'colorPrice' },
-  { key: 'day_badge_bg',    tKey: 'colorBadge' },
-  { key: 'day_add_btn_color', tKey: 'colorAddBtn' },
-  { key: 'day_thumb_bg',    tKey: 'colorThumbBg' },
-  { key: 'day_modal_bg',    tKey: 'colorModalBg' },
-]
+// The colour rows come from lib/palette.ts now, grouped by what they change and labelled
+// in the words an owner would use. The old lists were thirteen bare key names per mode -
+// "Card", "Card 2", "Dim", "Accent (gold)" - which name the variable rather than the
+// thing that moves, and "(gold)" was simply wrong for a restaurant whose accent is green.
+// That file also owns which part of the real menu maps to which row, so the preview's
+// click-to-edit and these labels cannot describe different colours.
 
 const GOOGLE_FONTS = [
   'Nunito', 'Bebas Neue', 'Inter', 'Roboto', 'Lato', 'Poppins',
@@ -307,9 +284,15 @@ export default function ThemePage() {
     return () => document.removeEventListener('click', onClick, true)
   }, [dirty, T])
 
-  // Click-to-edit. The mock preview called this with a field name; the real page in a
-  // frame cannot, without a message it does not send yet - so nothing calls it today and
-  // the machinery below stays because it is what a `br-preview-pick` message would drive.
+  // Click-to-edit: the preview says which colour governs what was tapped, and the editor
+  // goes to that row - the right tab, scrolled to, flashed, with the picker open. It is
+  // the one thing the old mock did better than the real page, and it works across the
+  // frame because both sides read the same map (lib/palette.ts).
+  const pickField = useCallback((field: string) => {
+    setTab(mode)                       // the palette being previewed is the one to edit
+    setPendingPick(`${mode}_${field}`)
+  }, [mode])
+
   useEffect(() => {
     if (!pendingPick) return
     const raf = requestAnimationFrame(() => {
@@ -658,16 +641,33 @@ export default function ThemePage() {
               </div>
             </div>
           )}
-          {tab === 'night' && NIGHT_FIELDS.map(f => (
-            <ColorRow key={f.key} fieldKey={f.key} label={T[f.tKey] as string} value={config[f.key] ?? ''}
-                      flash={flashKey === f.key} warning={warnText(f.key)}
-                      onChange={v => setColor(f.key, v)} />
-          ))}
-          {tab === 'day' && DAY_FIELDS.map(f => (
-            <ColorRow key={f.key} fieldKey={f.key} label={T[f.tKey] as string} value={config[f.key] ?? ''}
-                      flash={flashKey === f.key} warning={warnText(f.key)}
-                      onChange={v => setColor(f.key, v)} />
-          ))}
+          {(tab === 'night' || tab === 'day') && (
+            <>
+              <p className="text-xs" style={{ color: 'var(--dim)' }}>
+                Tap anything in the preview to jump to the colour that changes it. Leave a
+                row empty to use the template&rsquo;s own.
+              </p>
+              {PALETTE_GROUPS.map(group => (
+                <div key={group.id} className="card p-4">
+                  <div className="eyebrow mb-0.5">{group.title}</div>
+                  {group.hint && (
+                    <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>{group.hint}</p>
+                  )}
+                  <div className={group.hint ? '' : 'mt-3'}>
+                    {group.fields.map(f => {
+                      const key = `${tab}_${f.key}`
+                      return (
+                        <ColorRow key={key} fieldKey={key} label={f.label} what={f.what}
+                                  value={config[key] ?? ''}
+                                  flash={flashKey === key} warning={warnText(key)}
+                                  onChange={v => setColor(key, v)} />
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
           {tab === 'background' && (
             <>
               <div className="p-4 rounded-xl text-sm leading-6"
@@ -812,32 +812,41 @@ export default function ThemePage() {
 
         {/* ── Right: live preview ─────────────────────────────────────── */}
         <ThemePreview slug={plan.restaurantSlug} config={config} mode={mode}
-                      onMode={setMode} template={config.template_key || ''} />
+                      onMode={setMode} template={config.template_key || ''}
+                      onPick={pickField} />
       </div>
     </div>
   )
 }
 
-function ColorRow({ fieldKey, label, value, onChange, flash, warning }:
-  { fieldKey?: string; label: string; value: string; onChange: (v: string) => void; flash?: boolean; warning?: string | null }) {
+/** One colour. The label says what moves; `what` says it in a sentence. A row is a row in
+ *  a group now rather than a card of its own - thirteen cards in a column is thirteen
+ *  boxes competing with each other and no sense of which belong together. */
+function ColorRow({ fieldKey, label, what, value, onChange, flash, warning }:
+  { fieldKey?: string; label: string; what?: string; value: string
+    onChange: (v: string) => void; flash?: boolean; warning?: string | null }) {
   const colorVal = isColor(value) ? toHex(value) : '#000000'
-  const borderColor = flash ? 'var(--gold)' : warning ? 'rgba(224,83,60,0.55)' : 'var(--border)'
   return (
     <div id={fieldKey ? `crow-${fieldKey}` : undefined}
-         className="flex items-center gap-4 p-3 rounded-xl"
-         style={{ background: 'var(--card)', border: `1px solid ${borderColor}`,
-                  boxShadow: flash ? '0 0 0 3px rgba(231,177,90,0.35)' : undefined,
-                  transition: 'box-shadow .2s, border-color .2s' }}>
+         className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg"
+         style={{ borderTop: '1px solid var(--border)',
+                  background: flash ? 'var(--gold-dim)' : 'transparent',
+                  boxShadow: flash ? '0 0 0 2px var(--gold)' : undefined,
+                  transition: 'background .25s, box-shadow .25s' }}>
       <input type="color" value={colorVal} onChange={e => onChange(e.target.value)}
-             style={{ width: 44, height: 36, padding: '2px 4px', flexShrink: 0 }} />
-      <div className="flex-1">
-        <div className="text-xs mb-1 uppercase tracking-widest" style={{ color: 'var(--dim)' }}>
-          {label}
-        </div>
-        <input value={value} onChange={e => onChange(e.target.value)}
-               style={{ fontSize: '0.8rem', padding: '4px 8px' }}
-               placeholder="#rrggbb or rgba(…)" />
+             aria-label={label}
+             style={{ width: 40, height: 40, padding: 2, flexShrink: 0 }} />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold leading-tight">{label}</div>
+        {what && (
+          <div className="text-[11px] leading-4 mt-0.5" style={{ color: 'var(--dim)' }}>{what}</div>
+        )}
       </div>
+      <input value={value} onChange={e => onChange(e.target.value)}
+             className="font-mono shrink-0"
+             style={{ fontSize: '0.75rem', padding: '5px 8px', width: 118,
+                      borderColor: warning ? 'var(--danger)' : undefined }}
+             placeholder="template" />
       {warning && (
         <span title={warning} className="shrink-0" style={{ cursor: 'help', lineHeight: 0 }}>
           <svg width="17" height="15" viewBox="0 0 16 14" aria-hidden="true">

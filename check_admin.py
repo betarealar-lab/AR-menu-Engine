@@ -271,6 +271,13 @@ def main() -> int:
               "ALLOWED.indexOf(e.origin)" in prev)
         check("and applies nothing but custom properties",
               'k.slice(0, 2) !== "--"' in prev)
+        # Click-to-edit: tapping the menu opens the row that governs that colour. The map
+        # is posted in from lib/palette.ts, which also owns the label and the grouping, so
+        # a row cannot describe a colour it no longer changes.
+        check("the preview takes a click map and reports picks",
+              "br-pick-map" in prev and "br-preview-pick" in prev)
+        check("and neither reaches a diner's page",
+              "br-pick-map" not in plain and "br-preview-pick" not in plain)
 
         # Only templates we can actually RENDER may be offered. The editor used to list 22
         # presets as "templates" while app/src/lib/css/ held two stylesheets, so picking

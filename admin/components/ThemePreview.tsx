@@ -16,18 +16,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { VAR_MAP } from '@/lib/paletteVars'
+import { PICK_MAP } from '@/lib/palette'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
 export type PreviewMode = 'night' | 'day'
 export type PreviewDevice = 'phone' | 'desktop'
 
-export default function ThemePreview({ slug, config, mode, onMode, template }: {
+export default function ThemePreview({ slug, config, mode, onMode, template, onPick }: {
   slug: string
   config: Record<string, string>
   mode: PreviewMode
   onMode: (m: PreviewMode) => void
   template: string
+  /** Tapping a part of the menu opens the row that governs its colour. */
+  onPick?: (field: string) => void
 }) {
   const frame = useRef<HTMLIFrameElement>(null)
   const [device, setDevice] = useState<PreviewDevice>('phone')
@@ -52,16 +55,21 @@ export default function ThemePreview({ slug, config, mode, onMode, template }: {
     if (config.font_heading) vars['--font-heading'] = config.font_heading
 
     win.postMessage({ type: 'br-theme', mode, template, vars }, MENU_ORIGIN || '*')
+    // The click map goes with it. Sent from here rather than written into the page, so
+    // one definition (lib/palette.ts) owns the label, the grouping and the target.
+    win.postMessage({ type: 'br-pick-map', map: PICK_MAP }, MENU_ORIGIN || '*')
   }, [config, mode, template])
 
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       if (MENU_ORIGIN && e.origin !== MENU_ORIGIN) return
-      if ((e.data as { type?: string })?.type === 'br-preview-ready') setReady(true)
+      const msg = e.data as { type?: string; field?: string }
+      if (msg?.type === 'br-preview-ready') setReady(true)
+      if (msg?.type === 'br-preview-pick' && msg.field) onPick?.(msg.field)
     }
     addEventListener('message', onMessage)
     return () => removeEventListener('message', onMessage)
-  }, [])
+  }, [onPick])
 
   // Post on every change, and once the frame says it is listening - otherwise the first
   // values go into a page that has not parsed its listener yet and are simply lost.
@@ -114,7 +122,7 @@ export default function ThemePreview({ slug, config, mode, onMode, template }: {
       </div>
 
       <p className="text-[11px] mt-2 text-center" style={{ color: 'var(--dim)' }}>
-        Your real menu, with your dishes. Changes show here before they are saved.
+        Your real menu, with your dishes. Tap anything to open the colour that changes it.
       </p>
     </div>
   )

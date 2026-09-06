@@ -182,6 +182,40 @@ const buildMs = Date.now() - started;
     }
     if (m.reload) location.reload();
   });
+  // Click-to-edit. Tapping a part of the menu tells the editor which colour governs it,
+  // and the editor jumps to that row. The map comes from the editor rather than being
+  // written here twice - one definition owns the label, the grouping and the target.
+  var PICK = [];
+  addEventListener("message", function (e) {
+    if (ALLOWED.indexOf(e.origin) < 0) return;
+    if (e.data && e.data.type === "br-pick-map" && Array.isArray(e.data.map)) PICK = e.data.map;
+  });
+
+  document.addEventListener("click", function (ev) {
+    if (!PICK.length) return;
+    // A click lands on the innermost element, so walk OUT until something matches. The
+    // map is ordered most-specific-first, so the first hit at each level is the right one.
+    for (var el = ev.target; el && el !== document; el = el.parentElement) {
+      for (var i = 0; i < PICK.length; i++) {
+        try {
+          if (el.matches && el.matches(PICK[i][0])) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            parent.postMessage({ type: "br-preview-pick", field: PICK[i][1] }, "*");
+            return;
+          }
+        } catch (_) { /* a selector we cannot parse is a selector we skip */ }
+      }
+    }
+  }, true);
+
+  // In preview the page is a swatch, not a menu: opening the 3D modal or following a
+  // delivery link would take the editor somewhere it cannot come back from.
+  document.addEventListener("submit", function (e) { e.preventDefault(); }, true);
+  document.querySelectorAll("a[href]").forEach(function (a) {
+    a.addEventListener("click", function (e) { e.preventDefault(); });
+  });
+
   // Tell the editor the page is ready for values, so it does not post into a blank frame.
   try { parent.postMessage({ type: "br-preview-ready" }, "*"); } catch (_) {}
 })();`} />
