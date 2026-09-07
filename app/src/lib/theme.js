@@ -34,6 +34,37 @@ export const VAR_MAP = {
 // worse than a missing one falling back to the template's default.
 const SAFE = /^[-#\w\s,.%()/'"+*]+$/;
 
+/** BOTH palettes, each scoped to the attribute that selects it.
+ *
+ *  **Two bugs lived in emitting only one.**
+ *
+ *  The first was precedence. A single unscoped `:root{...}` block has the same specificity
+ *  as the template sheet's own `[data-theme="day"]{...}`, and it was written into `<head>`
+ *  BEFORE the sheet - so on every page the template's default palette quietly won and the
+ *  restaurant's own colours were never seen. Monday Greens' real palette is a teal day
+ *  theme (`--bg: #36a1b0`, straight out of the platform's theme_config); what the deployed
+ *  page actually drew was the template's cream. The restaurant's colours must win, always.
+ *
+ *  The second was the toggle. With only the active mode inlined, tapping day/night flipped
+ *  the attribute onto an element whose `:root` block still held the other mode's values,
+ *  and nothing repainted. Temo: "there is not light/dark switch so why is there just a
+ *  small button that does nothing on top right corner."
+ *
+ *  Both go away by scoping each palette to its own attribute: `:root[data-theme="day"]` is
+ *  (0,2,0) and beats the sheet's (0,1,0) wherever it sits, and the attribute now decides
+ *  which of the two applies - which is what a toggle is.
+ *
+ *  The cost is one extra copy of ~40 declarations, about 1.4 KB before compression, and it
+ *  buys a switch that works with no second request and no re-render.
+ */
+export function paletteCss(cfg = {}) {
+  return ["day", "night"]
+    .map((mode) => [mode, themeCss(cfg, mode)])
+    .filter(([, css]) => css)
+    .map(([mode, css]) => `:root[data-theme="${mode}"]{${css}}`)
+    .join("");
+}
+
 /** `night_`/`day_` prefixed keys plus bare ones, mapped to CSS custom properties. */
 export function themeCss(cfg = {}, mode = "night") {
   const other = mode === "day" ? "night_" : "day_";

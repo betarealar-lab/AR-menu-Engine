@@ -325,18 +325,45 @@ def main() -> int:
     check("and the shim feeds it in production's own key format",
           "item_view_" in orbited)
 
-    print("\n== the nine symbols the port needs from us ==")
+    print("\n== what the port needs from us, and where it now comes from ==")
+    #
+    # **These two checks used to codify the bug.** They asserted that `shim.js` defined
+    # `addToBasket` and friends, and that it INVENTED the lightbox's DOM - and it did both,
+    # with `function () {}` and nine fake hidden <div>s. Green checks, no basket, no
+    # lightbox. A check that asserts a stub exists will defend that stub forever.
+    #
+    # The arrangement now: an adapter translates our fields into theirs, a platform layer
+    # holds the features, and real markup comes from the platform's own page. Each of the
+    # three is asserted where it actually lives - and `check_features.py` then asserts that
+    # the FEATURE works, rather than that a file is present.
     shim = (PORTED / "shim.js").read_text(encoding="utf-8")
+    platform = (PORTED / "platform.js").read_text(encoding="utf-8")
+    chrome = (PORTED / "chrome.html").read_text(encoding="utf-8")
+
+    # The adapter's job: our shape, under their names. Nothing here may be a stub.
     for sym in ("menuItems", "_themeConfig", "track", "idle", "_trackFirstInteraction",
-                "addToBasket", "_setQty", "_syncQtyCtrl", "_basketKey", "t",
-                "_setPriceWithOld", "_variantsHtml", "_addonsHtml", "_variantIndex"):
-        check(f"shim provides {sym}", f"window.{sym} =" in shim)
-    # Every one of these is bound at top level by viewer.js. A missing element is
+                "t", "_setPriceWithOld", "_escapeHtml", "_parseConfigList"):
+        check(f"the adapter provides {sym}", f"window.{sym} =" in shim)
+
+    # The features, in a layer of their own, so that losing one has to be a deletion
+    # somebody meant rather than a stub somebody left behind.
+    for sym in ("addToBasket", "_setQty", "_syncQtyCtrl", "_basketKey", "_variantsHtml",
+                "_addonsHtml", "_variantIndex", "_qtyCtrlHtml", "_showWaiterQR"):
+        check(f"the platform layer provides {sym}", f"window.{sym} = " in platform)
+    check("...and none of them is a stub",
+          "= function () {};" not in re.sub(r"^\s*//.*$", "", platform, flags=re.M))
+
+    # Every id below is bound at TOP LEVEL by viewer.js. A missing element is
     # `null.addEventListener`, which aborts the rest of the block and leaves every `let`
     # after it in the temporal dead zone - the symptom being "openModal exists but throws
-    # Cannot access '_mvPromise' before initialization", which points nowhere useful.
-    check("and stubs the lightbox DOM it wires at parse time",
-          "img-lightbox" in shim and "qty-add-btn" in shim)
+    # Cannot access '_mvPromise' before initialization", which points nowhere useful. A
+    # deployed page did exactly that, so the markup is REAL now: copied out of index.html
+    # by extract_chrome.py rather than invented.
+    check("the lightbox is the platform's own markup",
+          'id="img-lightbox"' in chrome and 'id="lightbox-qty"' in chrome)
+    check("so is the 3D modal", 'id="modal-spin"' in chrome and 'id="modal-viewer"' in chrome)
+    check("so is the basket", 'id="basket-bar"' in chrome and 'id="basket-panel"' in chrome)
+    check("and the shim invents no DOM of its own", 'createElement("div")' not in shim)
 
     print("\n== a menu is a stranger's typing ==")
     nasty = snapshot(items=[{

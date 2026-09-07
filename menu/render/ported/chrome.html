@@ -1,0 +1,139 @@
+<!-- The platform's overlay markup, taken verbatim by extract_chrome.py.
+     Six blocks from index.html, in document order, unmodified.
+     DO NOT EDIT - re-run the extractor. See its docstring for why hand-written
+     markup with the same ids is not the same thing. -->
+
+<!-- img-lightbox: the photo lightbox - tap a photo dish to see it full size -->
+<div id="img-lightbox" aria-hidden="true">
+    <button class="close-btn" id="lightbox-close" aria-label="Close">&#10005;</button>
+    <div id="lightbox-name"></div>
+    <img id="lightbox-img" alt="">
+    <div id="lightbox-panel">
+        <p id="lightbox-desc"></p>
+        <div id="lightbox-options"></div>
+        <div id="lightbox-row">
+            <span id="lightbox-price"></span>
+            <div class="qty-ctrl" id="lightbox-qty" data-idx="">
+                <button class="qty-add-btn" aria-label="Add to basket"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></button>
+                <div class="qty-stepper">
+                    <button class="qty-dec">&#8722;</button>
+                    <span class="qty-num">1</span>
+                    <button class="qty-inc">+</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- modal: the 3D viewer: model-viewer, drawer, price, add-to-basket, AR -->
+<div id="modal">
+    <button class="nav-arrow left-arrow"  id="modal-prev">&#10094;</button>
+    <button class="nav-arrow right-arrow" id="modal-next">&#10095;</button>
+    <button class="close-btn" id="close-btn" aria-label="Close">&#10005;</button>
+    <button class="spin-btn" id="modal-spin" aria-label="Auto-spin" aria-pressed="false" title="360° auto-spin" style="display:none">
+        <span class="spin-360">360&deg;</span>
+        <span class="spin-label">SPIN</span>
+    </button>
+    <div id="modal-title"></div>
+    <div id="modal-viewer-wrap">
+        <model-viewer id="modal-viewer"
+            camera-controls
+            shadow-intensity="1"
+            min-camera-orbit="auto 0deg auto"
+            max-camera-orbit="auto 85deg auto">
+        </model-viewer>
+        <div class="modal-vignette"></div>
+    </div>
+    <div id="modal-drawer">
+        <div id="modal-drawer-handle"></div>
+        <div id="modal-title-d"></div>
+        <div id="modal-price"></div>
+        <div id="modal-drawer-body">
+            <div>
+                <p id="modal-description"></p>
+                <div id="modal-qty-wrap">
+                    <div class="qty-ctrl" id="modal-qty-ctrl" data-idx="0">
+                        <button class="qty-add-btn" aria-label="Add to basket"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></button>
+                        <div class="qty-stepper">
+                            <button class="qty-dec">&#8722;</button>
+                            <span class="qty-num">1</span>
+                            <button class="qty-inc">+</button>
+                        </div>
+                    </div>
+                </div>
+                <button id="modal-ar-btn"></button>
+                <p id="modal-message"></p>
+                <p class="tip" id="modal-tip">Drag to rotate</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- xr-overlay: the WebXR carousel's controls, drawn over the camera feed -->
+<div id="xr-overlay">
+    <div id="xr-gesture-layer"></div>
+    <div id="xr-place-hint">
+        <div id="xr-hint-step"></div>
+        <div id="xr-hint-main"></div>
+    </div>
+    <div id="xr-nav-row">
+        <button id="xr-prev">&#10094;</button>
+        <button id="xr-next">&#10095;</button>
+    </div>
+    <div id="xr-move-hint">Drag to move &middot; Twist two fingers to rotate</div>
+    <button id="xr-exit">Exit AR</button>
+    <button id="xr-place-again"></button>
+    <button id="xr-carousel-toggle"></button>
+    <button id="xr-label-toggle"></button>
+    <button id="xr-hide-ui">HIDE UI</button>
+    <div id="xr-scale-gauge">
+        <div id="xr-scale-track">
+            <div id="xr-scale-fill"></div>
+            <div id="xr-scale-mark"></div>
+        </div>
+        <span id="xr-scale-pct">100%</span>
+    </div>
+    <button id="xr-add-btn" aria-label="Add to basket">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+    </button>
+</div>
+
+<!-- basket-bar: the floating 'N items - 42 GEL' bar -->
+<div id="basket-bar">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;margin-right:8px"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+    <span id="basket-bar-count"></span>
+    <span id="basket-bar-total"></span>
+    <button id="basket-bar-delete" aria-label="Clear basket">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+    </button>
+</div>
+
+<!-- basket-panel: the basket itself, and Show to staff -->
+<div id="basket-panel">
+    <div class="basket-header">
+        <span id="basket-title">Basket</span>
+        <button id="basket-clear">Clear</button>
+        <button id="basket-close">Close</button>
+    </div>
+    <div id="basket-items"></div>
+    <div class="basket-footer">
+        <div class="basket-total-row">
+            <span id="basket-total-label">Total</span>
+            <span id="basket-total">0 ₾</span>
+        </div>
+        <button id="basket-waiter-btn" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="14" x2="14" y2="14.01"/><line x1="17" y1="14" x2="17" y2="14.01"/><line x1="20" y1="14" x2="20" y2="14.01"/><line x1="14" y1="17" x2="14" y2="17.01"/><line x1="17" y1="17" x2="17" y2="17.01"/><line x1="20" y1="17" x2="20" y2="17.01"/><line x1="14" y1="20" x2="14" y2="20.01"/><line x1="17" y1="20" x2="17" y2="20.01"/><line x1="20" y1="20" x2="20" y2="20.01"/></svg>
+            <span id="basket-waiter-label">Show to staff</span>
+        </button>
+    </div>
+</div>
+
+<!-- waiter-overlay: the order QR a diner shows the waiter -->
+<div id="waiter-overlay">
+    <div id="waiter-card">
+        <button id="waiter-overlay-close" aria-label="Close">&times;</button>
+        <h3 id="waiter-overlay-title">Show to staff</h3>
+        <div id="waiter-qr"></div>
+        <p id="waiter-overlay-hint">Staff scans this to get your order</p>
+    </div>
+</div>

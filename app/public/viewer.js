@@ -1,3 +1,147 @@
+/* ---- ui.js ---- */
+// ui.js - the platform's UI strings, taken verbatim by extract_ui.py.
+// Every key, en/ka/ru, exactly as index.html has them. DO NOT EDIT: re-run the
+// extractor. A hand-maintained copy of this object is how the menu ended up
+// showing the word "undefined" to Georgian diners.
+//
+// `window.UI` because that is what the ported viewer, the AR overlay and the
+// basket all read - `UI[window.__lang].loading` and forty-one more.
+
+window.UI = {
+    en: {
+        tagline:   'Taste the Wild',
+        viewAR:    'VIEW ON TABLE',
+        view3D:    'VIEW IN 3D',
+        loading:   'Loading...',
+        close:     'Close',
+        tip:       'Drag to rotate',
+        spin:      'Auto-spin',
+        placeHint: 'Scan a well-lit, textured table slowly, then tap to place',
+        moveHint:  'Drag to rotate · Pinch to scale',
+        exitAR:    'Exit Model view',
+        placeAgain:'Place Again',
+        hintStep1: 'STEP 1 OF 2',
+        hintScan:  'Slowly scan a well-lit, textured table',
+        hintStep2: 'STEP 2 OF 2',
+        hintTap:   'Tap to place your dish',
+        coachScan:    'Find a table',
+        coachScanSub: 'Move your phone slowly over a flat, textured table',
+        coachFound:   'Surface Found!',
+        coachFoundSub:'Ready to place your dish',
+        langBtn:   'ქარ',
+        themeDay:  'Day',
+        themeNight:'Night',
+        carouselBtn:  'CAROUSEL',
+    singleBtn:    'SINGLE ITEM',
+    onTable:      'ON TABLE',
+    floating:     'FLOATING',
+    addBtn:       'ADD',
+    basketTitle:  'Basket',
+    emptyBasket:  'Your basket is empty',
+    total:        'Total',
+    clearBasket:  'Clear',
+    showWaiter:   'Show to staff',
+    waiterHint:   'Staff scans this to get your order instantly',
+    readyBtn:     '✓ Ready to Order',
+    readyDone:    '✓ Order Noted!',
+    hideUI:       'HIDE UI',
+    showUI:       'SHOW UI',
+    arNoUsdz:     'iPhone AR needs a USDZ model. Showing 3D instead.',
+    arNoModel:    '3D model is not available for this item.',
+    arModelMissing:'Could not load the 3D model. Showing 3D instead.',
+    arFailed:     'Could not start AR. Showing 3D instead.',
+    arUnsupported:'AR is not available on this device. Showing 3D instead.',
+    },
+    ka: {
+        tagline:   'გასინჯე ველური გემო',
+        viewAR:    'ᲛᲐᲒᲘᲓᲐᲖᲔ ᲜᲐᲮᲕᲐ',
+        view3D:    '3D-ში ᲜᲐᲮᲕᲐ',
+        loading:   'იტვირთება...',
+        close:     'დახურვა',
+        tip:       'გაასრიალეთ მოსაბრუნებლად',
+        spin:      'ავტო-ტრიალი',
+        placeHint: 'მიუშვირე კარგად განათებულ, ტექსტურიან ბრტყელ მაგიდას და ნელა ამოძრავე',
+        moveHint:  'გასაბრუნებლად გაასრიალე · პინჩი მასშტაბისთვის',
+        exitAR:    'მოდელის დახურვა',
+        placeAgain:'ხელახლა დადება',
+        hintStep1: 'ნაბიჯი 1 / 2',
+        hintScan:  'ნელა დაასკანერე განათებული, ტექსტურიანი მაგიდა',
+        hintStep2: 'ნაბიჯი 2 / 2',
+        hintTap:   'შეეხე ეკრანს მოთავსებისთვის',
+        coachScan:    'მაგიდის ძიება',
+        coachScanSub: 'ნელა ამოძრავეთ ტელეფონი ტექსტურიან ბრტყელ მაგიდაზე',
+        coachFound:   'ზედაპირი ნაპოვნია!',
+        coachFoundSub:'მზადაა კერძის დასადებად',
+        langBtn:   'RU',
+        themeDay:  'ნათელი თემა',
+        themeNight:'მუქი თემა',
+        carouselBtn:  'კარუსელი',
+    singleBtn:    'ცალი',
+    onTable:      'მაგიდაზე ტექსტი ',
+    floating:     'მოლივლივე ტექსტი',
+    addBtn:       'დამატება',
+    basketTitle:  'კალათა',
+    emptyBasket:  'კალათა ცარიელია',
+    total:        'სულ',
+    clearBasket:  'გასუფთავება',
+    showWaiter:   'აჩვენეთ სერვისის თანამშრომელს',
+    waiterHint:   'სერვისის თანამშრომელი დაასკანერებს და მყისვე მიიღებს შენს შეკვეთას',
+    readyBtn:     '✓ შეკვეთა მზადაა',
+    readyDone:    '✓ მიღებულია!',
+    hideUI:       'UI დამალვა',
+    showUI:       'UI ჩვენება',
+    arNoUsdz:     'iPhone-ზე AR-ს USDZ მოდელი სჭირდება. იხსნება 3D.',
+    arNoModel:    'ამ ნივთისთვის 3D მოდელი არ არის.',
+    arModelMissing:'3D მოდელი ვერ ჩაიტვირთა. იხსნება 3D.',
+    arFailed:     'AR ვერ გაეშვა. იხსნება 3D.',
+    arUnsupported:'ამ მოწყობილობაზე AR მიუწვდომელია. იხსნება 3D.',
+    },
+    ru: {
+        tagline:   'Попробуй дикий вкус',
+        viewAR:    'ПОКАЗАТЬ НА СТОЛЕ',
+        view3D:    'СМОТРЕТЬ В 3D',
+        loading:   'Загрузка...',
+        close:     'Закрыть',
+        tip:       'Проведите пальцем, чтобы повернуть',
+        spin:      'Автовращение',
+        placeHint: 'Наведите на хорошо освещённый стол с текстурой и медленно двигайте телефон',
+        moveHint:  'Проведите пальцем — поворот · Сведите пальцы — масштаб',
+        exitAR:    'Закрыть модель',
+        placeAgain:'Разместить снова',
+        hintStep1: 'ШАГ 1 ИЗ 2',
+        hintScan:  'Медленно наведите на освещённый стол с текстурой',
+        hintStep2: 'ШАГ 2 ИЗ 2',
+        hintTap:   'Коснитесь экрана, чтобы разместить блюдо',
+        coachScan:    'Найдите стол',
+        coachScanSub: 'Медленно двигайте телефон над плоским столом с текстурой',
+        coachFound:   'Поверхность найдена!',
+        coachFoundSub:'Готово к размещению блюда',
+        langBtn:   'EN',
+        themeDay:  'Светлая тема',
+        themeNight:'Тёмная тема',
+        carouselBtn:  'КАРУСЕЛЬ',
+        singleBtn:    'ОДНО БЛЮДО',
+        onTable:      'НА СТОЛЕ',
+        floating:     'В ВОЗДУХЕ',
+        addBtn:       'ДОБАВИТЬ',
+        basketTitle:  'Корзина',
+        emptyBasket:  'Ваша корзина пуста',
+        total:        'Итого',
+        clearBasket:  'Очистить',
+        showWaiter:   'Показать официанту',
+        waiterHint:   'Официант отсканирует и сразу получит ваш заказ',
+        readyBtn:     '✓ Заказ готов',
+        readyDone:    '✓ Заказ принят!',
+        hideUI:       'Скрыть интерфейс',
+        showUI:       'Показать интерфейс',
+        arNoUsdz:     'Для AR на iPhone нужна модель USDZ. Открываем 3D.',
+        arNoModel:    'Для этого блюда 3D-модель недоступна.',
+        arModelMissing:'Не удалось загрузить 3D-модель. Открываем 3D.',
+        arFailed:     'Не удалось запустить AR. Открываем 3D.',
+        arUnsupported:'AR недоступен на этом устройстве. Открываем 3D.',
+    }
+};
+
 /* ---- xr.js ---- */
         let THREE, GLTFLoader, GLTFExporter;
         let renderer, scene, camera, reticle, xrCanvas;
@@ -872,109 +1016,64 @@
             }
         };
 /* ---- shim.js ---- */
-// shim.js — everything the ported viewer expects from the app it was lifted out of.
+// shim.js — the ONLY adapter between the ported viewer and our page.
 //
-// `viewer.js` and `xr.js` are VERBATIM from the live platform's index.html. They are not
-// edited, because the whole point of taking them is that they already work on real phones
-// in real restaurants. What they need from around them is small and listed here, and this
-// file is the only place our menu and their code meet.
+// `viewer.js`, `xr.js` and `hero.js` are VERBATIM from the live platform's index.html.
+// They are not edited, because the whole point of taking them is that they already work on
+// real phones in real restaurants. What they need from around them is listed here.
 //
-// Nine symbols, and each stub says honestly what it is:
+// **This file used to be where features went to die.** It contained:
 //
-//   menuItems              built from the page's own cards, in their item shape
-//   _themeConfig           carries per-item camera angles, same key format
-//   UI / window.__lang     the English strings the viewer shows
-//   track                  analytics. A no-op HERE, with a queue, because the menu has
-//                          no analytics yet and a silent drop would be a lie
-//   idle                   requestIdleCallback with a setTimeout fallback
-//   _trackFirstInteraction the funnel marker. No-op for the same reason as track
-//   addToBasket / _setQty / _syncQtyCtrl / _basketKey / _basket
-//                          the basket. There ISN'T one in the self-serve menu yet, so
-//                          these are stubs and the qty controls are hidden by CSS. When
-//                          the basket is built, this is where it connects.
+//     window.addToBasket   = function () {};              // the basket
+//     window._variantsHtml = function () { return ""; };  // glass / bottle
+//
+// ...and nine fake hidden <div>s wearing the photo lightbox's ids. Every one of those was
+// written to stop `viewer.js` throwing, and every one of them silently deleted a feature.
+// They are gone: the markup now comes from `chrome.html` and the behaviour from
+// `platform.js`, both copied from the platform rather than invented here.
+//
+// The rule this file is now held to: **an adapter translates, it does not substitute.**
+// Anything in here either renames one of our fields to one of theirs, or wires our page's
+// own reality (an event sink, a table number, a config object) into a call they already
+// make. If something starts returning "" or doing nothing, it does not belong here.
 
 (function () {
   "use strict";
 
-  // ── DOM the ported code wires up at top level ─────────────────────────────────
-  // `viewer.js` binds its listeners as the script runs, not lazily. Any element it
-  // expects and does not find is `null.addEventListener` - a TypeError that aborts the
-  // REST of the block, leaving every `let` after it in the temporal dead zone. The
-  // symptom is baffling: openModal exists (function declarations hoist) but throws
-  // "Cannot access '_mvPromise' before initialization" when called.
-  //
-  // These nine are the photo LIGHTBOX - tap a photo-only dish to see it full size. We
-  // have no item photos yet (`items.photo_key` exists and nothing writes to it), so the
-  // feature has nothing to show and its markup was not ported. Stubs rather than edits
-  // to viewer.js: when photos arrive, port the real markup and delete this list.
-  ["img-lightbox", "lightbox-panel", "lightbox-img", "lightbox-name", "lightbox-desc",
-   "lightbox-price", "lightbox-options", "lightbox-close", "lightbox-qty"
-  //
-  // The stubs need CHILDREN too, not just ids: the wiring reaches inside them, e.g.
-  // `_lbQtyCtrl.querySelector('.qty-add-btn').addEventListener(...)`. An empty <div>
-  // gets one line further and fails the same way.
-  ].forEach(function (id) {
-    if (document.getElementById(id)) return;
-    const el = document.createElement("div");
-    el.id = id;
-    el.hidden = true;
-    el.style.display = "none";
-    if (id.endsWith("qty")) {
-      ["qty-add-btn", "qty-dec", "qty-inc"].forEach(function (cls) {
-        const b = document.createElement("button");
-        b.className = cls;
-        el.appendChild(b);
-      });
-    }
-    document.body.appendChild(el);
-  });
+  // ── language ──────────────────────────────────────────────────────────────────────
+  // The server rendered the restaurant's primary language into the markup, and it is on
+  // the <html> element. Reading it back rather than defaulting to English means the first
+  // frame and the first script agree - the platform's own version defaults to 'ka' and
+  // then corrects itself, which is a flash.
+  window.__lang = (document.documentElement.lang || "en").slice(0, 2);
 
-  window.__lang = "en";
-  window.UI = {
-    en: {
-      view: "View 3D",
-      view3D: "View 3D",
-      viewAR: "View on your table",
-      loading: "Loading...",
-      onTable: "On your table",
-      floating: "Floating",
-      singleBtn: "One dish",
-      carouselBtn: "All dishes",
-      hideUI: "Hide controls",
-      showUI: "Show controls",
-      hintScan: "Move your phone slowly to find a surface",
-      hintStep: "Point at your table",
-      hintTap: "Tap to place",
-      arNoModel: "This dish has no 3D model yet.",
-      arNoUsdz: "AR is not ready for this dish yet.",
-      arModelMissing: "The 3D model could not be loaded.",
-      arFailed: "AR could not start on this device.",
-      arUnsupported: "This device does not support AR.",
-    },
-  };
+  // `window.UI` comes from `ui.js`, extracted verbatim - all 42 strings in all three
+  // languages. It used to be eleven English strings typed by hand here, which is how
+  // Georgian diners were shown the word "undefined".
 
-  // Analytics. The engine has a verdict log; the MENU has no event pipeline yet
-  // (MENU-PLATFORM §2.5 - events go to an append-only sink, deliberately not built).
-  // Queued rather than dropped so that when the sink exists, the calls are already in
-  // the right places and nothing has to be re-instrumented.
-  // The sink exists now (0009_events), so these stop being stubs. The viewer's own
-  // `track()` calls are unchanged and stay where the platform put them - the whole reason
-  // they were queued rather than dropped was so that the day a sink existed, nothing had
-  // to be re-instrumented.
+  // ── analytics ─────────────────────────────────────────────────────────────────────
   //
-  // Names are translated to OUR whitelist rather than passed through. The platform's
+  // The viewer's own `track()` calls are unchanged and stay exactly where the platform put
+  // them. Only the sink is ours.
+  //
+  // Names are TRANSLATED to our whitelist rather than passed through. The platform's
   // vocabulary grew over two years and has several spellings of the same idea; an open
   // name column becomes a junk drawer within a year and then no query can be trusted.
   // Anything unrecognised is counted locally and never sent.
   const EVENT_NAME = {
-    view: "view", page_view: "view", menu_view: "view",
+    view: "view", page_view: "view", page_load: "view", menu_view: "view",
     hero_pass: "hero_pass", scroll_past_hero: "hero_pass",
-    category: "category", category_change: "category",
+    category: "category", category_change: "category", category_filter: "category",
     open_modal: "item_open", view_3d: "item_open", item_open: "item_open",
-    ar: "ar_open", ar_open: "ar_open", view_ar: "ar_open",
+    ar: "ar_open", ar_open: "ar_open", view_ar: "ar_open", ar_success: "ar_open",
     ar_placed: "ar_placed", ar_place: "ar_placed",
+    // The funnel this company is a bet on: a dish added to the basket, and whether the
+    // diner had seen it in 3D or in AR first.
+    basket_add: "basket_add", basket_remove: "basket_remove",
+    basket_open: "basket_open", basket_clear: "basket_clear",
+    waiter_qr_shown: "waiter_qr",
     delivery: "delivery", order: "delivery",
-    lang: "lang", theme: "theme",
+    lang: "lang", theme: "theme", theme_change: "theme",
   };
 
   // Random, per tab, forgotten when it closes. Its only job is to tell one diner opening
@@ -998,10 +1097,10 @@
 
   const TENANT = (window.__CFG && window.__CFG.tenant_id) || "";
 
-  // Which table this code was on. The per-table QR codes carry `?t=<n>` (share/page.tsx),
-  // and it is read ONCE here rather than per event: a diner navigating within the menu
-  // keeps the same table, and re-reading the URL would lose it the moment anything
-  // touched the query string.
+  // Which table this code was on. The per-table QR codes carry `?t=<n>`, and it is read
+  // ONCE here rather than per event: a diner navigating within the menu keeps the same
+  // table, and re-reading the URL would lose it the moment anything touched the query
+  // string.
   const TABLE = (function () {
     try {
       const t = new URLSearchParams(location.search).get("t") || "";
@@ -1010,6 +1109,7 @@
       return /^\d{1,4}$/.test(t) ? t : "";
     } catch (_) { return ""; }
   })();
+
   let pending = [];
   let timer = null;
 
@@ -1060,40 +1160,44 @@
   });
   window.addEventListener("pagehide", flush);
 
-  window._trackFirstInteraction = function () {};
+  // The platform's marker for "this visitor did something". Ours fires the one event it
+  // is really for and then gets out of the way.
+  let _interacted = false;
+  window._trackFirstInteraction = function (type) {
+    if (_interacted) return;
+    _interacted = true;
+    window.track("hero_pass", null, { via: type || "" });
+  };
 
   window.idle = function (fn) {
     (window.requestIdleCallback || function (f) { return setTimeout(f, 1); })(fn);
   };
 
-  // No basket in the self-serve menu yet. Stubs rather than deletions, so `viewer.js`
-  // stays byte-identical to production and a future basket is a matter of filling these
-  // in rather than re-porting.
-  window._basket = new Map();
-  window._basketKey = function (idx) { return String(idx); };
-  window.addToBasket = function () {};
-  window._setQty = function () {};
-  window._syncQtyCtrl = function () {};
+  // ── text helpers the render path calls for every dish ─────────────────────────────
 
-  // The platform's per-field translation picker, reproduced rather than stubbed because
-  // it is on the render path for every dish name and description: t(item, 'name')
-  // returns the _ka or _ru variant when one exists for the current language. The menu is
-  // English-only today, so this is the fallback branch - but it is here in full so that
-  // adding Georgian means putting name_ka on the item, exactly as production does it,
-  // rather than discovering this function missing later.
   window._cleanText = window._cleanText || function (v) {
     return v == null ? "" : String(v).trim();
   };
+
+  // The platform's per-field translation picker: t(item, 'name') returns the _ka or _ru
+  // variant when one exists for the current language.
   window.t = function (item, field) {
+    if (!item) return "";
     const lang = window.__lang;
-    if (lang === "ru" && item[field + "_ru"]) return _cleanText(item[field + "_ru"]);
-    if (lang === "ka" && item[field + "_ka"]) return _cleanText(item[field + "_ka"]);
-    return _cleanText(item[field]);
+    if (lang === "ru" && item[field + "_ru"]) return window._cleanText(item[field + "_ru"]);
+    if (lang === "ka" && item[field + "_ka"]) return window._cleanText(item[field + "_ka"]);
+    return window._cleanText(item[field]);
+  };
+
+  window._escapeHtml = window._escapeHtml || function (v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
   };
 
   // theme_config stores lists as JSON strings - hero_images, drink_categories. Their
-  // parser, verbatim, because a malformed value must yield an empty list rather than
-  // throw and take the rest of the boot with it.
+  // parser, verbatim, because a malformed value must yield an empty list rather than throw
+  // and take the rest of the boot with it.
   window._parseConfigList = function (raw) {
     const t = String(raw || "").trim();
     if (!t) return [];
@@ -1105,80 +1209,99 @@
     }
   };
 
-  window._escapeHtml = window._escapeHtml || function (v) {
-    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
-  };
-
-  // Reproduced from the platform verbatim in behaviour: the modal price, with an
-  // optional struck-through "was". Not a stub, because it is on the render path for
-  // every dish in the 3D modal and returning nothing would leave the price blank.
+  // The modal price, with an optional struck-through "was".
   window._setPriceWithOld = function (el, price, priceOld) {
     if (!el) return;
     el.textContent = "";
-    const was = _cleanText(priceOld);
+    const was = window._cleanText(priceOld);
     if (was) {
       const sp = document.createElement("span");
       sp.className = "price-was";
       sp.textContent = was;
       el.appendChild(sp);
     }
-    el.appendChild(document.createTextNode(_cleanText(price)));
+    el.appendChild(document.createTextNode(window._cleanText(price)));
   };
 
-  // Variants (sizes) and add-ons. A real platform feature that the self-serve schema has
-  // no columns for yet - `items` has name, price, description and one model, and adding
-  // variants is a migration plus admin UI, not a shim. Returning "" is exactly what the
-  // platform's own functions do for an item without them, so the modal renders the same
-  // way it does for a plain dish.
-  window.__variantSel = {};
-  window.__addonSel = {};
-  window._variantIndex = function () { return 0; };
-  window._variantsHtml = function () { return ""; };
-  window._addonsHtml = function () { return ""; };
-
   // Per-item camera angle, in the platform's own key format so `_itemCameraOrbit` works
-  // unmodified: theme_config["item_view_<id>"] = "h v zoom".
-  window._themeConfig = {};
+  // unmodified: theme_config["item_view_<idx>"] = "h v zoom".
+  window._themeConfig = window._themeConfig || {};
 
   /** Build the item list the viewer works on, out of the cards already in the page.
    *
-   *  The snapshot is not re-parsed and nothing is fetched: every card already carries its
-   *  model url, its usdz, its name and its camera angle, because the page was rendered
-   *  complete (MENU-PLATFORM §2.1a). This just reads them back.
+   *  Nothing is fetched and the snapshot is not re-parsed: every card already carries its
+   *  model url, its usdz, its name, its price and its camera angle, because the page was
+   *  rendered complete. This reads them back.
+   *
+   *  The two exceptions are `variants` and `addons`. Those are structured data with prices
+   *  in them - "Glass 16 ₾ / Bottle 70 ₾" - and reading prices back out of markup to then
+   *  do arithmetic with them is the kind of shortcut that puts a wrong total in front of a
+   *  paying customer. The server emits them as JSON in `window.__ITEMS`, keyed by index,
+   *  for the ~18% of dishes that have any. Everything else stays in the markup, once.
    */
   window.menuItems = [];
   function build() {
+    const extras = window.__ITEMS || {};
     const cards = [].slice.call(document.querySelectorAll(".menu-item[data-idx]"));
-    window.menuItems = cards.map(function (el, i) {
+    const out = [];
+    for (const el of cards) {
       const d = el.dataset;
-      if (d.orbit) window._themeConfig["item_view_" + i] = d.orbit;
-      return {
-        id: i,
+      const i = parseInt(d.idx, 10);
+      // The 3D pill renders a second card for the same dish, exactly as the platform does
+      // (both carry the same index so the basket, AR and analytics treat them as one
+      // item). Only the first one becomes an entry.
+      if (out[i]) continue;
+      // Keyed by the dish's REAL id, because `_itemCameraOrbit` looks up
+      // `_themeConfig["item_view_" + item.id]`. Keyed by index it silently missed every
+      // time and every model opened at the default angle.
+      if (d.orbit && d.id) window._themeConfig["item_view_" + d.id] = d.orbit;
+      const ex = extras[i] || extras[String(i)] || {};
+      const desc = el.querySelector(".ingredients");
+      out[i] = {
+        // The dish's real id, for the staff QR and for the event sink. A position is
+        // meaningless to both.
+        id: d.id || "",
         name: d.name || "",
-        name_ka: "",
-        description: d.desc || "",
+        name_ka: d.nameKa || "",
+        name_ru: d.nameRu || "",
+        description: desc ? desc.textContent.trim() : "",
         description_ka: "",
         price: d.price || "",
+        price_old: d.priceOld || "",
         // Their field names. `model` is the GLB a viewer loads, `usdz` is what Quick Look
-        // gets. Both are already at real-world size - see viewer.mjs on why `ar_scale`
-        // is 1 here and not a number somebody has to maintain.
+        // gets. Both are already at real-world size, which is why `ar_scale` is 1 for
+        // anything from our pipeline and only an imported model carries a multiplier.
         model: d.glb || "",
         model_url: d.glb || "",
         usdz: d.usdz || "",
         usdz_url: d.usdz || "",
         thumbnail_url: d.poster || "",
-        ar_scale: 1,
-        is_3d: !!d.glb,
-        text_only: !d.glb,
+        ar_scale: d.arScale ? parseFloat(d.arScale) : 1,
+        // The card's own answer, not "does it have a GLB". See markup.js on `data-is3d`:
+        // a dish can keep its model and still be a photo dish, and that is the owner's
+        // call to make.
+        is_3d: d.is3d === "1",
+        text_only: el.classList.contains("no-image"),
+        variants: ex.v || [],
+        addons: ex.a || [],
       };
-    });
-    return window.menuItems;
+    }
+    // A hole here would mean a card claimed an index no other card did, which cannot
+    // happen from our renderer - but `menuItems[i]` is indexed by the whole viewer, so a
+    // sparse array is worth collapsing loudly rather than carrying.
+    for (let i = 0; i < out.length; i++) if (!out[i]) out[i] = { id: "", name: "" };
+    window.menuItems = out;
+    return out;
   }
 
   window.__bootViewer = function () {
     build();
+    // `viewer.js` keeps its OWN `let menuItems` at the top of the bundle's shared scope,
+    // and uses it for `menuItems.indexOf(item)` when it reports which dish was viewed.
+    // Left empty, every 3D and AR event was filed against index -1 - the counts existed
+    // and were all wrong. Both names now point at one array.
+    try { menuItems = window.menuItems; } catch (_) { /* viewer.js absent (tests) */ }
+
     if (typeof _startThumbUpgrades === "function") _startThumbUpgrades();
     // Preload the AR carousel's models in the background, exactly as the platform does
     // after its menu renders, so the first AR tap finds them decoded.
@@ -1186,39 +1309,725 @@
     if (ar.length && window.XR && window.XR.backgroundPreload) {
       window.idle(function () { window.XR.backgroundPreload(ar); });
     }
-    // The platform binds the modal to the THUMBNAIL, not the card:
-    //     thumbImg.addEventListener('click', () => openModal(globalIdx, menuItems))
-    // ...and once a poster upgrades to a live <model-viewer>, `_upgradeThumb` puts its
-    // own pointerdown/pointerup pair on the viewer so a DRAG rotates the dish and only a
-    // real tap opens the modal. Binding the card instead - which an earlier version did -
-    // fights that: every rotation ends in a click that bubbles, and the modal opens when
-    // the diner was only turning the plate round.
+    // The modal is bound to the THUMBNAIL here rather than in the delegated card handler,
+    // because once a poster upgrades to a live <model-viewer>, `_upgradeThumb` puts its own
+    // pointerdown/pointerup pair on the viewer so a DRAG rotates the dish and only a real
+    // tap opens the modal. A delegated click on the card would fight that: every rotation
+    // ends in a click that bubbles, and the modal opens when the diner was only turning
+    // the plate round.
     document.querySelectorAll(".thumb-img").forEach(function (img) {
       const idx = parseInt(img.dataset.globalIdx, 10);
-      if (!(window.menuItems[idx] || {}).is_3d) return;
-      img.addEventListener("click", function () { openModal(idx, window.menuItems); });
-    });
-    // The name and the price are not the plate, so tapping them is unambiguous and opens
-    // the modal directly.
-    document.querySelectorAll(".menu-item[data-idx]").forEach(function (el) {
-      const idx = parseInt(el.dataset.idx, 10);
-      if (!(window.menuItems[idx] || {}).is_3d) return;
-      el.querySelectorAll(".item-name, .price").forEach(function (hit) {
-        hit.style.cursor = "pointer";
-        hit.addEventListener("click", function (ev) {
-          ev.stopPropagation();
-          openModal(idx, window.menuItems);
-        });
-      });
-    });
-    document.querySelectorAll(".ar-btn").forEach(function (b) {
-      b.addEventListener("click", function (ev) {
+      const item = window.menuItems[idx];
+      if (!item) return;
+      img.addEventListener("click", function (ev) {
         ev.stopPropagation();
-        openAR(parseInt(b.dataset.idx, 10), window.menuItems);
+        if (item.is_3d) openModal(idx, window.menuItems);
+        else if (item.thumbnail_url) {
+          openLightbox(item.thumbnail_url, window.t(item, "name"), item, idx);
+        }
       });
+    });
+    // Every quantity control on the page starts in the right state - the basket survives a
+    // filter change, and a diner who added two coffees and then tapped "Coffee" must still
+    // see 2.
+    document.querySelectorAll(".qty-ctrl[data-idx]").forEach(function (c) {
+      if (typeof window._syncQtyCtrl === "function") window._syncQtyCtrl(c.dataset.idx);
     });
     if (typeof setARButtonsState === "function") setARButtonsState(false);
   };
+})();
+
+/* ---- platform.js ---- */
+// platform.js — the features every menu has, whatever it looks like.
+//
+// **This file exists because I stubbed these instead of porting them.** `shim.js` used to
+// contain:
+//
+//     window.addToBasket   = function () {};              // the basket
+//     window._variantsHtml = function () { return ""; };  // glass / bottle
+//
+// ...plus nine fake hidden <div>s standing in for the photo lightbox. Those stubs let
+// `viewer.js` boot without crashing, which is all they were written to do. They also
+// removed half the product, and the page still looked plausible, so nothing caught it
+// until Temo opened it on a phone in a restaurant:
+//
+//   > "this is not a copy of og monday greens it is something that tried to be a copy of a
+//   >  copy and failed. and considering u have access to the files u should have done
+//   >  better."
+//
+// He also drew the line this file is named after:
+//
+//   > "make sure to differentiate what are normal website features and what are template
+//   >  additions, like add to cart, category sorted, 3d on top, 3d and AR view, show to
+//   >  waiter, view the cart, these and some others are baisc features not template
+//   >  specific."
+//
+// So: **platform features live here and every template gets them.** Add to cart, view the
+// cart, show to waiter, variants, add-ons, the quantity stepper. A template changes the
+// palette, the fonts, the hero and the card shape - it does not get to not have a basket.
+// Nothing in this file reads `data-template`, and that is the point: there is no way for
+// a template to switch a feature off, because there is no switch.
+//
+// (Category filtering, the 3D-first ordering, the theme switch and the language switch
+// are the other platform features; they live in `page.js` because they are about the LIST
+// rather than about a dish.)
+//
+// ── what is verbatim and what is adapted ─────────────────────────────────────────────
+//
+// The behaviour is the platform's, function for function, from `index.html`. Two things
+// are genuinely different, and both are because our page is rendered on the SERVER:
+//
+//   1. **Wiring is delegated.** `renderMenuCard` attaches nine listeners to every card as
+//      it builds it. Our cards are already in the HTML when this file runs, so there is
+//      nothing to attach them during. One listener on `#menu-list` does the same job for
+//      170 cards, and keeps working when the filter shows and hides them.
+//
+//   2. **Items come from `window.__ITEMS`.** Their `menuItems` array is what the fetch
+//      returned. Ours is rebuilt from the cards (see `shim.js`), which carries everything
+//      except variants and add-ons - those are structured data with prices in them and
+//      cannot be read back out of markup honestly. So the server emits exactly those two
+//      fields, for the ~18% of dishes that have them, and nothing else is duplicated.
+//
+// Three tenant special cases from the original are deliberately dropped: Mugsy's basket
+// thumbnails, BAOMA's empty-basket suppression, and Burger Planet's three hardcoded
+// delivery links. Each is one restaurant's arrangement, not a platform feature.
+
+(function () {
+  "use strict";
+
+  // ── selections, shared with the lightbox and the modal ────────────────────────────
+  // Kept on `window` because `viewer.js` reads them by those exact names. A diner who
+  // picks "Bottle" on the card and then opens the dish sees Bottle selected there too;
+  // that is one selection, stored once.
+  window.__variantSel = window.__variantSel || {};
+  window.__addonSel = window.__addonSel || {};
+
+  // The basket. A Map keyed by `_basketKey` - not by item index - because one dish can be
+  // in the basket twice with different sizes, and those are two lines, not one.
+  window._basket = window._basket || new Map();
+
+  // Which dishes this diner has already seen in 3D or in AR. `viewer.js` writes to them
+  // and `addToBasket` reads them, because "did 3D make them order it" is the one number
+  // this whole company is a bet on.
+  window._arViewedItems = window._arViewedItems || new Set();
+  window._modalViewedItems = window._modalViewedItems || new Set();
+  window._xrAddedKeys = window._xrAddedKeys || new Set();
+
+  const $ = (id) => document.getElementById(id);
+  const esc = window._escapeHtml;
+
+  // ── prices ────────────────────────────────────────────────────────────────────────
+  // Their arithmetic, unchanged. Prices are free text on a menu ("16 / 70 ₾", "from 12"),
+  // so the basket parses the digits out rather than assuming a number - and a line that
+  // parses to nothing contributes nothing rather than NaN, which would poison the total.
+
+  function _parsePrice(str) {
+    return parseFloat(String(str).replace(/[^\d.]/g, "")) || 0;
+  }
+  function _fmtPrice(num) {
+    const n = Math.round(num * 10) / 10;
+    return n + " ₾";
+  }
+  // Unit price of a basket line = item price + any selected add-on prices.
+  function _addonSum(entry) {
+    const list = (entry.item && entry.item.addons) || [];
+    return (entry.aIdx || []).reduce(
+      (s, i) => s + _parsePrice(list[i] && list[i].price), 0);
+  }
+  // Base price = the chosen variant's price when the item has variants, otherwise the
+  // item's own price. Add-on prices stack on top of either.
+  function _lineBase(entry) {
+    const item = entry.item;
+    if (entry.vIdx != null && item.variants && item.variants[entry.vIdx]) {
+      return _parsePrice(item.variants[entry.vIdx].price);
+    }
+    return _parsePrice(item.price);
+  }
+  function _lineUnit(entry) { return _lineBase(entry) + _addonSum(entry); }
+
+  function _basketTotal() {
+    let s = 0;
+    window._basket.forEach((entry) => { s += _lineUnit(entry) * entry.qty; });
+    return s;
+  }
+  function _basketCount() {
+    let n = 0;
+    window._basket.forEach(({ qty }) => { n += qty; });
+    return n;
+  }
+
+  // Russian counts three ways and getting it wrong reads as a machine wrote the menu.
+  function _ruPlural(n, one, few, many) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+  }
+
+  // ── the key ───────────────────────────────────────────────────────────────────────
+  // "12", "12~v1", "12~v1#0,3". A dish, optionally a size, optionally a set of add-ons.
+  // Sorted before joining so that picking bacon then cheese and cheese then bacon are the
+  // same line rather than two.
+  function _basketKey(globalIdx, vIdx, aIdxSorted) {
+    let k = String(globalIdx);
+    if (typeof vIdx === "number" && vIdx >= 0) k += "~v" + vIdx;
+    if (aIdxSorted && aIdxSorted.length) k += "#" + aIdxSorted.join(",");
+    return k;
+  }
+
+  // ── markup the modal and the lightbox ask for ─────────────────────────────────────
+  // `viewer.js` calls all four of these while building its panels. They were the stubs
+  // that returned "".
+
+  // A saved customer choice wins; otherwise choose the first choice with a photo. That
+  // prevents a pictureless first choice (for example Veggie) from becoming the default
+  // card state when the available photo is Chicken.
+  function _variantIndex(item, globalIdx) {
+    const s = window.__variantSel[globalIdx];
+    if (typeof s === "number" && item.variants && item.variants[s]) return s;
+    const pictured = (item.variants || []).findIndex(
+      (v) => v && v.image_url);
+    return pictured >= 0 ? pictured : 0;
+  }
+
+  function _selectedVariantImage(item, globalIdx) {
+    if (!item.variants || !item.variants.length) return "";
+    const v = item.variants[_variantIndex(item, globalIdx)];
+    return (v && v.image_url) || "";
+  }
+
+  // Single-select size/price pills (e.g. Glass / Bottle). Empty -> nothing shown.
+  function _variantsHtml(item, globalIdx) {
+    if (!item.variants || !item.variants.length) return "";
+    const sel = _variantIndex(item, globalIdx);
+    const rows = item.variants.map(function (v, i) {
+      const n = esc(window.__lang === "ka" && v.ka ? v.ka : (v.en || v.ka || ""));
+      const p = esc(v.price || "");
+      const on = i === sel;
+      return `<button type="button" class="variant${on ? " selected" : ""}" data-vi="${i}"` +
+        ` role="radio" aria-checked="${on}">` +
+        `<span class="variant-name">${n}</span>` +
+        `<span class="variant-price">${p}</span></button>`;
+    }).join("");
+    return `<div class="variants" role="radiogroup">${rows}</div>`;
+  }
+
+  function _addonsHtml(item, globalIdx) {
+    if (!item.addons || !item.addons.length) return "";
+    const sel = window.__addonSel[globalIdx] || [];
+    const rows = item.addons.map(function (a, i) {
+      const n = esc(window.__lang === "ka" && a.ka ? a.ka : (a.en || a.ka || ""));
+      const p = esc(a.price || "");
+      const on = sel.indexOf(i) >= 0;
+      return `<button type="button" class="addon${on ? " selected" : ""}" data-ai="${i}"` +
+        ` aria-pressed="${on}">` +
+        `<span class="addon-l"><span class="addon-check" aria-hidden="true"></span>` +
+        `<span class="addon-name">${n}</span></span>` +
+        `<span class="addon-price">+${p}</span></button>`;
+    }).join("");
+    return `<div class="addons">${rows}</div>`;
+  }
+
+  // Add-to-basket control. Shared by photo cards and text-only cards so the two cannot
+  // drift apart. Starts as the cart button; `_syncQtyCtrl` swaps in the stepper once the
+  // item is in the basket. The server renders one of these into every card - this copy is
+  // for the modal and the lightbox, which build their panels at runtime.
+  const CART_SVG =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+    ' stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>' +
+    '<path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>';
+
+  function _qtyCtrlHtml(globalIdx) {
+    return `<div class="qty-ctrl" data-idx="${globalIdx}">` +
+      `<button class="qty-add-btn" aria-label="Add to basket">${CART_SVG}</button>` +
+      `<div class="qty-stepper">` +
+      `<button class="qty-dec">&#8722;</button>` +
+      `<span class="qty-num">1</span>` +
+      `<button class="qty-inc">+</button>` +
+      `</div></div>`;
+  }
+
+  // ── the basket ────────────────────────────────────────────────────────────────────
+
+  function _updateBasketBar() {
+    const count = _basketCount();
+    const bar = $("basket-bar");
+    if (!bar) return;
+    const show = count > 0;
+    bar.classList.toggle("visible", show);
+    document.body.classList.toggle("basket-bar-visible", show);
+    if (!show) return;
+    $("basket-bar-count").textContent = count + " " + (
+      window.__lang === "ka" ? "პროდუქტი"
+        : window.__lang === "ru" ? _ruPlural(count, "товар", "товара", "товаров")
+          : count === 1 ? "item" : "items");
+    $("basket-bar-total").textContent = _fmtPrice(_basketTotal());
+  }
+
+  // Every control for one basket line, wherever it is on the page: the card, the 3D
+  // modal, the lightbox. They share a `data-idx`, so they cannot disagree about a
+  // quantity - which is the whole reason the platform keyed them that way.
+  function _syncQtyCtrl(key) {
+    const entry = window._basket.get(key);
+    const qty = entry ? entry.qty : 0;
+    document.querySelectorAll('.qty-ctrl[data-idx="' + key + '"]').forEach(function (ctrl) {
+      const addBtn = ctrl.querySelector(".qty-add-btn");
+      const stepper = ctrl.querySelector(".qty-stepper");
+      const numEl = ctrl.querySelector(".qty-num");
+      if (!addBtn || !stepper) return;
+      if (qty > 0) {
+        addBtn.style.display = "none";
+        stepper.classList.add("visible");
+        if (numEl) numEl.textContent = qty;
+      } else {
+        addBtn.style.display = "";
+        stepper.classList.remove("visible");
+      }
+    });
+  }
+
+  function addToBasket(key, item, aIdx, vIdx) {
+    if (!item) return;
+    const isNew = !window._basket.has(key);
+    if (!isNew) window._basket.get(key).qty++;
+    else window._basket.set(key, {
+      item: item, qty: 1, aIdx: aIdx || [],
+      vIdx: typeof vIdx === "number" ? vIdx : null,
+    });
+    if (isNew) {
+      // The number the company is a bet on: did the dish they added come after they
+      // looked at it in 3D, or in AR, or neither.
+      const bIdx = parseInt(key, 10);
+      window.track("basket_add", bIdx, {
+        after_ar: window._arViewedItems.has(bIdx),
+        after_3d: window._modalViewedItems.has(bIdx),
+      });
+    }
+    _syncQtyCtrl(key);
+    _updateBasketBar();
+    if (_panelOpen()) _renderBasketPanel();
+  }
+
+  function _setQty(key, qty) {
+    if (qty <= 0) {
+      if (window._basket.has(key)) window.track("basket_remove", parseInt(key, 10));
+      window._basket.delete(key);
+    } else if (window._basket.has(key)) {
+      window._basket.get(key).qty = qty;
+    }
+    _syncQtyCtrl(key);
+    _updateBasketBar();
+    if (_panelOpen()) _renderBasketPanel();
+  }
+
+  function _panelOpen() {
+    const p = $("basket-panel");
+    return !!p && p.style.display === "flex";
+  }
+
+  function _renderBasketPanel() {
+    const u = window.UI[window.__lang] || window.UI.en;
+    const box = $("basket-items");
+    if (!box) return;
+    box.innerHTML = "";
+    $("basket-title").textContent = u.basketTitle;
+    $("basket-clear").textContent = u.clearBasket;
+    $("basket-close").textContent = u.close;
+    $("basket-total-label").textContent = u.total;
+    $("basket-waiter-label").textContent = u.showWaiter;
+    if (window._basket.size === 0) {
+      box.innerHTML = `<p class="basket-empty">${esc(u.emptyBasket)}</p>`;
+    } else {
+      window._basket.forEach(function (entry, key) {
+        const item = entry.item, qty = entry.qty, aIdx = entry.aIdx, vIdx = entry.vIdx;
+        const line = _lineUnit(entry) * qty;
+        const v = vIdx != null && item.variants && item.variants[vIdx];
+        const varTxt = v
+          ? (window.__lang === "ka" && v.ka ? v.ka : (v.en || v.ka || "")) : "";
+        const addTxt = (aIdx && aIdx.length)
+          ? aIdx.map(function (i) {
+            const a = (item.addons || [])[i];
+            return a ? (window.__lang === "ka" && a.ka ? a.ka : (a.en || a.ka)) : "";
+          }).filter(Boolean).join(", ")
+          : "";
+        const row = document.createElement("div");
+        row.className = "basket-item";
+        row.innerHTML =
+          `<div class="basket-item-info">` +
+          `<span class="basket-item-name">${esc(window.t(item, "name"))}</span>` +
+          (varTxt ? `<span class="basket-item-addons">${esc(varTxt)}</span>` : "") +
+          (addTxt ? `<span class="basket-item-addons">+ ${esc(addTxt)}</span>` : "") +
+          `</div>` +
+          `<div class="basket-qty">` +
+          `<button class="qty-btn" data-key="${esc(key)}" data-delta="-1">&#8722;</button>` +
+          `<span class="qty-count">${qty}</span>` +
+          `<button class="qty-btn" data-key="${esc(key)}" data-delta="1">+</button>` +
+          `</div>` +
+          `<span class="basket-item-price">${_fmtPrice(line)}</span>`;
+        box.appendChild(row);
+      });
+    }
+    $("basket-total").textContent = _fmtPrice(_basketTotal());
+  }
+
+  function _openBasket() {
+    window.track("basket_open");
+    _renderBasketPanel();
+    const panel = $("basket-panel");
+    panel.style.display = "flex";
+    requestAnimationFrame(function () { panel.classList.add("active"); });
+    document.body.style.overflow = "hidden";
+  }
+  function _closeBasket() {
+    const panel = $("basket-panel");
+    panel.classList.remove("active");
+    setTimeout(function () { panel.style.display = "none"; }, 230);
+    document.body.style.overflow = "";
+  }
+
+  function _clearBasket(counted) {
+    if (counted && window._basket.size > 0) {
+      // The one place a diner tells us the offer was wrong: a full basket, abandoned.
+      const snapshot = [];
+      let total = 0;
+      window._basket.forEach(function (entry) {
+        snapshot.push({
+          name: entry.item.name, qty: entry.qty, price: _fmtPrice(_lineUnit(entry)),
+        });
+        total += _lineUnit(entry) * entry.qty;
+      });
+      window.track("basket_clear", null, {
+        item_count: snapshot.length, items: snapshot,
+        total_gel: Math.round(total * 10) / 10,
+      });
+    }
+    const keys = Array.from(window._basket.keys());
+    window._basket.clear();
+    keys.forEach(_syncQtyCtrl);
+    _updateBasketBar();
+  }
+
+  // ── show to staff ─────────────────────────────────────────────────────────────────
+  // The basket is packed into a URL fragment and drawn as a QR. Staff scan it and get the
+  // order on their own phone, resolved against the LIVE menu so prices are always current.
+  // Everything is client-side and the library loads on the first tap, so a diner who never
+  // orders never downloads it.
+
+  let _qrLibPromise = null;
+  function _loadQRLib() {
+    if (window.qrcode) return Promise.resolve();
+    if (_qrLibPromise) return _qrLibPromise;
+    _qrLibPromise = new Promise(function (resolve, reject) {
+      const s = document.createElement("script");
+      s.src = "/vendor/qrcode.js";
+      s.onload = function () { resolve(); };
+      s.onerror = function () { _qrLibPromise = null; reject(new Error("qr lib failed")); };
+      document.head.appendChild(s);
+    });
+    return _qrLibPromise;
+  }
+
+  function _packOrder() {
+    const it = [];
+    window._basket.forEach(function (entry) {
+      const item = entry.item;
+      // The dish's REAL id, not its position. A position is meaningless to the staff page,
+      // which re-resolves every line against the live menu - and meaningless five minutes
+      // later if the owner hides a dish.
+      if (!item || !item.id) return;
+      // [id, qty] · [id, qty, [add-on idx]] · [id, qty, [add-on idx], variantIdx]
+      const hasA = entry.aIdx && entry.aIdx.length;
+      const hasV = typeof entry.vIdx === "number";
+      if (hasV) it.push([item.id, entry.qty, hasA ? entry.aIdx : [], entry.vIdx]);
+      else if (hasA) it.push([item.id, entry.qty, entry.aIdx]);
+      else it.push([item.id, entry.qty]);
+    });
+    const payload = {
+      v: 1,
+      r: document.documentElement.dataset.tenant || "",
+      ts: Date.now(),
+      it: it,
+    };
+    // UTF-8-safe base64url. Georgian dish names are multi-byte and plain btoa throws on
+    // them; the staff page decodes with the mirror of this.
+    const json = JSON.stringify(payload);
+    const bytes = new TextEncoder().encode(json);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return { b64: b64, count: it.length };
+  }
+
+  async function _showWaiterQR() {
+    const overlay = $("waiter-overlay");
+    const box = $("waiter-qr");
+    const u = window.UI[window.__lang] || window.UI.en;
+    const packed = _packOrder();
+    if (!packed.count) return;          // empty basket -> nothing to show
+
+    $("waiter-overlay-title").textContent = u.showWaiter;
+    $("waiter-overlay-hint").textContent = u.waiterHint;
+    box.innerHTML = "";
+    overlay.classList.add("active");
+    document.body.style.overflow = "hidden";
+
+    try {
+      await _loadQRLib();
+      const url = location.origin + "/w/" +
+        encodeURIComponent(document.documentElement.dataset.tenant || "") +
+        "#" + packed.b64;
+      // Prefer 'M' (~15% error correction - most reliable scan across a table, in the
+      // dark, on a cracked screen). A very large basket exceeds 'M' capacity, so fall
+      // back to 'L' (~7%, more data) before giving up.
+      let svg = null;
+      for (const ecc of ["M", "L"]) {
+        try {
+          const qr = window.qrcode(0, ecc);   // 0 = auto-size version
+          qr.addData(url);
+          qr.make();
+          svg = qr.createSvgTag({ cellSize: 6, margin: 4, scalable: true });
+          break;
+        } catch (_capacity) { /* try the next, lower-ECC level */ }
+      }
+      if (!svg) throw new Error("too large for a single code");
+      box.innerHTML = svg;
+      window.track("waiter_qr_shown", null, { item_count: packed.count });
+    } catch (err) {
+      box.innerHTML = '<p style="color:#b00020;font-size:0.85rem;padding:24px 12px;">' +
+        "This order is too large for one code - please call the waiter over.</p>";
+    }
+  }
+
+  function _closeWaiterOverlay() {
+    $("waiter-overlay").classList.remove("active");
+    document.body.style.overflow = "";
+  }
+
+  // ── published, because the ported viewer calls every one of these by name ──────────
+  window._parsePrice = _parsePrice;
+  window._fmtPrice = _fmtPrice;
+  window._lineUnit = _lineUnit;
+  window._basketTotal = _basketTotal;
+  window._basketCount = _basketCount;
+  window._ruPlural = _ruPlural;
+  window._basketKey = _basketKey;
+  window._variantIndex = _variantIndex;
+  window._selectedVariantImage = _selectedVariantImage;
+  window._variantsHtml = _variantsHtml;
+  window._addonsHtml = _addonsHtml;
+  window._qtyCtrlHtml = _qtyCtrlHtml;
+  window._syncQtyCtrl = _syncQtyCtrl;
+  window._updateBasketBar = _updateBasketBar;
+  window._renderBasketPanel = _renderBasketPanel;
+  window.addToBasket = addToBasket;
+  window._setQty = _setQty;
+  window._openBasket = _openBasket;
+  window._closeBasket = _closeBasket;
+  window._showWaiterQR = _showWaiterQR;
+
+  // ── wiring ────────────────────────────────────────────────────────────────────────
+  //
+  // Everything below binds to markup that `chrome.html` puts in the page. If any of it is
+  // missing the listeners throw, and a throw HERE would take `viewer.js` down with it -
+  // which is exactly the failure that shipped. So it is wrapped, and it says which id it
+  // could not find rather than dying anonymously on line 18 of something else.
+
+  function wire() {
+    const list = $("menu-list");
+    if (list) {
+      // One listener for every card, instead of nine per card. The cards are in the HTML
+      // before this file runs, and the filter hides and shows them rather than rebuilding
+      // them, so there is no moment at which a card needs its own listeners attached.
+      list.addEventListener("click", onCardClick);
+    }
+
+    $("basket-bar").addEventListener("click", _openBasket);
+    $("basket-bar-delete").addEventListener("click", function (e) {
+      e.stopPropagation();
+      _clearBasket(false);
+    });
+    $("basket-close").addEventListener("click", _closeBasket);
+    $("basket-panel").addEventListener("click", function (e) {
+      if (e.target === $("basket-panel")) _closeBasket();
+    });
+    $("basket-clear").addEventListener("click", function () {
+      _clearBasket(true);
+      _renderBasketPanel();
+    });
+    $("basket-items").addEventListener("click", function (e) {
+      const btn = e.target.closest(".qty-btn");
+      if (!btn) return;
+      const entry = window._basket.get(btn.dataset.key);
+      if (entry) _setQty(btn.dataset.key, entry.qty + parseInt(btn.dataset.delta, 10));
+    });
+
+    $("basket-waiter-btn").addEventListener("click", function (e) {
+      e.stopPropagation();
+      _showWaiterQR();
+    });
+    $("waiter-overlay-close").addEventListener("click", _closeWaiterOverlay);
+    $("waiter-overlay").addEventListener("click", function (e) {
+      if (e.target === $("waiter-overlay")) _closeWaiterOverlay();
+    });
+
+    // Add to basket from inside AR, while the dish is standing on the diner's table.
+    // Tapping it again removes it, but only if AR is what put it there - a dish added
+    // from the menu and then seen in AR must not vanish on a stray tap.
+    $("xr-add-btn").addEventListener("click", function (e) {
+      e.stopPropagation();
+      const item = window.XR && window.XR.getCurrentItem && window.XR.getCurrentItem();
+      if (!item || !window.menuItems) return;
+      const idx = window.menuItems.indexOf(item);
+      if (idx < 0) return;
+      const key = String(idx);
+      if (!window._basket.has(key)) {
+        addToBasket(key, item);
+        window._xrAddedKeys.add(key);
+      } else if (window._xrAddedKeys.has(key)) {
+        _setQty(key, 0);
+        window._xrAddedKeys.delete(key);
+      }
+      $("xr-add-btn").classList.toggle("in-basket", window._basket.has(key));
+    });
+  }
+
+  /** Every tap inside the menu list. The platform's per-card handlers, in one place.
+   *
+   *  Order matters and is theirs: the quantity controls and the option pills claim the
+   *  tap first, because a diner adjusting a size is not asking to open the dish.
+   */
+  function onCardClick(ev) {
+    const card = ev.target.closest(".menu-item[data-idx]");
+    if (!card) return;
+    const idx = parseInt(card.dataset.idx, 10);
+    const item = (window.menuItems || [])[idx];
+    if (!item) return;
+
+    const hasV = !!(item.variants && item.variants.length);
+    const hasA = !!(item.addons && item.addons.length);
+
+    // ── the quantity control ──
+    const add = ev.target.closest(".qty-add-btn");
+    if (add) {
+      ev.stopPropagation();
+      if (hasV || hasA) {
+        // A dish with sizes or add-ons always adds through "+", because each combination
+        // is its own basket line and the inline stepper cannot express which one.
+        const sel = (window.__addonSel[idx] || []).slice().sort((a, b) => a - b);
+        const vSel = hasV ? _variantIndex(item, idx) : null;
+        addToBasket(_basketKey(idx, vSel, sel), item, sel, vSel);
+        add.classList.remove("just-added");
+        void add.offsetWidth;                     // restart the animation
+        add.classList.add("just-added");
+      } else {
+        addToBasket(String(idx), item);
+      }
+      return;
+    }
+    if (ev.target.closest(".qty-dec")) {
+      ev.stopPropagation();
+      const entry = window._basket.get(String(idx));
+      if (entry) _setQty(String(idx), entry.qty - 1);
+      return;
+    }
+    if (ev.target.closest(".qty-inc")) {
+      ev.stopPropagation();
+      addToBasket(String(idx), item);
+      return;
+    }
+
+    // ── size pills ──
+    const vBtn = ev.target.closest(".variant");
+    if (vBtn) {
+      ev.stopPropagation();
+      const vi = parseInt(vBtn.dataset.vi, 10);
+      window.__variantSel[idx] = vi;
+      card.querySelectorAll(".variant").forEach(function (o) {
+        const on = o === vBtn;
+        o.classList.toggle("selected", on);
+        o.setAttribute("aria-checked", on ? "true" : "false");
+      });
+      // The card price follows the size. A drink whose item price reads "16 / 70" is
+      // showing a summary; the real number is the one the diner just chose.
+      const pv = item.variants[vi];
+      const priceEl = card.querySelector(".price");
+      if (priceEl && pv) priceEl.textContent = pv.price || "";
+      // A pictureless choice keeps the main photo; a pictured one swaps this card's photo
+      // and never creates a second dish.
+      const img = _selectedVariantImage(item, idx);
+      if (img) {
+        const mv = card.querySelector("model-viewer");
+        if (mv) mv.remove();
+        const wrap = card.querySelector(".thumb-wrap");
+        if (wrap) wrap.classList.remove("thumb-model-ready");
+        const thumb = card.querySelector(".thumb-img");
+        if (thumb) {
+          thumb.dataset.model = "";
+          delete thumb.dataset.upgraded;
+          thumb.src = img;
+        }
+      }
+      return;
+    }
+
+    // ── add-on checkboxes ──
+    const aBtn = ev.target.closest(".addon");
+    if (aBtn) {
+      ev.stopPropagation();
+      const ai = parseInt(aBtn.dataset.ai, 10);
+      const arr = window.__addonSel[idx] || (window.__addonSel[idx] = []);
+      const at = arr.indexOf(ai);
+      const on = at < 0;
+      if (on) arr.push(ai); else arr.splice(at, 1);
+      aBtn.classList.toggle("selected", on);
+      aBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      return;
+    }
+
+    // ── the AR button ──
+    if (ev.target.closest(".ar-btn")) {
+      ev.stopPropagation();
+      window.openAR(idx, window.menuItems);
+      return;
+    }
+
+    // ── everything else opens the dish ──
+    //
+    // A 3D dish opens the 3D viewer; a photo dish opens the photo. Both are the platform's
+    // behaviour, and the thumbnail is deliberately NOT handled here: once a poster
+    // upgrades to a live <model-viewer>, `_upgradeThumb` puts its own pointer pair on it
+    // so that a DRAG rotates the dish and only a real tap opens the modal. Handling the
+    // thumbnail here as well would fight that - every rotation ends in a click that
+    // bubbles, and the modal would open when the diner was turning the plate round.
+    if (ev.target.closest(".thumb-wrap")) return;
+
+    if (item.is_3d) window.openModal(idx, window.menuItems);
+    else if (item.thumbnail_url) window.openLightbox(item.thumbnail_url,
+      window.t(item, "name"), item, idx);
+  }
+
+  // Bound after the DOM exists but before `__bootViewer` runs, so a diner who taps a card
+  // in the first second gets the same behaviour as one who waits.
+  function start() {
+    try {
+      wire();
+      _updateBasketBar();
+    } catch (err) {
+      // Named loudly on purpose. The whole reason this file exists is that a missing
+      // element once produced a TypeError with no name on it, and the visible symptom was
+      // "the menu is fine but nothing works" for two weeks.
+      window.__platformError = err;
+      console.error("[betareal] platform layer failed to wire - is chrome.html in the " +
+        "page? Every basket, lightbox and AR control needs its markup present.", err);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
 })();
 
 /* ---- viewer.js ---- */
@@ -2391,104 +3200,208 @@
         }
 
 /* ---- page.js ---- */
-// page.js — the menu page's own behaviour: category filtering and the language switch.
+// page.js — the platform features that are about the LIST rather than about a dish.
 //
-// NOT ported. `viewer.js` and `xr.js` are the platform's code because they are the part
-// that already works on real phones and would be idiotic to rewrite. This is the other
-// kind: UI glue that is a dozen lines when written against markup we control, and would
-// be several hundred if lifted out of an app that also has a basket, three fixture
-// loaders, drink categories and per-tenant special cases woven through the same
-// functions.
+// Category filtering, the 3D-first ordering, the day/night switch and the language switch.
+// Like `platform.js`, every one of these is a feature every menu has: a template changes
+// how they LOOK, never whether they exist. Nothing here reads `data-template`.
 //
-// The behaviour it reproduces is the platform's, and two details are deliberate:
+// ── why this is adapted rather than copied, and where the line is ────────────────────
 //
-//   The 3D pill is a SENTINEL (`__ar3d`), not a category name, so a restaurant with a
-//   real category called "3D" does not collide with it.
+// The platform filters by re-rendering: `applyFilter` calls `renderMenuList(cat)`, which
+// empties `#menu-list` and rebuilds every card from the array it fetched. It has to -
+// there is nothing in its HTML until JavaScript puts it there.
 //
-//   A 3D dish appears in BOTH the 3D pill and its own category. Temo chose that
-//   explicitly after the platform's first version moved 3D items out of their categories
-//   and diners could not find them any more.
+// Our page arrives with all 170 cards already in it, grouped into `.cat-section`s, because
+// that is the whole point of rendering on the server. So the same behaviour is reached by
+// showing and hiding what is already there. The RULES are theirs, exactly:
+//
+//   `__ar3d` is a sentinel, not a category name, so a restaurant with a real category
+//   called "3D" cannot collide with it.
+//
+//   A 3D dish appears in BOTH the 3D pill and its own category. Temo chose full
+//   duplication after the platform's first version moved 3D items out of their categories
+//   and diners stopped finding them.
+//
+//   In the "All" view the 3D block leads and then every category follows in menu order.
+//   Inside a single selected category, 3D dishes come first. Both are `appendPrioritizedItems`
+//   and `renderMenuList` in index.html, and both are why Temo's "3d does not appear on
+//   top" was a real report and not a preference.
+//
+// One thing is NOT a copy and is marked where it happens: the sections use
+// `display: contents`, so the `hidden` attribute cannot hide them - the author rule wins
+// over the UA one. The cards and the header are hidden individually instead.
 
 (function () {
   "use strict";
 
-  const $$ = (s) => [].slice.call(document.querySelectorAll(s));
+  const $$ = (s, root) => [].slice.call((root || document).querySelectorAll(s));
+  const $ = (id) => document.getElementById(id);
 
-  // ── categories ────────────────────────────────────────────────────
+  // The virtual category. Display-only: its cards carry the same `data-idx` as the ones in
+  // the real category, so the basket, AR and analytics treat them as one dish.
+  const AR_CAT = "__ar3d";
+
+  // ── categories ────────────────────────────────────────────────────────────────────
+
+  let _activeFilter = "";
+
+  /** Everything in one section that the filter turns on and off.
+   *
+   *  Not the section element itself: `.cat-section { display: contents }` is an AUTHOR
+   *  rule and `[hidden]` is a user-agent one, so author wins and a hidden section stays
+   *  perfectly visible. That is a silent failure - the filter appears to do nothing, which
+   *  is exactly what Temo reported - so the children are hidden instead, and this comment
+   *  is here so nobody "simplifies" it back.
+   */
+  function partsOf(section) {
+    return $$(".menu-item, .category-header, .ar-featured-banner", section);
+  }
+
+  /** 3D dishes first, in a single selected category. The platform's `appendPrioritizedItems`.
+   *
+   *  The original order is captured once, so switching back to "All" restores the
+   *  restaurant's own sequence rather than leaving a category permanently re-sorted.
+   */
+  function orderSection(section, arFirst) {
+    const cards = $$(".menu-item", section);
+    if (!cards.length) return;
+    if (!section.__order) section.__order = cards.slice();
+    const want = arFirst
+      ? section.__order.filter((c) => c.dataset.glb)
+        .concat(section.__order.filter((c) => !c.dataset.glb))
+      : section.__order;
+    // Only touch the DOM when the order actually differs. Re-appending 20 cards on every
+    // pill tap is 20 layout invalidations for nothing.
+    const now = $$(".menu-item", section);
+    if (want.length === now.length && want.every((c, i) => c === now[i])) return;
+    for (const card of want) section.appendChild(card);
+  }
+
   function applyFilter(cat) {
-    for (const card of $$(".menu-item")) {
-      const mine = card.dataset.cat || "";
-      const is3d = !!card.dataset.glb;
-      card.hidden = !(cat === "" || (cat === "__ar3d" ? is3d : mine === cat));
+    const sections = $$(".cat-section");
+    // A pill for a category that no longer has anything in it falls back to All, rather
+    // than showing a diner an empty menu.
+    if (cat && cat !== AR_CAT && !sections.some((s) => s.dataset.cat === cat)) cat = "";
+    _activeFilter = cat;
+
+    for (const section of sections) {
+      const mine = section.dataset.cat || "";
+      const on = cat === "" || mine === cat;
+      for (const el of partsOf(section)) el.hidden = !on;
+      // 3D first only inside a single selected category. In the All view the 3D block
+      // above already leads, and the categories below keep the owner's own order.
+      orderSection(section, on && cat !== "" && cat !== AR_CAT);
     }
-    // A section heading with nothing under it is worse than no heading, and the
-    // platform's list has none - the cards carry their own category.
-    const bar = document.getElementById("cat-filter");
+
+    const bar = $("cat-filter");
     if (bar) {
-      for (const p of bar.querySelectorAll(".cat-pill")) {
+      for (const p of $$(".cat-pill", bar)) {
         p.classList.toggle("active", (p.dataset.cat || "") === cat);
       }
     }
+    // The AR buttons reset to their idle label: a filter change can hide the dish whose
+    // model was mid-load, and a button left saying "Loading..." never stops.
+    if (typeof setARButtonsState === "function") setARButtonsState(false);
   }
 
   function wireCategories() {
-    const bar = document.getElementById("cat-filter");
+    const bar = $("cat-filter");
     if (!bar) return;
     bar.addEventListener("click", (ev) => {
       const pill = ev.target.closest(".cat-pill");
-      if (pill) applyFilter(pill.dataset.cat || "");
+      if (!pill) return;
+      const cat = pill.dataset.cat || "";
+      window.track("category_filter", null, {
+        category: cat === AR_CAT ? "3D" : (pill.textContent || "All"),
+      });
+      applyFilter(cat);
+      // Back to the top of the list. Tapping "Desserts" after scrolling through Breakfast
+      // otherwise lands the diner halfway down a category they just chose.
+      const list = $("menu-list");
+      if (list && _activeFilter) {
+        const top = list.getBoundingClientRect().top + window.scrollY - 96;
+        window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+      }
     });
 
-    // The scroll arrows only mean anything when the pills actually overflow, which
-    // depends on the phone, the language and how many categories a restaurant has -
-    // so it is measured rather than assumed. Monday Greens has 26.
-    const scroller = bar;
+    // The scroll arrows only mean anything when the pills actually overflow, which depends
+    // on the phone, the language and how many categories a restaurant has - so it is
+    // measured rather than assumed. Monday Greens has 26.
     const left = document.querySelector(".cat-nav-l");
     const right = document.querySelector(".cat-nav-r");
     const sync = () => {
-      const over = scroller.scrollWidth > scroller.clientWidth + 4;
-      if (left) left.hidden = !over || scroller.scrollLeft <= 2;
+      const over = bar.scrollWidth > bar.clientWidth + 4;
+      if (left) left.hidden = !over || bar.scrollLeft <= 2;
       if (right) {
-        right.hidden =
-          !over ||
-          scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 2;
+        right.hidden = !over ||
+          bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 2;
       }
     };
     const nudge = (dir) =>
-      scroller.scrollBy({ left: dir * scroller.clientWidth * 0.7, behavior: "smooth" });
+      bar.scrollBy({ left: dir * bar.clientWidth * 0.7, behavior: "smooth" });
     if (left) left.addEventListener("click", () => nudge(-1));
     if (right) right.addEventListener("click", () => nudge(1));
-    scroller.addEventListener("scroll", sync, { passive: true });
+    bar.addEventListener("scroll", sync, { passive: true });
     addEventListener("resize", sync);
     sync();
   }
 
-  // ── language and theme ────────────────────────────────────────────
-  // Every translation is already in the page - the card carries `data-name-ka` and the
-  // server rendered the primary language into the text. Switching is a swap, not a
-  // re-fetch and not a re-render: a diner changing language must not watch the menu
-  // reload, which is the same principle as the whole no-flash design.
+  // ── language ──────────────────────────────────────────────────────────────────────
+  //
+  // Every translation is already in the page - the card carries `data-name-ka` and
+  // `data-desc-ka`, the pill carries `data-cat-ka`. Switching is a swap, not a re-fetch
+  // and not a re-render: a diner changing language must not watch the menu reload, which
+  // is the same principle as the whole no-flash design.
+
   const LABEL = { en: "EN", ka: "ქარ", ru: "RU" };
+  const CASED = { en: "En", ka: "Ka", ru: "Ru" };   // dataset keys: data-name-ka -> nameKa
 
   function applyLang(lang, langs) {
     document.documentElement.lang = lang;
     window.__lang = lang;
+    try { localStorage.setItem("br-lang", lang); } catch (_) { /* private mode */ }
+
+    const suffix = CASED[lang] || "";
     for (const card of $$(".menu-item")) {
-      const el = card.querySelector(".item-name");
-      if (!el) continue;
-      const alt = card.dataset["name" + lang.charAt(0).toUpperCase() + lang.slice(1)];
-      const wanted = lang === "en" ? card.dataset.name : alt || card.dataset.name;
-      if (wanted && el.textContent !== wanted) el.textContent = wanted;
+      const d = card.dataset;
+      const nameEl = card.querySelector(".item-name");
+      if (nameEl) {
+        const alt = lang === "en" ? d.name : (d["name" + suffix] || d.name);
+        if (alt && nameEl.textContent !== alt) nameEl.textContent = alt;
+      }
+      const descEl = card.querySelector(".ingredients");
+      if (descEl) {
+        const alt = lang === "en" ? d.desc : (d["desc" + suffix] || d.desc);
+        if (alt != null && descEl.textContent !== alt) descEl.textContent = alt;
+      }
     }
-    for (const p of $$(".cat-pill")) {
-      if (!p.dataset.catEn) p.dataset.catEn = p.textContent;
-      const ka = p.dataset.catKa;
-      p.textContent = lang !== "en" && ka ? ka : p.dataset.catEn;
+    for (const el of $$(".cat-pill, .category-header")) {
+      const d = el.dataset;
+      const alt = lang === "en" ? d.catEn : (d["cat" + suffix] || d.catEn);
+      if (alt && el.textContent !== alt) el.textContent = alt;
     }
-    const btn = document.getElementById("lang-toggle");
+    // The size and add-on pills carry their own translations, and the basket panel is
+    // built from `UI[lang]` the next time it opens.
+    for (const card of $$(".menu-item")) {
+      const idx = parseInt(card.dataset.idx, 10);
+      const item = (window.menuItems || [])[idx];
+      if (!item || !(item.variants || []).length && !(item.addons || []).length) continue;
+      const vBox = card.querySelector(".variants");
+      if (vBox && typeof window._variantsHtml === "function") {
+        vBox.outerHTML = window._variantsHtml(item, idx);
+      }
+      const aBox = card.querySelector(".addons");
+      if (aBox && typeof window._addonsHtml === "function") {
+        aBox.outerHTML = window._addonsHtml(item, idx);
+      }
+    }
+    if (typeof window._updateBasketBar === "function") window._updateBasketBar();
+
+    const btn = $("lang-toggle");
     if (btn && langs.length > 1) {
-      // The button always offers the OTHER language, so its label is never the one you
-      // are already reading.
+      // The button always offers the OTHER language, so its label is never the one you are
+      // already reading.
       const next = langs[(langs.indexOf(lang) + 1) % langs.length];
       btn.textContent = LABEL[next] || next.toUpperCase();
       btn.dataset.next = next;
@@ -2496,29 +3409,84 @@
   }
 
   function wireLanguage() {
-    const btn = document.getElementById("lang-toggle");
+    const btn = $("lang-toggle");
     if (!btn) return;
     const langs = (btn.dataset.langs || "en").split(",");
-    applyLang(langs[0], langs);
-    btn.addEventListener("click", () => applyLang(btn.dataset.next || langs[0], langs));
-  }
-
-  // Day/night. The platform stores the choice per visitor; the SERVER already rendered
-  // the tenant's default into `data-theme`, so this only has to flip it.
-  function wireTheme() {
-    const btn = document.getElementById("theme-toggle");
-    if (!btn) return;
-    const root = document.documentElement;
-    const sync = () => {
-      const day = root.dataset.theme === "day";
-      btn.textContent = day ? "Night" : "Day";
-    };
-    sync();
+    let start = langs[0];
+    try {
+      const saved = localStorage.getItem("br-lang");
+      if (saved && langs.indexOf(saved) >= 0) start = saved;
+    } catch (_) { /* private mode */ }
+    applyLang(start, langs);
     btn.addEventListener("click", () => {
-      root.dataset.theme = root.dataset.theme === "day" ? "night" : "day";
-      sync();
+      const to = btn.dataset.next || langs[0];
+      window.track("lang", null, { to });
+      applyLang(to, langs);
     });
   }
+
+  // ── day / night ───────────────────────────────────────────────────────────────────
+  //
+  // The button is an icon, not a word: `#theme-toggle` is a 34px fixed circle in the
+  // platform's stylesheet and a word does not fit in it. It shipped with the text "Night"
+  // in it, which is why Temo saw "a small button that does nothing" - it was doing
+  // something, into a box too small to show it.
+  //
+  // The icon shows what you will GET, not where you are: a sun while it is night.
+
+  const SVG_SUN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41' +
+    'M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
+  const SVG_MOON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">' +
+    '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+
+  // Scoped per restaurant. One phone can carry the menus of several restaurants on the
+  // same origin, and a diner who wants Corner in daylight has not asked for that at
+  // Monday Greens.
+  function themeKey() {
+    return "br-theme:" + (document.documentElement.dataset.tenant || "-");
+  }
+
+  function applyTheme(theme, persist) {
+    const root = document.documentElement;
+    const btn = $("theme-toggle");
+    root.setAttribute("data-theme", theme);
+    if (btn) {
+      btn.innerHTML = theme === "night" ? SVG_SUN : SVG_MOON;
+      const u = (window.UI && window.UI[window.__lang]) || (window.UI && window.UI.en) || {};
+      btn.setAttribute("aria-label",
+        theme === "night" ? (u.themeDay || "Day") : (u.themeNight || "Night"));
+    }
+    if (persist) {
+      try { localStorage.setItem(themeKey(), theme); } catch (_) { /* private mode */ }
+    }
+  }
+
+  function wireTheme() {
+    const btn = $("theme-toggle");
+    if (!btn) return;
+    let stored = null;
+    try {
+      const v = localStorage.getItem(themeKey());
+      if (v === "day" || v === "night") stored = v;
+    } catch (_) { /* private mode */ }
+    // The server already rendered the restaurant's own default into `data-theme`, so with
+    // no stored choice this changes nothing and there is no flash.
+    applyTheme(stored || document.documentElement.getAttribute("data-theme") || "night",
+      false);
+    btn.addEventListener("click", () => {
+      const from = document.documentElement.getAttribute("data-theme");
+      const to = from === "night" ? "day" : "night";
+      window.track("theme_change", null, { from, to });
+      applyTheme(to, true);
+    });
+  }
+
+  window.applyFilter = applyFilter;
+  window.applyLang = applyLang;
+  window.applyTheme = applyTheme;
 
   function start() {
     wireCategories();
@@ -2526,8 +3494,11 @@
     wireTheme();
   }
 
-  if (document.readyState === "complete") start();
-  else addEventListener("load", start, { once: true });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
 })();
 
 /* ---- init.js ---- */
@@ -2596,6 +3567,26 @@
     window.__spinEnabled = /^(1|true|on|yes)$/i.test(String(cfg.spin_enabled || "").trim());
     const spin = document.getElementById("modal-spin");
     if (spin && !window.__spinEnabled) spin.style.display = "none";
+
+    // ── the 3D, last, and NOT optional ────────────────────────────────────────────
+    //
+    // `__bootViewer` reads the cards back into the item list the viewer works on, binds
+    // the thumbnails, starts the poster-to-live-3D upgrades and warms the AR carousel.
+    //
+    // **Nothing called it.** It was defined in `shim.js` and invoked from nowhere, so on
+    // every deployed page `menuItems` stayed `[]`: no thumbnail ever became a live model,
+    // no AR model was ever preloaded, and every 3D and AR event was filed against item
+    // index -1. The page looked complete, so it took a person on a phone to notice - the
+    // same shape of failure as the stubs, and the reason `check_render.py` now asserts
+    // that this call exists rather than only that the file does.
+    //
+    // Deferred to idle: it touches 175 cards and can wait until after the first paint,
+    // which is the whole reason the menu is in the HTML.
+    try {
+      window.idle(function () { window.__bootViewer(); });
+    } catch (e) {
+      console.error("[betareal] the 3D viewer failed to boot", e);
+    }
   }
 
   if (document.readyState === "complete") start();

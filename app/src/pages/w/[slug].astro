@@ -1,0 +1,208 @@
+---
+// The staff side of "Show to staff". A diner's basket, on the waiter's phone.
+//
+// The diner's page packs the basket into a URL fragment and draws it as a QR
+// (`platform.js` → `_packOrder`). The waiter scans it and lands here.
+//
+// **The fragment carries ids and quantities, never prices.** Every price on this page is
+// re-resolved against the live menu, so an order scanned twenty minutes after a price
+// changed shows the price the till will charge - and a diner cannot edit a URL into a
+// cheaper bill. A dish that has since been hidden or deleted says so on its own line
+// rather than silently vanishing from a total the waiter is about to read out.
+//
+// The fragment never reaches the server: browsers do not send it. So the price book is
+// rendered INTO the page - id, name, price, sizes, add-ons - and a small inline script
+// decodes the hash against it. One request, no anon key in the markup, no round trip while
+// a waiter stands at a table.
+import { loadMenu } from "../../lib/menu.js";
+
+const { slug } = Astro.params;
+
+let menu = null;
+let error = null;
+try {
+  menu = await loadMenu(slug, { assetBase: "/a", locals: Astro.locals });
+} catch (err) {
+  error = err.message;
+}
+if (!menu && !error) return new Response(`No menu for "${slug}"`, { status: 404 });
+if (error) return new Response(`Menu unavailable: ${error}`, { status: 503 });
+
+// Short keys because this is a whole menu inlined: n name, k Georgian name, p price,
+// v sizes, a add-ons. ~170 dishes is about 20 KB, and it is a staff page opened once per
+// order on a phone that is already in the restaurant's wifi.
+const book = Object.fromEntries(menu.items.map((i) => [i.id, {
+  n: i.name_en, k: i.name_ka || "", p: i.price,
+  ...(i.variants?.length ? { v: i.variants.map((v) => ({ n: v.en || v.ka || "", p: v.price || "" })) } : {}),
+  ...(i.addons?.length ? { a: i.addons.map((a) => ({ n: a.en || a.ka || "", p: a.price || "" })) } : {}),
+}]));
+const title = menu.config.site_name || menu.tenant.name;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title} · Order</title>
+    <meta name="robots" content="noindex" />
+    {/* `is:global`, and it matters: every element below is created by the inline script
+        at runtime, so Astro's default scoping - which stamps a `data-astro-cid` attribute
+        on elements IN THE TEMPLATE - would match none of them and the page would render
+        as unstyled text. Which is exactly what it did the first time. */}
+    <style is:global>
+      /* Deliberately not the restaurant's palette. This is a working document a member of
+         staff reads once, in a hurry, often in a dim room - so it is high-contrast and
+         plain, and it does not change from venue to venue. */
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff; --fg: #111318; --muted: #6b7280; --line: #e5e7eb;
+        --accent: #0f766e; --warn: #b45309;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #0d0f13; --fg: #f3f4f6; --muted: #9aa1ad; --line: #23262d;
+                --accent: #5eead4; --warn: #fbbf24; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font);
+             font-size: 16px; line-height: 1.4; padding: 16px 14px 40px;
+             max-width: 560px; margin-inline: auto; }
+      header { border-bottom: 2px solid var(--fg); padding-bottom: 10px; margin-bottom: 4px; }
+      .brand { font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase;
+               color: var(--muted); }
+      .rname { font-size: 1.35rem; font-weight: 700; margin-top: 2px; }
+      .meta { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+      .line { display: flex; gap: 10px; align-items: baseline;
+              padding: 11px 0; border-bottom: 1px solid var(--line); }
+      /* Tabular figures so the quantities and the money line up as columns. A waiter
+         reads down this page, not across it. */
+      .qty { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 2.4em;
+             color: var(--accent); }
+      .name { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+      .primary { font-weight: 600; }
+      .secondary { font-size: 0.85rem; color: var(--muted); }
+      .unit { font-size: 0.75rem; color: var(--muted); }
+      .line-total { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+      .missing .primary { color: var(--warn); }
+      .totals { display: flex; justify-content: space-between; align-items: baseline;
+                margin-top: 14px; padding-top: 12px; border-top: 2px solid var(--fg);
+                font-size: 1.25rem; font-weight: 700; }
+      .t-count { display: block; font-size: 0.78rem; font-weight: 400; color: var(--muted); }
+      .t-value { font-variant-numeric: tabular-nums; }
+      .state { padding: 40px 0; color: var(--muted); text-align: center; }
+      .state.err { color: var(--warn); }
+    </style>
+  </head>
+  <body>
+    <div id="root"><p class="state">Reading the order…</p></div>
+    <script is:inline set:html={`window.__BOOK=${JSON.stringify(book).replace(/</g, "\\u003c")};` +
+      `window.__RNAME=${JSON.stringify(title).replace(/</g, "\\u003c")};`} />
+    <script is:inline>
+      (function () {
+        var root = document.getElementById("root");
+        var esc = function (s) {
+          return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+          });
+        };
+        var state = function (msg, bad) {
+          root.innerHTML = '<p class="state' + (bad ? " err" : "") + '">' + esc(msg) + "</p>";
+        };
+        // Prices on a menu are free text - "16 / 70 ₾", "from 12". The digits are what can
+        // be added up; anything that parses to nothing contributes nothing rather than
+        // poisoning the total with NaN. Same rule as the diner's basket, on purpose.
+        var parse = function (s) {
+          return parseFloat(String(s).replace(/[^\d.]/g, "")) || 0;
+        };
+        var fmt = function (n) { return (Math.round(n * 10) / 10) + " ₾"; };
+
+        // base64url, UTF-8 safe. The mirror of `_packOrder`: Georgian dish names are
+        // multi-byte and a plain atob/btoa pair mangles them.
+        function decode(raw) {
+          var b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
+          while (b64.length % 4) b64 += "=";
+          var bin = atob(b64);
+          var bytes = new Uint8Array(bin.length);
+          for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          return new TextDecoder().decode(bytes);
+        }
+
+        var raw = (location.hash || "").replace(/^#/, "");
+        if (!raw) {
+          state("No order in this link. Ask the guest to tap Show to staff again.", true);
+          return;
+        }
+        var payload;
+        try { payload = JSON.parse(decode(raw)); }
+        catch (e) { state("This order link is corrupted or incomplete.", true); return; }
+
+        var lines = Array.isArray(payload && payload.it) ? payload.it : [];
+        if (!lines.length) { state("This order is empty.", true); return; }
+
+        var book = window.__BOOK || {};
+        var html = "", total = 0, count = 0, missing = 0;
+
+        lines.forEach(function (pair) {
+          var id = pair[0];
+          var qty = Math.max(1, parseInt(pair[1], 10) || 1);
+          var row = book[id];
+          count += qty;
+          if (!row) {
+            // Named, not dropped. A line the waiter can ask about beats a total that
+            // quietly disagrees with what the guest thinks they ordered.
+            missing++;
+            html += '<div class="line missing"><span class="qty">' + qty + "&times;</span>" +
+              '<span class="name"><span class="primary">No longer on the menu</span>' +
+              '<span class="secondary">' + esc(String(id).slice(0, 8)) + "…</span></span>" +
+              '<span class="line-total">—</span></div>';
+            return;
+          }
+          // [id, qty] · [id, qty, addOnIdx[]] · [id, qty, addOnIdx[], variantIdx]
+          var vIdx = typeof pair[3] === "number" ? pair[3] : null;
+          var unit, varTxt = "";
+          if (vIdx !== null && row.v && row.v[vIdx]) {
+            unit = parse(row.v[vIdx].p);
+            varTxt = row.v[vIdx].n || "";
+          } else {
+            unit = parse(row.p);
+          }
+          var addSel = Array.isArray(pair[2]) ? pair[2] : [];
+          var addTxt = "";
+          if (addSel.length && row.a) {
+            var parts = [];
+            addSel.forEach(function (i) {
+              var a = row.a[i];
+              if (!a) return;
+              unit += parse(a.p);
+              parts.push(a.n);
+            });
+            addTxt = parts.filter(Boolean).join(", ");
+          }
+          var lineTotal = unit * qty;
+          total += lineTotal;
+          html += '<div class="line"><span class="qty">' + qty + "&times;</span>" +
+            '<span class="name"><span class="primary">' + esc(row.n) + "</span>" +
+            (row.k ? '<span class="secondary">' + esc(row.k) + "</span>" : "") +
+            (varTxt ? '<span class="secondary">' + esc(varTxt) + "</span>" : "") +
+            (addTxt ? '<span class="secondary">+ ' + esc(addTxt) + "</span>" : "") +
+            '<span class="unit">' + fmt(unit) + " each</span></span>" +
+            '<span class="line-total">' + fmt(lineTotal) + "</span></div>";
+        });
+
+        var when = payload.ts ? new Date(payload.ts) : null;
+        var whenStr = when && !isNaN(when)
+          ? when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+
+        root.innerHTML =
+          "<header><div class=\"brand\">BetaReal</div>" +
+          '<div class="rname">' + esc(window.__RNAME || "") + "</div>" +
+          '<div class="meta">Guest order' + (whenStr ? " · placed " + esc(whenStr) : "") +
+          (missing ? " · " + missing + " item(s) changed" : "") + "</div></header>" +
+          html +
+          '<div class="totals"><span class="t-label">Total' +
+          '<span class="t-count">' + count + " item(s)</span></span>" +
+          '<span class="t-value">' + fmt(total) + "</span></div>";
+      })();
+    </script>
+  </body>
+</html>

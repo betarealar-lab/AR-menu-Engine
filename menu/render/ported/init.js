@@ -63,6 +63,26 @@
     window.__spinEnabled = /^(1|true|on|yes)$/i.test(String(cfg.spin_enabled || "").trim());
     const spin = document.getElementById("modal-spin");
     if (spin && !window.__spinEnabled) spin.style.display = "none";
+
+    // ── the 3D, last, and NOT optional ────────────────────────────────────────────
+    //
+    // `__bootViewer` reads the cards back into the item list the viewer works on, binds
+    // the thumbnails, starts the poster-to-live-3D upgrades and warms the AR carousel.
+    //
+    // **Nothing called it.** It was defined in `shim.js` and invoked from nowhere, so on
+    // every deployed page `menuItems` stayed `[]`: no thumbnail ever became a live model,
+    // no AR model was ever preloaded, and every 3D and AR event was filed against item
+    // index -1. The page looked complete, so it took a person on a phone to notice - the
+    // same shape of failure as the stubs, and the reason `check_render.py` now asserts
+    // that this call exists rather than only that the file does.
+    //
+    // Deferred to idle: it touches 175 cards and can wait until after the first paint,
+    // which is the whole reason the menu is in the HTML.
+    try {
+      window.idle(function () { window.__bootViewer(); });
+    } catch (e) {
+      console.error("[betareal] the 3D viewer failed to boot", e);
+    }
   }
 
   if (document.readyState === "complete") start();

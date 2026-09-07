@@ -18,12 +18,19 @@ So: one generator, and `check_render.py` now asserts the output matches its sour
 
 Order matters at runtime, and it is the same order the platform's own index.html uses:
 
-    xr        defines window.XR, the WebXR carousel
+    ui        the platform's 42 strings in en/ka/ru. VERBATIM (extract_ui.py)
+    xr        defines window.XR, the WebXR carousel. VERBATIM
     shim      the ONLY adapter - what viewer.js expects from the app it was lifted out of
-    viewer    the 3D modal, AR entry, thumbnail upgrades. VERBATIM
-    hero      the hero video, the crossfade, the venue block
-    page      category filtering, language, theme
+    platform  the basket, variants, add-ons, the lightbox's data, show-to-staff
+    viewer    the 3D modal, the photo lightbox, AR entry, thumbnail upgrades. VERBATIM
+    hero      the hero video, the crossfade, the venue block. VERBATIM
+    page      category filtering, 3D-first ordering, language, day/night
     init      boots the lot once the page is parsed
+
+`platform.js` sits before `viewer.js` deliberately: viewer.js calls `addToBasket`,
+`_variantsHtml` and `_syncQtyCtrl` by name, and those used to be stubs living in shim.js.
+That is the arrangement this whole layer exists to make impossible again - see its
+docstring, and FEEDBACK.md.
 """
 from __future__ import annotations
 
@@ -34,7 +41,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 PORTED = ROOT / "menu" / "render" / "ported"
 OUT = ROOT / "app" / "public" / "viewer.js"
 
-FILES = ["xr.js", "shim.js", "viewer.js", "hero.js", "page.js", "init.js"]
+FILES = ["ui.js", "xr.js", "shim.js", "platform.js", "viewer.js", "hero.js",
+         "page.js", "init.js"]
 
 
 def build() -> str:

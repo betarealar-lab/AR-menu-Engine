@@ -20,8 +20,16 @@
 // against the live page to prove each further cut.
 import { envFrom } from "../lib/env.js";
 import { loadMenu, themeMode } from "../lib/menu.js";
-import { themeCss, settingsCss, fontLinks } from "../lib/theme.js";
-import { hero, header, catBar, menuList, toggles } from "../lib/markup.js";
+import { paletteCss, settingsCss, fontLinks } from "../lib/theme.js";
+import { hero, header, catBar, menuList, toggles, itemsJson } from "../lib/markup.js";
+// The platform's overlay markup, extracted verbatim (menu/render/extract_chrome.py):
+// the 3D modal, the WebXR controls, the photo lightbox, the basket and the staff QR.
+//
+// **It is imported, not written.** `viewer.js` binds `#modal-spin` at top level on its
+// 18th line; with that element absent the TypeError aborts the whole block and takes the
+// 3D viewer, AR, the thumbnail upgrades and the basket with it - silently, on a page that
+// otherwise looks finished. That is what shipped, and `chrome.html` is the fix.
+import chromeHtml from "../../../menu/render/ported/chrome.html?raw";
 // One sheet per template, trimmed by `menu/render/trim_css.py`. The cut is only ever
 // rules scoped to ANOTHER template or tenant - those provably cannot match this page, so
 // it is a proof rather than the guess that produced four "renders but looks wrong" bugs.
@@ -65,7 +73,11 @@ const lang = (menu.tenant.languages || ["en"])[0];
 const template = SHEETS[menu.tenant.template] ? menu.tenant.template : DEFAULT_TEMPLATE;
 const sheet = SHEETS[template];
 const title = cfg.site_name || menu.tenant.name;
-const vars = [themeCss(cfg, mode), settingsCss(cfg)].filter(Boolean).join(";");
+// Both palettes, each scoped to its own `data-theme`, plus the settings that reach CSS.
+// Scoped rather than flat so the restaurant's colours beat the template's defaults AND so
+// the day/night button has something to switch between - see `paletteCss`.
+const palette = paletteCss(cfg);
+const settings = settingsCss(cfg);
 // The settings the deferred bundle needs at runtime: hero art, the venue block, the
 // links. SETTINGS only - a few hundred bytes, never the menu, which is already in the
 // markup. `init.js` reads this and starts the hero video, the photo crossfade, the
@@ -91,6 +103,9 @@ runtimeCfg.tenant_id = menu.tenant.id;
 const previewOrigins = envFrom(Astro.locals)(
   "PREVIEW_ORIGINS", "http://127.0.0.1:3001,http://localhost:3001")
   .split(",").map((s) => s.trim()).filter(Boolean);
+// Sizes and add-ons, keyed by index, for the ~18% of dishes that have any. The only two
+// fields the viewer needs that are NOT recoverable from the markup - see `itemsJson`.
+const items = itemsJson(menu);
 const buildMs = Date.now() - started;
 ---
 <!doctype html>
@@ -112,11 +127,15 @@ const buildMs = Date.now() - started;
     {cfg.hero_image_url && (
       <link rel="preload" as="image" href={cfg.hero_image_url} fetchpriority="high" />
     )}
+    {/* The template's stylesheet FIRST, the restaurant's palette after it.
+        Order matters: the sheet carries its own `[data-theme="day"]` defaults, and a
+        palette written before it loses every tie. This is the restaurant's own theme -
+        it wins. */}
+    <style set:html={sheet} />
     {/* The restaurant's palette, before a single pixel is painted. The platform sets
         these at runtime after fetching theme_config, which is the re-skin a diner
         watches happen; resolved here, there is no second state to flash to. */}
-    <style set:html={`:root{${vars}}`} />
-    <style set:html={sheet} />
+    <style set:html={palette + (settings ? `:root{${settings}}` : "")} />
     <Fragment set:html={fontLinks(cfg)} />
   </head>
   <body>
@@ -126,6 +145,11 @@ const buildMs = Date.now() - started;
     <Fragment set:html={catBar(menu, lang)} />
     <Fragment set:html={menuList(menu, lang)} />
 
+    {/* The 3D modal, the AR overlay, the lightbox, the basket, the staff QR. After the
+        list, as the platform has them, because two of them are position:fixed and the
+        stacking order between the overlays is document order. */}
+    <Fragment set:html={chromeHtml} />
+
     {/* Everything interactive - the category filter, the 3D modal, AR, the WebXR
         carousel - in one cached file that every tenant shares, loaded after the menu is
         already readable. `defer` keeps it off the parser's critical path entirely. */}
@@ -133,7 +157,8 @@ const buildMs = Date.now() - started;
         JSON would end the script early - the standard fix, and cheaper than a request. */}
     <script
       is:inline
-      set:html={`window.__CFG=${JSON.stringify(runtimeCfg).replace(/</g, "\\u003c")};`}
+      set:html={`window.__CFG=${JSON.stringify(runtimeCfg).replace(/</g, "\\u003c")};` +
+        `window.__ITEMS=${JSON.stringify(items).replace(/</g, "\\u003c")};`}
     />
     {/* Everything interactive - the category filter, the 3D modal, AR, the WebXR
         carousel, the hero video and crossfade - in one cached file every tenant shares,
