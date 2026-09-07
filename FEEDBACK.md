@@ -1,22 +1,20 @@
-# The live menu is not a faithful copy — Temo, 2026-09-07
+# The live menu was not a faithful copy — fixed 2026-09-07
 
-The menu app is deployed and reachable at
-**https://betareal-menu.betareal-ar.workers.dev/mg** — and what it serves is wrong.
+**Status: done and deployed.** Kept as the record of what went wrong, because the mistake
+is the kind that repeats.
 
-Temo, after opening it on a phone:
+Temo, after opening `https://betareal-menu.betareal-ar.workers.dev/mg` on a phone:
 
 > "this is not a copy of og monday greens it is something that tried to be a copy of a copy
 > and failed. and considering u have access to the files u should have done better."
 
-He is right, and the reason is specific and my fault: **I stubbed the features instead of
-porting them.** `menu/render/ported/shim.js` — the file whose own comment calls itself "the
-ONLY adapter" — contains:
+He was right, and the reason was specific: **I stubbed the features instead of porting
+them.** `menu/render/ported/shim.js` — the file whose own comment called itself "the ONLY
+adapter" — contained:
 
 ```js
-window.addToBasket   = function () {};      // the basket, gone
-window._setQty       = function () {};
-window._variantsHtml = function () { return ""; };   // glass / bottle, gone
-window._addonsHtml   = function () { return ""; };
+window.addToBasket   = function () {};              // the basket, gone
+window._variantsHtml = function () { return ""; };  // glass / bottle, gone
 // ...plus nine FAKE HIDDEN <div>s standing in for the photo lightbox
 ```
 
@@ -26,112 +24,122 @@ nothing caught it until a person opened it on a phone.
 
 ---
 
-## The eight faults, as reported
+## Worse than reported
 
-1. **Dark theme always.** No light/dark switch. There is a small button top-right that
-   does nothing.
-2. **Categories do not work.** Tapping a category filters nothing.
-3. **3D dishes do not appear on top.** They should lead the list.
-4. **Everything is sorted alphabetically.** Wrong order entirely — it should follow the
-   owner's `position`.
-5. **No add-to-cart button.** Stubbed out (above).
-6. **Photos take forever to load.**
-7. **Variant switching does not work** — glass → bottle does nothing. Stubbed out (above).
-8. **Photo expansion does not work** — the lightbox is nine fake hidden divs.
+Two things nobody could have got far enough to see:
+
+**The page carried no overlay markup at all.** `viewer.js` binds `#modal-spin` at TOP LEVEL
+on its 18th line. With that element absent it is `null.addEventListener` — a TypeError that
+aborts the rest of the block and leaves every `let` after it in the temporal dead zone. So
+the 3D viewer, AR, the thumbnail upgrades and every basket call the viewer makes were all
+gone, from one line, with one message in a console nobody was reading.
+
+**`__bootViewer` was called from nowhere.** Defined in `shim.js`, invoked by nothing. On
+every deployed page `menuItems` stayed `[]`: no thumbnail ever upgraded to live 3D, no AR
+model was preloaded, and every 3D and AR event was filed against item index -1. The counts
+existed and were all wrong.
 
 ---
 
-## The architectural point, which matters more than the eight bugs
+## The eight faults, and what each one actually was
 
-Temo, same message:
+| reported | cause | fix |
+|---|---|---|
+| dark theme always, dead toggle | the button shipped with the word "Night" in a 34px circle; and only ONE palette was emitted, unscoped, *before* the template sheet — so it lost every specificity tie and the restaurant's own colours were never applied | icon button; both palettes emitted, each scoped to its own `[data-theme]`, after the sheet |
+| categories do not work | one flat list of 170 cards; nothing to filter | `.cat-section` per category with a heading, as the platform does |
+| everything alphabetical | `order by i.position, i.name` — but `position` is the rank WITHIN a category. 170 dishes, 26 categories, 26 distinct positions. Sorting the whole menu by it interleaves every category and breaks ties by name | order by category position, then item position |
+| 3D not on top | no AR-featured block, no 3D-first ordering | AR block leads the All view; 3D first inside a selected category |
+| no add-to-cart | `addToBasket` was a stub, so there was nothing for a button to call | `platform.js`, ported; a cart control on every card |
+| photos take forever | 187 photos averaging 2 MB, some **7008 px wide** from a phone camera, drawn in a 430 px card, cross-origin, no `Cache-Control` | `menu/photos.py`: 860 px WebP in our own bucket, same-origin, immutable. **376.7 MB → 6.8 MB** |
+| variants dead | `_variantsHtml` returned `""` | ported; real pills, real prices, its own basket line |
+| photo expansion dead | the lightbox was nine fake hidden divs | real markup from `chrome.html`; `viewer.js` already had the behaviour |
+
+Also found on the way: a dish with an approved model and `is_3d` **off** is a photo dish by
+the owner's choice, and the runtime was overriding that by inferring 3D from the presence
+of a GLB. Two Monday Greens dishes are set that way. `data-is3d` states it now.
+
+---
+
+## The line Temo drew, made structural
 
 > "make sure to differentiate what are normal website features and what are template
 > additions, like add to cart, category sorted, 3d on top, 3d and AR view, show to waiter,
 > view the cart, these and some others are baisc features not template specific."
 
-**I blurred two different things into one.** There are:
+**Platform features** — add to cart, view the cart, show to waiter, category filtering, 3D
+ordered first, 3D and AR view, photo expansion, variants, add-ons, day/night, language —
+live in `ported/platform.js` and `ported/page.js`. Nothing in either file reads
+`data-template`. There is no switch for a template to turn a feature off, because there is
+no switch.
 
-### Platform features — every menu has these, whatever it looks like
-
-- add to cart / view the cart / show to waiter
-- category filtering and the category bar
-- 3D dishes ordered first
-- 3D view and AR view
-- photo expansion (lightbox)
-- variants (glass / bottle, regular / decaf)
-- light / dark switch
-- language switch
-
-These are **the product**. A template that "does not have" one of them is a broken
-template, not a design choice. They belong in one shared layer that every template gets.
-
-### Template additions — what makes one restaurant look unlike another
-
-- the palette (68 colour keys)
-- fonts
-- hero: image, gallery, video, crossfade
-- card shape, spacing, radius, shadows
-- editorial sections a particular template renders
-
-The current port has no such line drawn. Features live wherever they happened to land when
-I was making `viewer.js` boot, which is why removing a stub removed a feature.
+**Template additions** — palette, fonts, hero, card shape, editorial sections — are CSS.
 
 ---
 
-## Where the real thing is
+## Copied, not reinvented
 
-**`C:\Users\temot\BetaReal scaleable\index.html` — 13,881 lines.** The whole production
-app: markup, CSS and JS in one file. That is the source of truth for every behaviour above,
-and it is on this machine. There was never a reason to reimplement from memory.
+Three extractors take the real thing out of `C:\Users\temot\BetaReal scaleable\index.html`,
+so none of it can drift by being retyped:
 
-Ported so far, in `menu/render/ported/`:
-
-| file | what it is | state |
+| generator | output | what |
 |---|---|---|
-| `full.css` | the entire stylesheet | verbatim, complete |
-| `xr.js` | the WebXR AR carousel | verbatim |
-| `viewer.js` | the 3D modal, AR entry, thumbnail upgrades | verbatim |
-| `hero.js` | hero video, crossfade, venue block | verbatim |
-| `page.js` | category filter, language, theme | **incomplete — the faults live here** |
-| `init.js` | boot | thin |
-| `shim.js` | **ours**, the adapter | **stubs the missing half** |
+| `extract_css.py` | `ported/full.css` | the entire stylesheet, verbatim |
+| `extract_chrome.py` | `ported/chrome.html` | modal, XR overlay, lightbox, basket, staff QR |
+| `extract_ui.py` | `ported/ui.js` + `app/src/lib/ui.json` | all 42 strings, en/ka/ru |
 
-`build_viewer.py` concatenates these into `app/public/viewer.js`, which the diner page
-loads. `check_render.py` asserts the served file matches its sources.
+`build_viewer.py` concatenates `ui, xr, shim, platform, viewer, hero, page, init` into
+`app/public/viewer.js`. `platform.js` sits before `viewer.js` on purpose: viewer.js calls
+`addToBasket` and `_variantsHtml` by name, and those used to be the stubs.
 
 ---
 
-## What has to happen
+## Why 392 checks were green
 
-1. **Draw the line.** A `platform` layer with every feature in the first list, and template
-   CSS that only changes appearance. Then a feature cannot be lost by editing a template.
-2. **Port the missing behaviour from `index.html`, verbatim**, the way `viewer.js` and
-   `xr.js` were ported — not reimplemented. The basket, the lightbox, variants, the theme
-   toggle, category filtering, the ordering.
-3. **Fix the ordering.** Alphabetical is wrong; `position` within category is right, with
-   3D dishes first.
-4. **Photo loading.** Measure before guessing — the imported rows point at 1200px r2.dev
-   URLs, and the diner page draws them at 430px.
-5. **A check per feature.** Every one of the eight faults above should fail a check if it
-   regresses. `check_render.py` currently proves the FILES are present; it does not prove
-   the FEATURES work, which is exactly how eight of them went missing at once.
+They were not wrong. They were checking the wrong thing.
+
+- `check_render.py` drives `menu/render/render.mjs` — a **different renderer** from the one
+  the Astro app uses, so it asserted facts about a page nobody was served.
+- Everything else asserted that FILES existed and matched their sources. `shim.js` was
+  present, correct, byte-identical — and stubbed.
+- Two checks asserted the stubs *should* exist. **A check that asserts a stub exists will
+  defend that stub forever.**
+
+`check_features.py` is the answer: 130 checks, each naming a feature a diner uses, run
+against the real `markup.js`, the real built `viewer.js` and the real `chrome.html`. Both
+mutation tests turn it red — remove the cart button, re-stub `addToBasket`.
+
+**Add a check there whenever a feature is added. If a feature can be deleted without
+turning one of them red, it was never really shipped.**
+
+394 checks pass across seven suites.
+
+---
+
+## Also new
+
+`/w/<slug>` — the staff page the order QR points at. Ids and quantities travel in the URL
+fragment, never prices; every price is re-resolved against the live menu, so a stale scan
+cannot undercharge and a URL cannot be edited into a cheaper bill.
 
 ---
 
 ## State of everything else, 2026-09-07
 
-**Deployed:** menu app on Cloudflare Workers, `betareal-menu.betareal-ar.workers.dev`,
-R2 via bindings (no storage credentials in the Worker), secrets set. Verified live: `/mg`
-and `/corner` render, `/nope` 404s, a model serves from R2 at 219 KB.
+**Deployed and verified live:** the menu on Cloudflare Workers,
+`betareal-menu.betareal-ar.workers.dev`. MG renders in its own teal palette, the basket
+totals, the filter filters, 3D leads, Georgian switches throughout, a photo comes back
+28 KB and immutable, and `_worker.js` 404s to the public.
 
-**Not deployed:** the admin (Next 16, needs OpenNext — fallback to Vercel if it fights).
-The bridge and optimiser still run on Temo's PC.
+**Not deployed:** the admin (Next 16, needs OpenNext — fall back to Vercel if it fights).
+The bridge and the optimiser still run on Temo's PC.
 
-**Never run:** the 3D generation loop, end to end. Still the biggest untested thing.
+**Never run:** the 3D generation loop, end to end. Still the biggest untested thing, and
+now the biggest one.
 
-**Domain:** `betareal.ge` is live in a teammate's Cloudflare account, serving the marketing
-site and the current Monday Greens. Moving it is a production migration — see the runbook
-artifact. Not a blocker; `workers.dev` is fine for testing.
+**Domain:** `betareal.ge` is live in a teammate's Cloudflare account. Moving it is a
+production migration — see the runbook artifact. Not a blocker; `workers.dev` is fine.
 
-**Checks:** 392 across six suites, all passing — and that number is exactly the point of
-item 5 above. None of them caught this.
+**Page weight:** 414 KB, of which ~356 KB is the platform's entire stylesheet, inlined
+verbatim. Trimming it is a real optimisation and the honest way is to ask a browser which
+rules matched — not to guess selectors, which produced four "renders but looks wrong" bugs
+already.
