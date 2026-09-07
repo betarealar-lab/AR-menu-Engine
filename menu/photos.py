@@ -54,6 +54,11 @@ from menu.publish import connect                  # noqa: E402
 # 2x the 430 px card slot. Not 3x: at this subject matter - a plate, photographed close -
 # the third multiple is invisible on a phone and costs another 60% in bytes.
 MAX_W = 860
+# The hero is full-bleed and is the LCP element - the one image a diner is measured
+# waiting for - so it gets the width of a large phone at 2x rather than a card slot.
+HERO_W = 1600
+# A logo sits at 120 px at most and is usually flat colour, where WebP is very cheap.
+LOGO_W = 360
 # 78 is where WebP stops being distinguishable from the source on food photography and
 # starts costing real bytes. Checked by eye on a plate with fine texture, which is the
 # hardest case a menu has.
@@ -68,7 +73,7 @@ def fetch(url: str) -> bytes:
         return r.read()
 
 
-def encode(raw: bytes) -> tuple[bytes, tuple[int, int], tuple[int, int]]:
+def encode(raw: bytes, max_w: int = MAX_W) -> tuple[bytes, tuple[int, int], tuple[int, int]]:
     """Downscaled WebP, plus the size before and after."""
     from PIL import Image
 
@@ -84,9 +89,9 @@ def encode(raw: bytes) -> tuple[bytes, tuple[int, int], tuple[int, int]]:
         pass
     if im.mode not in ("RGB", "RGBA"):
         im = im.convert("RGBA" if "A" in im.getbands() else "RGB")
-    if im.width > MAX_W:
-        h = round(im.height * MAX_W / im.width)
-        im = im.resize((MAX_W, h), Image.LANCZOS)
+    if im.width > max_w:
+        h = round(im.height * max_w / im.width)
+        im = im.resize((max_w, h), Image.LANCZOS)
     buf = io.BytesIO()
     im.save(buf, "WEBP", quality=QUALITY, method=6)
     return buf.getvalue(), before, im.size
@@ -101,6 +106,35 @@ def key_for(tenant_slug: str, source: str) -> str:
     """
     h = hashlib.sha1(source.encode("utf-8")).hexdigest()[:16]
     return f"p/{tenant_slug}/{h}.webp"
+
+
+# The images that are SETTINGS rather than dishes. Same problem, different table: Monday
+# Greens' hero is 197 KB on somebody else's origin with no Cache-Control, and it is the
+# LCP element - the single image a diner is measured waiting for.
+#
+# (column, json key, width). `theme` and `settings` are both flat bags of strings.
+SETTING_IMAGES = [
+    ("settings", "hero_image_url", HERO_W),
+    ("settings", "logo_url", LOGO_W),
+    ("settings", "hero_logo_url", LOGO_W),
+    ("settings", "hero_video_poster_url", HERO_W),
+]
+
+
+def setting_rows(cur, slug: str | None):
+    """(tenant_id, slug, column, key, url, width) for every settings image still remote."""
+    cur.execute("""
+        select id, slug, settings from tenants
+        where (%s::text is null or slug = %s) order by slug
+    """, (slug, slug))
+    out = []
+    for tid, tslug, settings in cur.fetchall():
+        settings = settings or {}
+        for col, key, width in SETTING_IMAGES:
+            url = settings.get(key)
+            if isinstance(url, str) and url.startswith(("http://", "https://")):
+                out.append((tid, tslug, col, key, url, width))
+    return out
 
 
 def rows(cur, slug: str | None):
@@ -139,10 +173,11 @@ def main() -> int:
         todo = rows(cur, a.tenant)
     if a.limit:
         todo = todo[:a.limit]
-    if not todo:
-        print("nothing to do - every photo is already ours")
-        return 0
-    print(f"{len(todo)} photos to downscale  ({storage.describe()})")
+    # No early return when the dishes are done: the hero and the logo are settings, in
+    # another table, and they are the LAST thing to still be 197 KB on somebody else's
+    # origin. Skipping the second pass because the first had nothing to do is how the
+    # heaviest image on the page gets missed.
+    print(f"{len(todo)} dish photos to downscale  ({storage.describe()})")
     print(f"  target {MAX_W}px wide, WebP q{QUALITY}\n")
 
     got = saved = 0
@@ -182,6 +217,44 @@ def main() -> int:
                     (key, source, item_id))
             conn.commit()
         print(f"\n{len(done)} rows repointed")
+
+    # ── the settings images ─────────────────────────────────────────────────────────
+    with connect() as conn, conn.cursor() as cur:
+        settings_todo = setting_rows(cur, a.tenant)
+    if settings_todo:
+        print(f"\n{len(settings_todo)} settings images (hero, logo)\n")
+        updates: list[tuple[str, str, str, str]] = []      # (tid, key, newurl, source)
+        for tid, tslug, col, key, source, width in settings_todo:
+            try:
+                raw = fetch(source)
+                out, before, after = encode(raw, width)
+            except Exception as exc:
+                failed.append(f"{key}: {exc}")
+                continue
+            got += len(raw)
+            saved += len(raw) - len(out)
+            pct = 100 - round(100 * len(out) / max(1, len(raw)))
+            print(f"  {tslug:<8} {key:<22} {before[0]}x{before[1]} {len(raw)//1024:>4} KB"
+                  f"  ->  {after[0]}x{after[1]} {len(out)//1024:>3} KB  (-{pct}%)")
+            if a.dry_run:
+                continue
+            okey = key_for(tslug, source)
+            back.put("photos", okey, out, "image/webp")
+            updates.append((tid, key, "/a/" + okey, source))
+        if updates:
+            with connect() as conn, conn.cursor() as cur:
+                for tid, key, newurl, source in updates:
+                    # The source is kept beside the new value under `<key>_source` - the
+                    # same bargain as items.photo_source_url: nothing is lost and the batch
+                    # can be undone. settings is a flat bag of strings, so it costs one key.
+                    cur.execute(
+                        "update tenants set settings = settings"
+                        " || jsonb_build_object(%s::text, %s::text,"
+                        "                       %s::text, %s::text)"
+                        " where id = %s",
+                        (key, newurl, key + "_source", source, tid))
+                conn.commit()
+            print(f"\n  {len(updates)} settings repointed")
 
     print(f"\n{got/1e6:.1f} MB in, {(got-saved)/1e6:.1f} MB out "
           f"- {100*saved//max(1,got)}% less for a diner to download")

@@ -163,7 +163,7 @@ function qtyCtrl(i) {
  *  SAME `data-idx`, exactly as the platform does, so the basket, AR and the event sink all
  *  treat them as one dish - `.ar-featured` is a badge, not a second item.
  */
-export function menuItem(item, i, lang, promoted = false) {
+export function menuItem(item, i, lang, promoted = false, eager = false) {
   const name = pick(item, "name", lang);
   const desc = pick(item, "description", lang);
   // Three flags, three meanings. `text_only` is a compact row with no media at all; a
@@ -208,12 +208,16 @@ export function menuItem(item, i, lang, promoted = false) {
   // The first few cards are above the fold, so their photos are eager and the rest are
   // lazy. width/height are set so a late image cannot shove the text beside it - layout
   // shift is the other half of "looks slow" and costs nothing to prevent.
+  //
+  // WHICH four is decided by the list, not by `i`: the 3D block renders first, so keying
+  // it off the item's index made the eager images four dishes further down the page while
+  // the ones a diner was actually looking at queued behind the lazy-loader.
   const left = noImage ? "" :
     `<div class="item-left"><div class="thumb-wrap">` +
     `<img class="thumb-img"${item.thumbnail_url ? ` src="${e(item.thumbnail_url)}"` : ""}` +
     `${live ? ` data-model="${e(item.model)}"` : ""} data-global-idx="${i}" ` +
     `alt="${e(name)}" width="430" height="220" decoding="async" ` +
-    `${!promoted && i < 4 ? 'fetchpriority="high"' : 'loading="lazy"'}>` +
+    `${eager ? 'fetchpriority="high"' : 'loading="lazy"'}>` +
     `<div class="thumb-vignette"></div>` +
     (item.is_3d ? `<span class="badge-3d">3D</span>` : "") +
     `</div></div>`;
@@ -260,6 +264,11 @@ export function menuItem(item, i, lang, promoted = false) {
  *  first version, which moved 3D items OUT of their categories and left diners unable to
  *  find them.
  */
+// How many photos are worth fetching at high priority. Four is roughly the first
+// screenful on a phone; past that, eager loading competes with the hero - the LCP element -
+// for bandwidth, and makes the thing a diner is actually looking at arrive later.
+const EAGER = 4;
+
 export function menuList(menu, lang) {
   const items = menu.items;
   const threeD = items.map((it, i) => [it, i]).filter(([it]) => it.is_3d);
@@ -280,7 +289,7 @@ export function menuList(menu, lang) {
       `<div class="ar-featured-banner">` +
       `<span class="ar-featured-title">${e(t.title)}</span>` +
       `<span class="ar-featured-copy">${e(t.copy)}</span></div>` +
-      threeD.map(([it, i]) => menuItem(it, i, lang, true)).join("") +
+      threeD.map(([it, i], n) => menuItem(it, i, lang, true, n < EAGER)).join("") +
       `</div>`);
   }
   for (const cat of menu.categories) {
@@ -292,7 +301,11 @@ export function menuList(menu, lang) {
       (cat.name_ka ? ` data-cat-ka="${e(cat.name_ka)}"` : "") +
       (cat.name_ru ? ` data-cat-ru="${e(cat.name_ru)}"` : "") +
       `>${e(label(cat, lang))}</div>` +
-      entries.map(([it, i]) => menuItem(it, i, lang)).join("") +
+      entries.map(([it, i], n) =>
+        // Eager only when this section is what a diner opens on: no 3D block above it and
+        // no earlier category. Everything below the fold is lazy.
+        menuItem(it, i, lang, false, !threeD.length && sections.length === 0 && n < EAGER))
+        .join("") +
       `</div>`);
   }
   // A dish whose category was deleted still has to appear somewhere. Its own section with
