@@ -26,7 +26,7 @@
 // unchanged on Node and on Cloudflare Workers. Raw TCP to Postgres runs on neither without
 // help.
 
-import { envVar } from "./env.js";
+import { envFrom } from "./env.js";
 
 const SYMBOL = { GEL: "₾", USD: "$", EUR: "€", GBP: "£" };
 
@@ -52,9 +52,12 @@ export function assetUrl(v, base = "/a") {
   return /^(https?:)?\/\/|^data:|^\//.test(v) ? v : `${base}/${v}`;
 }
 
-export async function loadMenu(slug, { assetBase = "/a" } = {}) {
-  const url = envVar("SUPABASE_URL");
-  const key = envVar("SUPABASE_ANON_KEY");
+export async function loadMenu(slug, { assetBase = "/a", locals } = {}) {
+  // Handed the request's configuration rather than reaching for a global: on Cloudflare
+  // there is no global to reach for - secrets arrive with the request (see env.js).
+  const env = envFrom(locals);
+  const url = env("SUPABASE_URL");
+  const key = env("SUPABASE_ANON_KEY");
   if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are not set");
 
   const res = await fetch(`${url.replace(/\/$/, "")}/rest/v1/rpc/public_menu`, {

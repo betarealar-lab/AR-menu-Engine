@@ -18,6 +18,7 @@
 // match this page. Hand-picking "unused" rules is what produced four separate "renders
 // but looks wrong" bugs; trimming the generic remainder waits for a computed-style diff
 // against the live page to prove each further cut.
+import { envFrom } from "../lib/env.js";
 import { loadMenu, themeMode } from "../lib/menu.js";
 import { themeCss, settingsCss, fontLinks } from "../lib/theme.js";
 import { hero, header, catBar, menuList, toggles } from "../lib/markup.js";
@@ -45,7 +46,7 @@ const started = Date.now();
 let menu = null;
 let error = null;
 try {
-  menu = await loadMenu(slug, { assetBase: "/a" });
+  menu = await loadMenu(slug, { assetBase: "/a", locals: Astro.locals });
 } catch (err) {
   error = err.message;
 }
@@ -87,8 +88,8 @@ runtimeCfg.tenant_id = menu.tenant.id;
 
 // Who may repaint this page in preview. The admin, and nothing else. Configured rather
 // than inferred from the referrer, because a referrer is whatever the other side says.
-const previewOrigins = (import.meta.env.PREVIEW_ORIGINS || process.env.PREVIEW_ORIGINS
-  || "http://127.0.0.1:3001,http://localhost:3001")
+const previewOrigins = envFrom(Astro.locals)(
+  "PREVIEW_ORIGINS", "http://127.0.0.1:3001,http://localhost:3001")
   .split(",").map((s) => s.trim()).filter(Boolean);
 const buildMs = Date.now() - started;
 ---

@@ -20,7 +20,7 @@ export const prerender = false;
 // A beacon body over this is not a menu page reporting a funnel.
 const MAX_BODY = 8 * 1024;
 
-export async function POST({ request }) {
+export async function POST({ request, locals }) {
   let body;
   try {
     const text = await request.text();
@@ -37,7 +37,7 @@ export async function POST({ request }) {
     // The anon key, on purpose. This is exactly the privilege a diner has: permission to
     // call one function and nothing else. Using anything stronger here would mean the one
     // public route in the system held a key that could read every restaurant's data.
-    await anonClient().rpc("record_events", {
+    await anonClient(locals).rpc("record_events", {
       p_tenant: tenant,
       p_session: String(session).slice(0, 64),
       p_events: events.slice(0, 50),

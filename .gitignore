@@ -15,3 +15,6 @@ admin/node_modules/
 admin/.next/
 admin/.env.local
 admin/tsconfig.tsbuildinfo
+
+# Cloudflare's local simulator state (the fake R2 bucket wrangler dev writes to)
+app/.wrangler/

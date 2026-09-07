@@ -1,0 +1,44 @@
+# The menu app, as a Cloudflare Worker.
+#
+# This file is committed. Everything in it is a NAME, not a secret: bucket names, the entry
+# point, a compatibility date. The two secrets the app needs are set once with
+# `wrangler secret put` and stored encrypted by Cloudflare - they never appear here, in the
+# repo, or in the build output.
+#
+#   npx wrangler secret put SUPABASE_URL
+#   npx wrangler secret put SUPABASE_ANON_KEY
+#
+# Deploy:
+#   npm run build && npx wrangler deploy
+
+name = "betareal-menu"
+main = "./dist/_worker.js/index.js"
+compatibility_date = "2025-09-01"
+
+# Needed only so the S3 SDK on the DEVELOPMENT path in /a/[...key].js can compile. The
+# deployed Worker never executes it - it reaches R2 through the bindings below.
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# R2, bound rather than called over HTTP.
+#
+# A binding is an account-level grant made at deploy time, so the running Worker holds no
+# access key, no secret and no endpoint - there is nothing here to leak, and nothing to
+# rotate. It is also same-network: a 220 KB model does not leave Cloudflare to reach a
+# diner's page.
+#
+# Two buckets because the two kinds of data have opposite economics (storage.py): engine
+# output is large, few and regenerable; everything a restaurant uploaded is small and many.
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "betareal-photos"
+
+[[r2_buckets]]
+binding = "MODELS"
+bucket_name = "betareal-models"
+
+[observability]
+enabled = true

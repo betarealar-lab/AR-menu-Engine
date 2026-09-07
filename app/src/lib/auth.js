@@ -11,10 +11,11 @@
 // wrong shape by definition.
 
 import { createClient } from "@supabase/supabase-js";
-import { envVar } from "./env.js";
+import { envFrom } from "./env.js";
 
-export function anonClient() {
-  return createClient(envVar("SUPABASE_URL"), envVar("SUPABASE_ANON_KEY"), {
+export function anonClient(locals) {
+  const env = envFrom(locals);
+  return createClient(env("SUPABASE_URL"), env("SUPABASE_ANON_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
