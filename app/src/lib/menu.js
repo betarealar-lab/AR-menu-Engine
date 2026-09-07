@@ -10,21 +10,23 @@
 // works on real phones.
 //
 // This runs on the SERVER, once per publish. A diner never executes any of it.
+//
+// ── it asks the database for one thing, with the weakest key that works ───────────────
+//
+// This used to hold `SUPABASE_DB_URL` - a direct Postgres connection that bypasses
+// row-level security entirely - on the app that serves PUBLIC pages. It worked, and it was
+// the strongest credential in the building sitting in the most exposed place.
+//
+// Now it calls `public_menu(slug)` (0015) with the anon key. That function returns exactly
+// what a diner's page renders and nothing else: no hidden dish, no unapproved model, no
+// other restaurant, nothing about who owns or edits it. There is no table this key can
+// read and nothing to enumerate - it takes a slug, which is already in the URL.
+//
+// It is also one round trip instead of three, and it is plain `fetch`, so this file runs
+// unchanged on Node and on Cloudflare Workers. Raw TCP to Postgres runs on neither without
+// help.
 
-import postgres from "postgres";
 import { envVar } from "./env.js";
-
-let sql;
-
-function db() {
-  if (sql) return sql;
-  const url = envVar("SUPABASE_DB_URL");
-  if (!url) throw new Error("SUPABASE_DB_URL is not set - see .env");
-  // One connection, reused. The pooler is the only route that resolves on IPv4 (see
-  // HANDOFF's environment table), and it does not want a large pool from one process.
-  sql = postgres(url, { max: 4, idle_timeout: 20, prepare: false });
-  return sql;
-}
 
 const SYMBOL = { GEL: "₾", USD: "$", EUR: "€", GBP: "£" };
 
@@ -51,31 +53,24 @@ export function assetUrl(v, base = "/a") {
 }
 
 export async function loadMenu(slug, { assetBase = "/a" } = {}) {
-  const s = db();
+  const url = envVar("SUPABASE_URL");
+  const key = envVar("SUPABASE_ANON_KEY");
+  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are not set");
 
-  const [tenant] = await s`
-    select id, slug, name, template_id, theme, settings, languages
-    from tenants where slug = ${slug}
-  `;
-  if (!tenant) return null;
+  const res = await fetch(`${url.replace(/\/$/, "")}/rest/v1/rpc/public_menu`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`,
+               "Content-Type": "application/json" },
+    body: JSON.stringify({ p_slug: slug }),
+  });
+  if (!res.ok) throw new Error(`menu ${res.status}: ${(await res.text()).slice(0, 120)}`);
 
-  // Two queries, not three: categories come back joined onto the items. Every round trip
-  // is on the owner's save path, and the measured cost of a trip to Frankfurt is ~100 ms.
-  const [cats, rows] = await Promise.all([
-    s`select id, name, i18n, position from categories
-      where tenant_id = ${tenant.id} and visible order by position, name`,
-    s`select i.id, i.name, i.description, i.price_minor, i.price_text,
-             i.price_old_minor, i.currency, i.category_id, i.position, i.photo_key,
-             i.i18n, i.text_only, i.is_3d, i.thumb_3d, i.featured,
-             i.variants, i.addons,
-             m.draco_key, m.usdz_key, m.external_glb, m.external_usdz,
-             m.ar_scale, m.view_orbit, m.tenant_state
-      from items i
-      left join models m on m.id = i.model_id and m.tenant_id = i.tenant_id
-      where i.tenant_id = ${tenant.id} and i.visible
-      order by i.position, i.name`,
-  ]);
+  const doc = await res.json();
+  if (!doc || !doc.tenant) return null;         // no such restaurant
 
+  const tenant = doc.tenant;
+  const cats = doc.categories || [];
+  const rows = doc.items || [];
   const catById = new Map(cats.map((c) => [String(c.id), c]));
 
   // theme_config is one flat bag to the viewer. We keep palette and site settings in

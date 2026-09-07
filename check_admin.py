@@ -690,6 +690,49 @@ def main() -> int:
                          params={"select": "id"})
         check("the service key still cannot read tenants over the API", r.status_code == 403)
 
+        # ── what a diner's page is allowed to ask for ────────────────────────
+        # The menu app holds the ANON key now, not a direct database connection, and it can
+        # call exactly one function. These are the rules that function has to keep, because
+        # nothing above it is checking them any more.
+        anon_h = {"apikey": anon, "Authorization": f"Bearer {anon}",
+                  "Content-Type": "application/json"}
+        r = requests.post(f"{url}/rest/v1/rpc/public_menu", timeout=30, headers=anon_h,
+                          json={"p_slug": slug})
+        doc = r.json() if r.ok else None
+        check("an anonymous caller can read a published menu", r.ok and doc and doc.get("tenant"),
+              r.text[:140])
+        names = [i["name"] for i in (doc or {}).get("items", [])]
+        check("and it carries the dishes", "Khachapuri" in names, str(names)[:120])
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("update items set visible = false where id = %s", (item_id,))
+            cur.execute("update models set tenant_state = 'draft' where id = %s", (model_id,))
+            conn.commit()
+        r = requests.post(f"{url}/rest/v1/rpc/public_menu", timeout=30, headers=anon_h,
+                          json={"p_slug": slug})
+        doc = r.json() if r.ok else {}
+        check("a hidden dish is not in it",
+              "Khachapuri" not in [i["name"] for i in doc.get("items", [])])
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("update items set visible = true where id = %s", (item_id,))
+            conn.commit()
+        r = requests.post(f"{url}/rest/v1/rpc/public_menu", timeout=30, headers=anon_h,
+                          json={"p_slug": slug})
+        doc = r.json() if r.ok else {}
+        dish = next((i for i in doc.get("items", []) if i["name"] == "Khachapuri"), {})
+        check("and an unapproved model is stripped from the dish that points at it",
+              dish and dish.get("draco_key") is None,
+              "a model nobody approved would have reached a diner")
+
+        # The anon key may call that and nothing else.
+        for table in ("tenants", "items", "models", "captures", "model_requests", "invites"):
+            r = requests.get(f"{url}/rest/v1/{table}", timeout=30,
+                             headers={"apikey": anon, "Authorization": f"Bearer {anon}"},
+                             params={"select": "id", "limit": "1"})
+            rows = r.json() if r.ok else None
+            check(f"anon reads nothing from {table}",
+                  (not r.ok) or rows == [], f"HTTP {r.status_code} {str(rows)[:60]}")
+
     finally:
         try:
             with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
