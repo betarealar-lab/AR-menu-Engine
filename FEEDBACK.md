@@ -1,4 +1,4 @@
-# The live menu was not a faithful copy — fixed 2026-09-07
+# The live menu was not a faithful copy — fixed 2026-09-07, and again 2026-09-08
 
 **Status: done and deployed.** Kept as the record of what went wrong, because the mistake
 is the kind that repeats.
@@ -47,6 +47,7 @@ existed and were all wrong.
 |---|---|---|
 | dark theme always, dead toggle | the button shipped with the word "Night" in a 34px circle; and only ONE palette was emitted, unscoped, *before* the template sheet — so it lost every specificity tie and the restaurant's own colours were never applied | icon button; both palettes emitted, each scoped to its own `[data-theme]`, after the sheet |
 | categories do not work | one flat list of 170 cards; nothing to filter | `.cat-section` per category with a heading, as the platform does |
+| **categories STILL do not work** (reported again, 2026-09-08) | `el.hidden = true` does nothing: `[hidden]{display:none}` is a USER-AGENT rule and the template sheet's `.menu-item{display:grid}` is an AUTHOR rule, which wins at any specificity. The headings hid (no `display` of their own), so a tap removed the structure and left all 175 dishes in place | `platform.css`, loaded after the template sheet, with `!important` on the hidden state only - the same trick the platform's own `.cat-nav:not([hidden])` uses |
 | everything alphabetical | `order by i.position, i.name` — but `position` is the rank WITHIN a category. 170 dishes, 26 categories, 26 distinct positions. Sorting the whole menu by it interleaves every category and breaks ties by name | order by category position, then item position |
 | 3D not on top | no AR-featured block, no 3D-first ordering | AR block leads the All view; 3D first inside a selected category |
 | no add-to-cart | `addToBasket` was a stub, so there was nothing for a button to call | `platform.js`, ported; a cart control on every card |
@@ -110,6 +111,22 @@ mutation tests turn it red — remove the cart button, re-stub `addToBasket`.
 
 **Add a check there whenever a feature is added. If a feature can be deleted without
 turning one of them red, it was never really shipped.**
+
+### And the second rule, which cost a whole extra round
+
+The first version of the category check counted `[...cards].filter(c => !c.hidden)`. It was
+green, every time, while nothing moved on screen - because it was **reading back the
+attribute the filter had just written.** A check that asserts your own assignment happened
+is not a test of anything; it is an echo.
+
+Same trap in the browser, one level down: `getComputedStyle(el).display` on an element
+*inside* a `display:none` ancestor still returns that element's own value, not `none`. The
+honest signal is `el.getClientRects().length` - empty for anything not actually laid out.
+
+So: **check the effect, never the input.** The category checks now prove it from the CSS
+cascade - for every element the filter hides, either the template never gives it an
+unconditional `display`, or `platform.css` overrides the hidden state with `!important` -
+and both mutations (drop the `!important`, forget one selector) turn them red.
 
 394 checks pass across seven suites.
 

@@ -138,6 +138,50 @@ def node() -> str:
     return "node"
 
 
+def _loads_platform_css_last() -> bool:
+    """The order of the two <style> blocks in the page.
+
+    Equal specificity means the LAST one wins, so a platform rule written before the
+    template sheet is a rule that loses - which is the same mistake, one file over, that
+    hid Monday Greens' real palette behind the template's defaults.
+    """
+    page = (ROOT / "app" / "src" / "pages" / "[slug].astro").read_text(encoding="utf-8")
+    try:
+        return page.index("set:html={platformCss}") > page.index("set:html={sheet}")
+    except ValueError:
+        return False
+
+
+# Only the elements the category filter hides. A `display` on anything else is a template
+# doing its job.
+_HIDEABLE = (".cat-section", ".menu-item", ".category-header", ".ar-featured-banner")
+
+
+def _display_subjects(css: str) -> list[str]:
+    """Which hideable elements this sheet gives an UNCONDITIONAL `display` to.
+
+    Unconditional is the whole point. The platform's own sheet writes
+    `.cat-nav:not([hidden]) { display: flex }` - which leaves the hidden state alone and
+    needs no override, and is the trick our own CSS should have copied. A bare
+    `.menu-item { display: grid }` is the one that breaks `hidden`.
+    """
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    found = set()
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        if "display" not in body:
+            continue
+        for part in " ".join(sel.split()).split(","):
+            part = part.strip()
+            if not part or "[hidden]" in part or ":not(" in part:
+                continue                       # already guards the hidden state
+            # A rule styles its SUBJECT - the rightmost compound selector.
+            subject = part.split()[-1]
+            for t in _HIDEABLE:
+                if subject == t or subject.startswith(t + ".") or subject.startswith(t + ":"):
+                    found.add(t)
+    return sorted(found)
+
+
 def main() -> int:
     if not BUNDLE.is_file():
         print("app/public/viewer.js is missing - run: python menu/render/build_viewer.py")
@@ -267,6 +311,31 @@ def main() -> int:
 
     # ── 6. categories ────────────────────────────────────────────────────────────────
     print("\n-- categories --")
+    #
+    # **The check that lied.** This block used to count
+    # `[...cards].filter(c => !c.hidden)` - reading back the attribute the filter had just
+    # written. It was always right, and nothing moved on screen, because
+    # `[hidden] {display:none}` is a USER-AGENT rule while the template sheet's
+    # `.menu-item {display: grid}` is an AUTHOR rule, which wins at any specificity.
+    # Reading back a property your own code just set is not a test of anything.
+    #
+    # So: prove it from the CSS instead. For every element the filter hides, either the
+    # template sheet never gives it an unconditional `display`, or `platform.css` overrides
+    # the hidden state with `!important`. Those are the only two ways `hidden` can hide.
+    platform_css = (LIB / "platform.css").read_text(encoding="utf-8")
+    check("there is a platform stylesheet at all", bool(platform_css.strip()))
+    check("...and the page loads it AFTER the template sheet",
+          _loads_platform_css_last(), "equal specificity: the last one wins")
+    for target in _HIDEABLE:
+        check(f"{target} can actually be hidden",
+              f"{target}[hidden]" in platform_css
+              and "display: none !important" in platform_css)
+    for name in ("monday_greens", "elegant_black"):
+        sheet = (LIB / "css" / f"{name}.css").read_text(encoding="utf-8")
+        clashes = _display_subjects(sheet)
+        missing = [t for t in clashes if f"{t}[hidden]" not in platform_css]
+        check(f"{name}: everything it gives a `display` is still hideable",
+              not missing, ", ".join(missing) or f"{len(clashes)} guarded")
     check("the list is grouped into sections", html.count('class="cat-section"') == 3)
     check("each with a heading", html.count('class="category-header"') == 2)
     check("in the owner's order, not alphabetical",

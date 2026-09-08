@@ -1,0 +1,53 @@
+/* platform.css — the few rules a platform feature owns, that no template may override.
+ *
+ * Everything else about how a menu looks belongs to the template sheet. This file is not
+ * styling; it is the handful of declarations that make a FEATURE work, and it is loaded
+ * after the template so a template cannot take one away.
+ *
+ * ── why it exists: `hidden` was doing nothing ──────────────────────────────────────
+ *
+ * Temo, twice, on two different builds: "categories don't work".
+ *
+ * The category filter hides what is not in the chosen category with `el.hidden = true`.
+ * That is the right mechanism - it also takes the element out of the accessibility tree
+ * and out of find-in-page, which `display: none` from a class does not do on its own.
+ *
+ * But `[hidden] { display: none }` lives in the **user-agent** stylesheet, and the
+ * template sheet says:
+ *
+ *     .menu-item { display: grid; }        (and `flex`, further down, and per-template)
+ *     .ar-featured-banner { display: flex; }
+ *
+ * An author rule beats a user-agent rule at any specificity. So every card stayed
+ * visible. The `.category-header` has no `display` of its own, so the headings DID hide -
+ * which made it worse than nothing: tapping a category removed the structure and left all
+ * 175 dishes exactly where they were.
+ *
+ * The platform's own page solves this the same way, one element over:
+ *
+ *     .cat-nav:not([hidden]) { display: flex; }
+ *
+ * ...which is the whole trick - never set `display` unconditionally on something you
+ * intend to hide. Their sheet is taken verbatim and is not edited, so the fix lives here
+ * instead, as `!important` on the hidden state only. It cannot affect a visible element.
+ *
+ * **This was also a check that lied.** `check_features.py` counted
+ * `[...cards].filter(c => !c.hidden)` - the ATTRIBUTE, which was being set correctly - and
+ * went green while nothing moved on screen. A check that reads back the property your own
+ * code just wrote is not a test of anything. It reads computed styles now.
+ */
+
+/* The filter's hiding, immune to whatever `display` a template gives these.
+ *
+ * `.cat-section` is what the filter actually toggles - one element per category instead
+ * of the 175 cards inside it - and it is `display: contents` in the template sheet, so it
+ * needs this for exactly the same reason. The others are listed because a section can be
+ * partly hidden: the 3D block's cards are duplicates of cards that live in a category, and
+ * a future filter that shows a category with its 3D dishes suppressed would hide them
+ * individually. Costing four selectors to make that impossible to get wrong is cheap. */
+.cat-section[hidden],
+.menu-item[hidden],
+.category-header[hidden],
+.ar-featured-banner[hidden] {
+  display: none !important;
+}

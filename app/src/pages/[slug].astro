@@ -35,6 +35,10 @@ import chromeHtml from "../../../menu/render/ported/chrome.html?raw";
 // it is a proof rather than the guess that produced four "renders but looks wrong" bugs.
 // 347 KB down to ~114 KB, and the remaining generic rules stay until a computed-style
 // diff against the live page can prove each further cut.
+// The rules a platform FEATURE owns - currently just making the category filter's
+// `hidden` actually hide. Loaded after the template sheet so a template cannot override
+// one; see its own comment for the fortnight this cost.
+import platformCss from "../lib/platform.css?raw";
 import mondayGreensCss from "../lib/css/monday_greens.css?raw";
 import elegantBlackCss from "../lib/css/elegant_black.css?raw";
 
@@ -132,6 +136,7 @@ const buildMs = Date.now() - started;
         palette written before it loses every tie. This is the restaurant's own theme -
         it wins. */}
     <style set:html={sheet} />
+    <style set:html={platformCss} />
     {/* The restaurant's palette, before a single pixel is painted. The platform sets
         these at runtime after fetching theme_config, which is the re-skin a diner
         watches happen; resolved here, there is no second state to flash to. */}

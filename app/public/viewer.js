@@ -3246,16 +3246,32 @@ window.UI = {
 
   let _activeFilter = "";
 
-  /** Everything in one section that the filter turns on and off.
+  /** Whether the filter's `hidden` will actually hide anything.
    *
-   *  Not the section element itself: `.cat-section { display: contents }` is an AUTHOR
-   *  rule and `[hidden]` is a user-agent one, so author wins and a hidden section stays
-   *  perfectly visible. That is a silent failure - the filter appears to do nothing, which
-   *  is exactly what Temo reported - so the children are hidden instead, and this comment
-   *  is here so nobody "simplifies" it back.
+   *  **This is the bug that survived one fix and shipped twice.** `[hidden] {display:none}`
+   *  is a USER-AGENT rule; the template sheet says `.menu-item { display: grid }`, which is
+   *  an AUTHOR rule, and author beats user-agent at any specificity. So setting `hidden`
+   *  on a card did nothing at all. `.category-header` has no `display` of its own, so the
+   *  headings DID hide - tapping a category removed the structure and left all 175 dishes
+   *  where they were, which reads as "categories don't work" because it is.
+   *
+   *  `platform.css` restores it with `!important` on the hidden state. It is loaded after
+   *  the template sheet, so no template can take it away - and this function checks at boot
+   *  that it actually arrived, because a silently-missing stylesheet reproduces the
+   *  original bug exactly and there would again be nothing in the console to find.
    */
-  function partsOf(section) {
-    return $$(".menu-item, .category-header, .ar-featured-banner", section);
+  function hidingWorks() {
+    const probe = document.createElement("div");
+    probe.className = "cat-section";
+    probe.hidden = true;
+    document.body.appendChild(probe);
+    const ok = getComputedStyle(probe).display === "none";
+    probe.remove();
+    if (!ok) {
+      console.error("[betareal] platform.css did not load: `hidden` does not hide, so " +
+        "the category filter cannot work. The template sheet's `display` is winning.");
+    }
+    return ok;
   }
 
   /** 3D dishes first, in a single selected category. The platform's `appendPrioritizedItems`.
@@ -3288,7 +3304,10 @@ window.UI = {
     for (const section of sections) {
       const mine = section.dataset.cat || "";
       const on = cat === "" || mine === cat;
-      for (const el of partsOf(section)) el.hidden = !on;
+      // The SECTION, not its 175 children. `display: contents` means it has no box of its
+      // own, so hiding it removes the heading and every card under it in one attribute
+      // write - and `platform.css` is what makes that attribute mean something.
+      section.hidden = !on;
       // 3D first only inside a single selected category. In the All view the 3D block
       // above already leads, and the categories below keep the owner's own order.
       orderSection(section, on && cat !== "" && cat !== AR_CAT);
@@ -3489,6 +3508,10 @@ window.UI = {
   window.applyTheme = applyTheme;
 
   function start() {
+    // Asked once, out loud. A missing `platform.css` reproduces the original bug exactly -
+    // pills highlight, nothing else moves - and without this there is nothing in the
+    // console to find, which is how it went out twice.
+    window.__hidingWorks = hidingWorks();
     wireCategories();
     wireLanguage();
     wireTheme();
