@@ -25,6 +25,7 @@ import {
 import { loadCaptures, requestRescale, setArchived, hasDims, type Capture, type Dims } from '@/lib/data/studio'
 import SizeInput from '@/components/SizeInput'
 import ModelStage from '@/components/ModelStage'
+import ModelFiles from '@/components/ModelFiles'
 import SampleDish from '@/components/SampleDish'
 import QrCode from '@/components/QrCode'
 import { ensureViewer } from '@/lib/viewer'
@@ -348,7 +349,7 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
 }) {
   const plan = usePlan()
   const [name, setName] = useState(m.title)
-  const [panel, setPanel] = useState<null | 'angle' | 'size' | 'table'>(null)
+  const [panel, setPanel] = useState<null | 'angle' | 'size' | 'table' | 'files'>(null)
   // Drafts open in 3D straight away: the owner's verdict is the point of a draft, and a
   // verdict from a still image is the wrong verdict. Everything else waits for a tap.
   const [live, setLive] = useState(m.state === 'draft' && !m.archived && !!m.glb)
@@ -448,11 +449,21 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
           {m.glb && (
             <button className="underline" onClick={() => setPanel(panel === 'size' ? null : 'size')}>size</button>
           )}
+          {/* Ours, not an owner's. The FILES are public by URL - a diner's phone fetches
+              the same bytes with no credential, which is what serving a menu means - so
+              this is not a lock, it is a control an owner has no use for. `canUploadModels`
+              is `isSuper` (lib/usePlan.ts). */}
+          {plan.canUploadModels && (m.glb || m.usdz || m.poster) && (
+            <button className="underline"
+                    onClick={() => setPanel(panel === 'files' ? null : 'files')}>files</button>
+          )}
           <button className="underline ml-auto"
                   onClick={() => run(() => setArchived(m.id, !m.archived), m.archived ? 'Back in the library' : 'Hidden')}>
             {m.archived ? 'show' : 'hide'}
           </button>
         </div>
+
+        {panel === 'files' && <ModelFiles model={m} onSay={onSay} />}
 
         {panel === 'angle' && <Angle model={m} onSay={onSay} onChanged={onChanged} />}
 
