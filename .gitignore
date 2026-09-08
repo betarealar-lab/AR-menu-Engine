@@ -24,3 +24,9 @@ admin/tsconfig.tsbuildinfo
 
 # Cloudflare's local simulator state (the fake R2 bucket wrangler dev writes to)
 app/.wrangler/
+
+# Wrangler stores the Cloudflare account id and name here. `admin/.wrangler/` and
+# `app/.wrangler/` were already ignored; the one at the repo ROOT was not, which is how it
+# got committed. The same directory under app/ has previously held the R2 access key and
+# secret inside build sourcemaps, so the rule is the whole path, everywhere.
+/.wrangler/
