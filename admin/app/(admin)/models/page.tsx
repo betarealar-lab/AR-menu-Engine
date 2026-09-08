@@ -27,7 +27,7 @@ import SizeInput from '@/components/SizeInput'
 import SampleDish from '@/components/SampleDish'
 import QrCode from '@/components/QrCode'
 import { ensureViewer } from '@/lib/viewer'
-import { sizeInWords } from '@/lib/size'
+import { sizeInWords, type Axis } from '@/lib/size'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
@@ -380,7 +380,11 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
           {m.variant !== 'default' && <span>{m.variant}</span>}
           {m.scale_cm
             ? <span title={`${[m.width_cm, m.length_cm, m.height_cm].filter(v => v != null).join(' × ')} cm`}>
-                {sizeInWords(m.width_cm ?? m.scale_cm, m.height_cm)}
+                {/* The axis matters now that a dish can be sized by height alone:
+                    the word anchors are WIDTHS, so a 12 cm-tall burger described as
+                    'about a phone' is simply wrong. */}
+                {sizeInWords(m.width_cm ?? m.scale_cm, m.height_cm,
+                             (m.scale_axis as Axis) || 'width')}
               </span>
             : <span style={{ color: 'var(--gold)' }}>no size set</span>}
           <span>·</span>
@@ -407,7 +411,8 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
                     value={`${MENU_ORIGIN}/ar?g=${encodeURIComponent(m.glb.split('/a/')[1] || '')}` +
                            `&u=${encodeURIComponent(m.usdz.split('/a/')[1] || '')}` +
                            `&n=${encodeURIComponent(m.title)}` +
-                           `&s=${encodeURIComponent(m.scale_cm ? sizeInWords(m.width_cm ?? m.scale_cm, m.height_cm) : '')}`} />
+                           `&s=${encodeURIComponent(m.scale_cm ? sizeInWords(m.width_cm ?? m.scale_cm, m.height_cm,
+                             (m.scale_axis as Axis) || 'width') : '')}`} />
             <p className="text-[11px] mt-2" style={{ color: 'var(--dim)' }}>
               Scan with your phone. It appears on your table at the size it will ship at.
               Wrong? Resize below — that is free.

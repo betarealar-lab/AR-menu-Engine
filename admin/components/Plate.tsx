@@ -15,7 +15,7 @@ import { uploadAsset } from '@/lib/upload'
 import SizeInput from '@/components/SizeInput'
 import {
   loadCaptures, saveCapture, removeCapture, requestMultiview, loadCaptureTasks,
-  requestBuild, SHAPES, EMPTY_DIMS, hasDims, type Capture, type CaptureTask, type Dims,
+  requestBuild, EMPTY_DIMS, hasDims, type Capture, type CaptureTask, type Dims,
 } from '@/lib/data/studio'
 
 // dataset.SLOTS, in the engine's order. The first frame is what the generator builds
@@ -57,7 +57,11 @@ export default function Plate(props: {
   const [busySlot, setBusySlot] = useState<number | null>(null)
   // A flat plate by default: it is what most dishes are, and a default that is usually
   // right beats an empty box an owner skips.
-  const [dims, setDims] = useState<Dims>({ ...SHAPES[0].dims })
+  // EMPTY, not a preset. It used to open with Flat plate's 28 x 28 x 3 already in the
+  // boxes, which is a default answer to a question only the owner can answer - and a
+  // burger built as a dinner plate costs 30 credits and a remake. The Build button
+  // stays disabled until one number is typed.
+  const [dims, setDims] = useState<Dims>({ ...EMPTY_DIMS })
   const [sending, setSending] = useState(false)
   const fileRefs = useRef<(HTMLInputElement | null)[]>([])
 

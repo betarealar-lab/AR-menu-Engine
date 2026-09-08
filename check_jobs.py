@@ -283,6 +283,38 @@ def main() -> int:
         storage.backend = real_backend
         shutil.rmtree(store, ignore_errors=True)
 
+    # ── one typed number becomes the right size ──────────────────────────────────────
+    #
+    # Temo, 2026-09-08: "make it so that with 1 human inputted dimension it can scale."
+    # It already could - the plate just opened with a preset filled in and never said which
+    # of the three numbers mattered. This is the arithmetic that makes it true, checked
+    # without a toolchain, a bucket or a credit.
+    #
+    # The chain: an owner types ONE box -> `model_request_gate()` (0013) picks the primary,
+    # width first, into scale_cm/scale_axis -> this turns it into a uniform factor -> the
+    # model's own proportions supply the other two axes.
+    print("\n== one dimension is enough ==")
+    import optimize
+    plate = {"width": 0.14, "length": 0.14, "height": 0.03}
+    check("28 cm across a 14 cm model doubles it",
+          optimize.scale_factor(plate, {"cm": 28, "axis": "width"}) == 2.0)
+    check("...and the answer is in metres, because glTF and AR are",
+          abs(optimize.scale_factor({"width": 1.0}, {"cm": 28, "axis": "width"}) - 0.28) < 1e-9)
+    check("height alone scales it just the same",
+          optimize.scale_factor(plate, {"cm": 12, "axis": "height"}) == 4.0)
+    check("so does length alone",
+          optimize.scale_factor(plate, {"cm": 7, "axis": "length"}) == 0.5)
+    # Every way it can be unusable ends at 1.0. A model at its generated size is wrong; a
+    # model multiplied by infinity is not on the table at all.
+    for why, measured, scale in [
+        ("no size was given", plate, None),
+        ("the size is zero", plate, {"cm": 0, "axis": "width"}),
+        ("the axis is not one of ours", plate, {"cm": 28, "axis": "diagonal"}),
+        ("the geometry measures nothing", {"width": 0.0}, {"cm": 28, "axis": "width"}),
+        ("the number is not a number", plate, {"cm": "big", "axis": "width"}),
+    ]:
+        check(f"left alone when {why}", optimize.scale_factor(measured, scale) == 1.0)
+
     print("\n" + "=" * 58)
     bad_names = [n for n, ok, _ in RESULTS if not ok]
     print(f"{len(RESULTS) - len(bad_names)}/{len(RESULTS)} passed")

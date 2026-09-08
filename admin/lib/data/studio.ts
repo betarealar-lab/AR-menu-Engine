@@ -35,12 +35,11 @@ export type CaptureTask = {
  *  kept so the optimiser can compare and warn one day (0013). */
 export type Dims = { width: number | null; length: number | null; height: number | null }
 
-export const SHAPES: { id: string; label: string; dims: Dims }[] = [
-  { id: 'flat-plated',  label: 'Flat plate',          dims: { width: 28, length: 28, height: 3 } },
-  { id: 'deep-bowl',    label: 'Bowl',                dims: { width: 18, length: 18, height: 8 } },
-  { id: 'wide-flat',    label: 'Sharing platter',     dims: { width: 35, length: 25, height: 3 } },
-  { id: 'tall-stacked', label: 'Tall (burger, cake)', dims: { width: 12, length: 12, height: 12 } },
-]
+// The four shape presets that used to live here are gone. They filled all three boxes at
+// once and the plate opened with one of them selected, so the easy path was to send a
+// preset nobody had read. The engine only ever bakes ONE dimension anyway (see
+// `primaryDim` in lib/size.ts), so the screen asks for one number instead of offering four
+// guesses at three.
 
 export const EMPTY_DIMS: Dims = { width: null, length: null, height: null }
 export const hasDims = (d: Dims) => d.width !== null || d.length !== null || d.height !== null

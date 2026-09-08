@@ -65,6 +65,42 @@ AUTO_FLOOR_RATIO = 0.005
 SCALE_AXES = ("width", "length", "height")
 
 
+def scale_factor(measured: dict, scale: dict | None) -> float:
+    """How much to scale the model so ONE stated dimension comes out right, in metres.
+
+    **One number is the whole design, not a shortcut.** An owner is asked for width, length
+    and height and any one of them is enough: `model_request_gate()` (0013) picks the first
+    that was given - width, else length, else height - into `scale_cm`/`scale_axis`, and
+    this turns that into a single uniform factor. The model's own proportions supply the
+    other two axes, which is deliberate: scaling three axes independently to match three
+    typed numbers would squash a model whose generated proportions were slightly off, and a
+    slightly-wrong-but-true shape beats an exactly-sized distortion.
+
+    Metres because glTF is in metres and AR is in metres; a dish given as 28 cm is 0.28.
+
+    1.0 - leave it alone - for anything unusable: no scale asked for, an axis we do not
+    know, or geometry that measures zero on that axis. A model at its generated size is
+    wrong; a model multiplied by infinity is not on the table at all.
+
+    Lifted out of the middle of `optimize()` so it can be checked without running a
+    toolchain, a bucket or a credit. See check_jobs.py.
+    """
+    if not scale:
+        return 1.0
+    cm = scale.get("cm")
+    axis = scale.get("axis")
+    if not cm or axis not in SCALE_AXES:
+        return 1.0
+    try:
+        extent = float(measured.get(axis) or 0.0)
+        cm = float(cm)
+    except (TypeError, ValueError):
+        return 1.0
+    if extent <= 0 or cm <= 0:
+        return 1.0
+    return (cm / 100.0) / extent
+
+
 @dataclass
 class Optimized:
     ok: bool
@@ -230,11 +266,7 @@ def run(master: Path, out_dir: Path, *, triangles: int | None = TARGET_TRIANGLES
             say("placing")
             placed = work / "placed.glb"
             measured = glb.bounds(opt)
-            factor = 1.0
-            if scale and scale.get("cm") and scale.get("axis") in SCALE_AXES:
-                extent = float(measured.get(scale["axis"]) or 0.0)
-                if extent > 0:
-                    factor = (float(scale["cm"]) / 100.0) / extent
+            factor = scale_factor(measured, scale)
             place_stats = glb.place(opt, placed, factor=factor, seat=True)
             place_stats["scale_axis"] = (scale or {}).get("axis", "")
             place_stats["scale_cm"] = (scale or {}).get("cm", 0)
