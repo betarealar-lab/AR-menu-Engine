@@ -36,7 +36,11 @@ export type MenuItem = {
   sort_order: number
   visible: boolean
   ar_scale: number
+  /** The photo the diner sees, as a display URL. Read-only for the caller: what gets
+   *  STORED is `photo_key` below, and these two must be set together. */
   thumbnail_url: string
+  /** The R2 key behind it - what `items.photo_key` actually holds. */
+  photo_key: string
   thumb_3d: boolean
   is_3d: boolean
   text_only: boolean
@@ -106,7 +110,8 @@ type ItemRow = {
   // PostgREST returns an embedded one-to-one as an object, but has returned an array in
   // past versions and still does for some shapes. Both are handled at the call site.
   models: { id: string; draco_key: string | null; usdz_key: string | null
-            view_orbit: string | null; scale_cm: number | null } | null
+            view_orbit: string | null; scale_cm: number | null
+            ar_scale: number | null } | null
 }
 
 type CategoryRow = {
@@ -129,7 +134,7 @@ export async function loadMenu(tenantId: string) {
       .select('id, name, description, i18n, price_minor, price_text, category_id, ' +
               'position, visible, photo_key, model_id, is_3d, thumb_3d, text_only, ' +
               'featured, variants, ' +
-              'models ( id, draco_key, usdz_key, view_orbit, scale_cm )')
+              'models ( id, draco_key, usdz_key, view_orbit, scale_cm, ar_scale )')
       .eq('tenant_id', tenantId).order('position'),
     // Four theme_config lookups in the platform collapse to one row here.
     supabase.from('tenants').select('settings').eq('id', tenantId).single(),
@@ -170,10 +175,23 @@ export async function loadMenu(tenantId: string) {
       model_usdz: assetUrl(model?.usdz_key),
       sort_order: r.position ?? 0,
       visible: !!r.visible,
-      // Real-world size is baked into the shipped file, not applied by the viewer, so this
-      // is always 1. Kept because the platform's UI reads it.
-      ar_scale: 1,
+      // A multiplier the AR launcher applies on top of the file. For a model this engine
+      // generated it is 1, because `optimize.scale_factor()` bakes real-world size into
+      // the mesh - there is nothing left to correct. It exists for the models that DON'T
+      // come from here: an uploaded or imported .glb authored in the wrong unit, where the
+      // only fix short of re-exporting is to tell the viewer to multiply.
+      //
+      // It lives on the MODEL, not the dish, for the same reason the camera angle does:
+      // it is a property of the mesh, so pointing a second dish at that mesh should carry
+      // it. This was hardcoded to 1 here and absent from `saveItem`, which made the input
+      // on the item form - super-admin only, so nobody hit it - do nothing at all.
+      ar_scale: Number(model?.ar_scale ?? 1) || 1,
       thumbnail_url: assetUrl(r.photo_key),
+      // The stored key, carried through the form untouched so a save can put it back.
+      // Without this the form only ever held the display URL, `saveItem` had no key to
+      // write, and every photo uploaded through this admin was left orphaned in R2 the
+      // moment the dish was saved. MG and Corner have photos because they were imported.
+      photo_key: r.photo_key || '',
       thumb_3d: !!r.thumb_3d,
       is_3d: !!r.is_3d,
       text_only: !!r.text_only,
@@ -231,6 +249,10 @@ export async function saveItem(
     thumb_3d: form.thumb_3d,
     text_only: form.text_only,
     featured: form.featured,
+    // The half of the photo that persists. `thumbnail_url` is for the screen; this is the
+    // row. Empty means the owner removed the photo, and null is what `items.photo_key`
+    // stores for "none" - '' would be a key that fetches a 404.
+    photo_key: form.photo_key || null,
     model_id: form.model_id || null,
     i18n,
     variants: form.variants || [],
@@ -301,6 +323,16 @@ export async function saveSettings(tenantId: string, patch: Record<string, strin
 /** The starting camera angle, onto the MODEL the dish points at. A dish with no model has
  *  nothing to frame, which the screen should not let happen but the data layer must not
  *  assume. */
+export async function saveItemScale(modelId: string | null, scale: number) {
+  if (!modelId) return null
+  // Out of range means the caller has a bug, and writing it would ship a menu whose AR
+  // model is invisible or the size of a room. 1 is the honest fallback: the file as it is.
+  const v = Number.isFinite(scale) && scale >= 0.01 && scale <= 10 ? scale : 1
+  const supabase = createClient()
+  const { error } = await supabase.from('models').update({ ar_scale: v }).eq('id', modelId)
+  return error
+}
+
 export async function saveItemView(modelId: string | null, orbit: string) {
   if (!modelId) return null
   const supabase = createClient()

@@ -165,7 +165,9 @@ const en = {
   categoryMenuOrder: 'Visible Menu Order',
   categoryMenuOrderHint: 'Position in the category list. Saving shifts the other categories to keep the order gapless.',
   arScale: 'AR Scale',
-  arScaleHint: '1.0 = default (25cm). If model looks 2× too big → set 0.5. Too small → set 2.0.',
+  arScaleHint: '1.0 means the file as it is — right for every model made here, '
+    + 'which is already built at real size. Change it only for an uploaded model that '
+    + 'comes out wrong in AR: half the size it should be → 2, twice → 0.5.',
   viewAngle: '3D View Angle',
   viewAngleHint: 'Starting camera view for the 3D thumbnail and preview. Horizontal 0–360° spins around the dish, vertical 0–85° (0 = from the side, 85 = top-down), zoom 105 = default, lower = closer.',
   viewAngleH: 'Horizontal °',
@@ -590,7 +592,9 @@ const ka: typeof en = {
   categoryMenuOrder: 'მენიუში გამოჩენის რიგი',
   categoryMenuOrderHint: 'კატეგორიების სიაში პოზიცია. შენახვისას სხვა კატეგორიები ავტომატურად გადაიწევა, რომ რიგი უწყვეტი დარჩეს.',
   arScale: 'AR მასშტაბი',
-  arScaleHint: '1.0 = ნაგულისხმევი (25სმ). თუ მოდელი 2×-ით დიდია → 0.5. პატარაა → 2.0.',
+  arScaleHint: '1.0 ნიშნავს ფაილს როგორც არის — ეს სწორია აქ შექმნილი ყველა მოდელისთვის, '
+    + 'რომელიც უკვე რეალური ზომითაა აგებული. შეცვალეთ მხოლოდ ატვირთული მოდელისთვის, '
+    + 'თუ AR-ში არასწორი ზომისაა: ორჯერ პატარაა → 2, ორჯერ დიდია → 0.5.',
   viewAngle: '3D ხედვის კუთხე',
   viewAngleHint: 'კამერის საწყისი ხედი 3D ესკიზსა და გადახედვაში. ჰორიზონტალური 0–360° ატრიალებს კერძს, ვერტიკალური 0–85° (0 = გვერდიდან, 85 = ზემოდან), ზუმი 105 = ნაგულისხმევი, ნაკლები = უფრო ახლოდან.',
   viewAngleH: 'ჰორიზონტალური °',

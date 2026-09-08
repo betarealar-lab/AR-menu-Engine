@@ -13,6 +13,7 @@ import {
   deleteCategory as deleteCategoryRow,
   saveSettings,
   saveItemView,
+  saveItemScale,
 } from '@/lib/data/menu'
 import {
   DEFAULT_MENU_FILTERS,
@@ -32,6 +33,11 @@ type MenuItem = {
   description_en: string; description_ka: string
   price: string; category_id: string | null; model: string; model_usdz: string
   sort_order: number; visible: boolean; ar_scale: number; thumbnail_url: string; thumb_3d: boolean; is_3d: boolean; text_only: boolean; featured: boolean
+  // The R2 KEY behind `thumbnail_url`, which is a display URL with the origin on it.
+  // `items.photo_key` stores the key, and until this existed the form only ever held
+  // the URL - so `saveItem` had nothing to write and every photo an owner uploaded was
+  // dropped on save.
+  photo_key: string
   // The library is pointers, not copies (MENU-PLATFORM §3): `model` is the url a viewer
   // loads, `model_id` is which row it came from and the only thing that can be changed.
   model_id: string | null
@@ -52,7 +58,7 @@ type MenuFilters = {
 }
 const EMPTY_ITEM: Omit<MenuItem, 'id'> = {
   name_en: '', name_ka: '', description_en: '', description_ka: '',
-  price: '', category_id: null, model: '', model_usdz: '', sort_order: 0, visible: true, ar_scale: 1.0, thumbnail_url: '', thumb_3d: false, is_3d: true, text_only: false, featured: false,
+  price: '', category_id: null, model: '', model_usdz: '', sort_order: 0, visible: true, ar_scale: 1.0, thumbnail_url: '', photo_key: '', thumb_3d: false, is_3d: true, text_only: false, featured: false,
   model_id: null, variants: [],
 }
 
@@ -68,6 +74,7 @@ function normalizeTextOnlyItem(item: Omit<MenuItem, 'id'>) {
     model: '',
     model_usdz: '',
     thumbnail_url: '',
+    photo_key: '',
     thumb_3d: false,
     ar_scale: 1.0,
   }
@@ -298,7 +305,8 @@ export default function MenuPage() {
       description_en: item.description_en, description_ka: item.description_ka,
       price: item.price, category_id: item.category_id, model: item.model, model_usdz: item.model_usdz ?? '',
       sort_order: item.sort_order, visible: item.visible, ar_scale: item.ar_scale ?? 1.0,
-      thumbnail_url: item.thumbnail_url ?? '', thumb_3d: item.thumb_3d ?? false, is_3d: item.is_3d ?? true, featured: item.featured ?? false,
+      thumbnail_url: item.thumbnail_url ?? '', photo_key: item.photo_key ?? '',
+      thumb_3d: item.thumb_3d ?? false, is_3d: item.is_3d ?? true, featured: item.featured ?? false,
       model_id: item.model_id ?? null, variants: item.variants ?? [],
       text_only: item.text_only ?? (!item.is_3d && !item.thumbnail_url && !item.model && !item.model_usdz) })
     setItemMenuGroup(groupForCategory(item.category_id))
@@ -344,6 +352,11 @@ export default function MenuPage() {
       const clear = isDefaultView || !nextItemForm.is_3d || nextItemForm.text_only
       await saveItemView(nextItemForm.model_id,
                          clear ? '' : `${viewForm.h} ${viewForm.v} ${viewForm.zoom}`)
+      // Same place, same reason: the AR multiplier corrects a MESH authored in the wrong
+      // unit, so it belongs to the model. It was on this form and written nowhere, which
+      // meant a super admin could type 0.01, watch the field accept it, save, and reopen
+      // to find 1 - with no way to tell that from the number simply not working in AR.
+      await saveItemScale(nextItemForm.model_id, nextItemForm.ar_scale)
     }
     setSaving(false); setItemModal(false); setUploadProgress(''); setThumbProgress(''); await load()
     flash(editItem ? T.itemUpdated : T.itemAdded)
@@ -469,8 +482,8 @@ export default function MenuPage() {
       return
     }
     try {
-      const { url: publicUrl } = await uploadAsset(blob, 'photo', plan.restaurantId, file.name)
-      setItemForm(f => ({ ...f, thumbnail_url: publicUrl, text_only: false }))
+      const { key, url: publicUrl } = await uploadAsset(blob, 'photo', plan.restaurantId, file.name)
+      setItemForm(f => ({ ...f, thumbnail_url: publicUrl, photo_key: key, text_only: false }))
       setThumbProgress(text(T.uploadedFile, { name: file.name }))
     } catch (e) {
       setThumbProgress(text(T.uploadFailed, { message: e instanceof Error ? e.message : String(e) }))
@@ -871,7 +884,7 @@ export default function MenuPage() {
                         is_3d: false,
                         model: '',
                         model_usdz: '',
-                        thumbnail_url: '',
+                        thumbnail_url: '', photo_key: '',
                         thumb_3d: false,
                         text_only: true,
                       }))
@@ -966,7 +979,7 @@ export default function MenuPage() {
                   </button>
                   {itemForm.thumbnail_url && (
                     <button type="button"
-                            onClick={() => { setItemForm(f => ({ ...f, thumbnail_url: '', thumb_3d: false })); setThumbProgress('') }}
+                            onClick={() => { setItemForm(f => ({ ...f, thumbnail_url: '', photo_key: '', thumb_3d: false })); setThumbProgress('') }}
                             className="px-3 py-1.5 rounded text-xs font-medium"
                             style={{ background: 'rgba(224,82,82,0.1)', color: 'var(--danger)', border: '1px solid rgba(224,82,82,0.25)' }}>
                       {T.clearThumb}
@@ -1011,7 +1024,10 @@ export default function MenuPage() {
                        setItemForm(f => ({ ...f, sort_order: Number(e.target.value) }))
                      }} />
             </Field>
-            {plan.canUploadModels && !itemForm.text_only && (
+            {/* Only where it can do something: the multiplier is stored on the MODEL,
+                so a dish that points at no model has nothing to write it to and the
+                control would silently discard whatever was typed. */}
+            {plan.canUploadModels && !itemForm.text_only && itemForm.model_id && (
               <Field label={T.arScale}>
                 <input type="number" min="0.01" max="10" step="0.05"
                        value={itemForm.ar_scale}

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import sys
 import uuid
@@ -107,6 +108,121 @@ class Supa:
                              headers=self._h(tok), json=body)
 
 
+# -- the bug this section exists for ---------------------------------------------------
+#
+# Twice in one day the admin collected something and then threw it away on save:
+#
+#   the model    an uploaded .glb went to R2 and no row ever pointed at it
+#   the photo    `saveItem` had no `photo_key` in its row object, so every dish photo an
+#                owner uploaded was orphaned in the bucket the moment they pressed Save
+#
+# Both look fine while you use them. The upload runs, the preview appears, the save says
+# it worked - and the value is gone when the screen reloads. The second one was on the
+# single thing a restaurant owner does most, and it survived every check in this repo,
+# because every check reaches the database through PostgREST, where the COLUMN round-trips
+# perfectly. The bug was four lines of TypeScript above it.
+#
+# So this reads the admin's own source and compares two sets: the columns its loader
+# SELECTS out of `items`, and the columns its writer puts back. Anything read and never
+# written is a field the screen can show and cannot save, and has to be named below with a
+# reason. Adding a column to the loader and forgetting the writer turns this red.
+#
+# Static - no server, no database - and it runs first, because a failure here means
+# everything after it is testing a product that cannot save.
+
+# Not `ADMIN`: that is the admin's BASE URL, up at the top of this file, and shadowing
+# it here turned "no admin at http://localhost:3001" into "no admin at C:\...\admin".
+ADMIN_SRC = Path(__file__).with_name("admin")
+ADMIN_DATA = ADMIN_SRC / "lib" / "data" / "menu.ts"
+ADMIN_PAGE = ADMIN_SRC / "app" / "(admin)" / "menu" / "page.tsx"
+
+#: Read out of `items` and deliberately never written straight back, each with its reason.
+READ_ONLY_ITEM_COLUMNS = {
+    "id": "the key - assigned by the database, used in the .eq() rather than the row",
+    "i18n": "written, but rebuilt from name_ka/description_ka rather than copied",
+    "models": "a join onto another table, not a column of items",
+    "price_minor": "written through parsePrice(), which picks between this and price_text",
+    "price_text": "the same, for a dish that no single integer can price",
+    "tenant_id": "written on insert from the caller, never taken from the form",
+}
+
+
+#: Columns of `models` that only the engine ever writes. The admin shows them and must
+#: not be able to edit them: they describe the FILE that was produced, and typing a
+#: different number here would make the row disagree with the mesh it names.
+MODEL_COLUMNS_THE_ENGINE_OWNS = {
+    "draco_key": "the optimised GLB the pipeline wrote",
+    "usdz_key": "its Quick Look twin, converted from the same master",
+    "scale_cm": "the real-world size the mesh was actually baked to",
+}
+
+
+def saved_fields_survive() -> bool:
+    """Everything the menu editor collects, it can also keep."""
+    print("== what the menu editor collects, it keeps ==")
+    src = ADMIN_DATA.read_text(encoding="utf-8")
+
+    m = re.search(r"\.from\('items'\)\s*\n\s*\.select\((.*?)\)\s*\n", src, re.S)
+    if not check("the menu editor's item query is where it was", m,
+                 "loadMenu no longer selects from items the way this reads it"):
+        return False
+    select = " ".join(re.findall(r"'([^']*)'", m.group(1)))
+    # The joined model's columns are a different table with different writers, so they are
+    # pulled out and checked separately below rather than counted against saveItem.
+    joined = re.search(r"models\s*\((.*?)\)", select)
+    joined_cols = re.findall(r"[a-z_0-9]+", joined.group(1)) if joined else []
+    selected = re.findall(r"[a-z_0-9]+", select[:joined.start()] if joined else select)
+
+    m = re.search(r"export async function saveItem\b.*?const row = \{(.*?)\n  \}", src, re.S)
+    if not check("saveItem still builds one row object", m):
+        return False
+    written = set(re.findall(r"^\s{4}([a-z_0-9]+):", m.group(1), re.M))
+    written |= {"price_minor", "price_text"}          # spread in as ...price
+
+    dropped = [c for c in selected if c not in written and c not in READ_ONLY_ITEM_COLUMNS]
+    check("every column the editor reads, saveItem writes back", not dropped,
+          "read and never saved: " + ", ".join(dropped))
+
+    # The two that were actually broken, named individually so a regression reads as
+    # itself rather than as a number going down.
+    check("a dish photo has somewhere to be saved to", "photo_key" in written)
+    check("and the form carries the key, not only the display URL",
+          "photo_key: r.photo_key" in src and "photo_key: string" in src)
+
+    page = ADMIN_PAGE.read_text(encoding="utf-8")
+    check("the photo upload records the key it just wrote to R2",
+          "photo_key: key" in page)
+    check("and removing the photo clears both halves",
+          "thumbnail_url: '', photo_key: ''" in page)
+
+    # The AR multiplier lives on `models`, so it is not in the set above: it has its own
+    # writer, and until today it had none at all - the input existed, accepted a number,
+    # and wrote it nowhere.
+    check("the AR scale on the item form reaches the model",
+          "export async function saveItemScale" in src)
+    check("and the screen actually calls it", "await saveItemScale(" in page)
+    check("the item form no longer invents an AR scale of 1",
+          "ar_scale: Number(model?.ar_scale" in src)
+
+    # The other half of the same question, for the model the dish points at. `ar_scale`
+    # was in exactly this position - read through the join, shown on a form, and written
+    # by nothing - which is why the join gets its own pass rather than being waved
+    # through as "another table's problem".
+    data_layer = "\n".join(f.read_text(encoding="utf-8")
+                           for f in sorted((ADMIN_SRC / "lib" / "data").glob("*.ts")))
+    orphans = []
+    for col in joined_cols:
+        if col in MODEL_COLUMNS_THE_ENGINE_OWNS or col == "id":
+            continue
+        # A writer is this column appearing on the left of a colon inside an .update().
+        if not re.search(r"\.update\(\s*\{[^}]*\b" + col + r"\s*:", data_layer, re.S):
+            orphans.append(col)
+    check("every model field the editor shows, the editor can change", not orphans,
+          "shown and unwritable: " + ", ".join(orphans))
+    print()
+    return True
+
+
 def main() -> int:
     load_env()
     url = os.environ.get("SUPABASE_URL", "")
@@ -126,6 +242,9 @@ def main() -> int:
 
     import psycopg
     sb = Supa(url, anon, service)
+
+    if not saved_fields_survive():
+        return 1
     print(f"The product  (menu {MENU}, admin {ADMIN})\n")
 
     owner_id = other_id = None
