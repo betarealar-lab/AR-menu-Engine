@@ -466,6 +466,61 @@ def main() -> int:
         check("a resize does not count against the free models",
               r.ok and r.json() == 2, r.text[:60])
 
+        # ── the free-model limit is ours, not theirs ─────────────────────────
+        #
+        # `tenants_write` is `using (is_member_of(id))` and `authenticated` held a
+        # TABLE-level UPDATE grant, so until 0018 an owner could raise their own
+        # `model_quota` from the browser with the anon key - the one number standing
+        # between a client and our Meshy credits, and the exact column
+        # `model_request_gate()` reads to decide whether a request is approved or comes to
+        # us. `slug` was writable the same way, and that is the address on every QR code
+        # already printed and stuck to a table.
+        #
+        # RLS could not fix it: a policy is per-ROW and cannot say "this row, not that
+        # column". Column privileges can, so the checks below are on the GRANT.
+        r = sb.patch(tok, "tenants", {"model_quota": 999}, id=f"eq.{tenant_id}")
+        check("an owner cannot raise their own free-model limit", not r.ok,
+              f"HTTP {r.status_code} {r.text[:80]}")
+        r = sb.patch(tok, "tenants", {"slug": "stolen-slug"}, id=f"eq.{tenant_id}")
+        check("nor change the address on their printed QR codes", not r.ok,
+              f"HTTP {r.status_code}")
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select model_quota, slug from tenants where id = %s", (tenant_id,))
+            q, sl = cur.fetchone()
+            check("...and neither actually moved", q != 999 and sl != "stolen-slug",
+                  f"quota {q}, slug {sl}")
+        # The things they SHOULD still be able to change, because locking the two above by
+        # revoking the table grant could easily have taken these with it.
+        r = sb.patch(tok, "tenants", {"settings": {"site_name": "Check Cafe"}},
+                     id=f"eq.{tenant_id}")
+        check("an owner can still edit their own settings", r.ok, r.text[:80])
+        r = sb.patch(tok, "tenants", {"template_id": "plain"}, id=f"eq.{tenant_id}")
+        check("...and still change their template", r.ok, r.text[:80])
+
+        r = sb.rpc(tok, "set_model_quota", {"p_tenant": str(tenant_id), "p_quota": 25})
+        check("an owner calling set_model_quota is refused", not r.ok,
+              f"HTTP {r.status_code}")
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("insert into super_admins (user_id) values (%s) "
+                        "on conflict do nothing", (owner_id,))
+            conn.commit()
+        r = sb.rpc(tok, "set_model_quota", {"p_tenant": str(tenant_id), "p_quota": 25})
+        check("a super admin can set it", r.ok and r.json() == 25, r.text[:80])
+        r = sb.rpc(tok, "set_model_quota", {"p_tenant": str(tenant_id), "p_quota": 5000})
+        check("...but not to a number nobody typed on purpose", not r.ok,
+              f"HTTP {r.status_code}")
+        # Read back through `admin_overview()` (0014), which is the one place a super
+        # admin sees every restaurant's numbers - and the same `model_requests_used()` the
+        # approval gate calls, so the screen cannot disagree with the rule.
+        r = sb.rpc(tok, "admin_overview", {})
+        row = next((x for x in (r.json() if r.ok else [])
+                    if x.get("tenant_id") == str(tenant_id)), {})
+        check("the developer overview shows the new limit and what is used",
+              row.get("quota") == 25 and row.get("quota_used") == 2, str(row)[:140])
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("delete from super_admins where user_id = %s", (owner_id,))
+            conn.commit()
+
         # Hiding, not deleting.
         r = sb.patch(tok, "models", {"archived": True}, id=f"eq.{model_id}")
         check("a model can be hidden", r.ok and r.json()[0]["archived"] is True)

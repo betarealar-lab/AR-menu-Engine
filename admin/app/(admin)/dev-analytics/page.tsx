@@ -40,6 +40,11 @@ export default function DevAnalyticsPage() {
   const [rows, setRows] = useState<Row[]>([])
   const [queue, setQueue] = useState<QueueRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [msg, setMsg] = useState('')
+  const say = useCallback((m: string) => {
+    setMsg(m)
+    setTimeout(() => setMsg(''), 4000)
+  }, [])
 
   const load = useCallback(async () => {
     if (plan.loading) return
@@ -145,6 +150,8 @@ export default function DevAnalyticsPage() {
         </div>
       )}
 
+      {msg && <div className="card px-4 py-3 mb-4 text-sm">{msg}</div>}
+
       <div className="card overflow-hidden">
         <div className="table-scroll">
           <table className="w-full text-sm" style={{ minWidth: 780 }}>
@@ -174,8 +181,8 @@ export default function DevAnalyticsPage() {
                   <td className="px-3 py-2.5 text-right">{Number(r.sessions).toLocaleString()}</td>
                   <td className="px-3 py-2.5 text-right">{Number(r.item_opens).toLocaleString()}</td>
                   <td className="px-3 py-2.5 text-right">{Number(r.ar_opens).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right" style={{ color: 'var(--dim)' }}>
-                    {r.quota_used}/{r.quota}
+                  <td className="px-3 py-2.5 text-right">
+                    <QuotaCell row={r} onSaved={load} onSay={say} />
                   </td>
                 </tr>
               ))}
@@ -189,5 +196,69 @@ export default function DevAnalyticsPage() {
         )}
       </div>
     </div>
+  )
+}
+
+
+/** The free-model limit, editable in place.
+ *
+ *  **The button is not the rule.** `model_quota` is not writable by `authenticated` at all
+ *  (0018 revokes the column grant), and `set_model_quota` is SECURITY DEFINER with
+ *  `is_super_admin()` inside it. So an owner who reaches this URL sees an empty table, and
+ *  an owner who reconstructs this call by hand gets 42501 from the database. Hiding a
+ *  control is a courtesy; the database is the boundary.
+ *
+ *  Reads back through `load()` rather than trusting the local value: the number that
+ *  matters is the one `model_request_gate()` will read on the next request, and the only
+ *  honest way to show it is to ask.
+ */
+function QuotaCell({ row, onSaved, onSay }: {
+  row: Row; onSaved: () => void; onSay: (m: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(String(row.quota))
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    const n = Number(value)
+    if (!Number.isInteger(n) || n < 0 || n > 1000) {
+      onSay('A limit is a whole number between 0 and 1000.')
+      return
+    }
+    if (n === row.quota) { setEditing(false); return }
+    setSaving(true)
+    const { error } = await createClient().rpc('set_model_quota',
+      { p_tenant: row.tenant_id, p_quota: n })
+    setSaving(false)
+    setEditing(false)
+    if (error) { onSay(`Could not change it: ${error.message}`); return }
+    // Said in dishes, not in numbers: "3" means nothing until you know 3 of what.
+    onSay(`${row.name}: ${n} free model${n === 1 ? '' : 's'}, ${row.quota_used} used.`)
+    onSaved()
+  }
+
+  if (!editing) {
+    return (
+      <button type="button" onClick={() => { setValue(String(row.quota)); setEditing(true) }}
+              title="Change the free-model limit"
+              className="tabular-nums hover:underline"
+              style={{ color: row.quota_used >= row.quota ? 'var(--gold)' : 'var(--dim)' }}>
+        {row.quota_used}/{row.quota}
+      </button>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 justify-end">
+      <span className="tabular-nums" style={{ color: 'var(--dim)' }}>{row.quota_used}/</span>
+      <input type="number" min={0} max={1000} value={value} autoFocus disabled={saving}
+             onChange={e => setValue(e.target.value)}
+             onKeyDown={e => {
+               if (e.key === 'Enter') void save()
+               if (e.key === 'Escape') setEditing(false)
+             }}
+             onBlur={() => void save()}
+             aria-label={`Free model limit for ${row.name}`}
+             className="w-16 text-right" style={{ padding: '2px 6px' }} />
+    </span>
   )
 }
