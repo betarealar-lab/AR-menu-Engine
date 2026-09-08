@@ -1,0 +1,133 @@
+# Deploy the admin panel to Cloudflare Workers.
+#
+# **Why this exists rather than `npm run deploy` on a laptop.** OpenNext's bundler creates
+# symlinks while it traces dependencies, and Windows refuses to create symlinks at all
+# unless Developer Mode is on or the shell is elevated. Temo's machine has it off, so the
+# local build stops with `EPERM: operation not permitted, symlink`.
+#
+# Developer Mode would fix it in fifteen seconds, and it is worth turning on. But a deploy
+# that only works from one particular laptop is the same dependency the BetaReal Cloudflare
+# account was created to end - so the durable answer is to build somewhere that is nobody's
+# machine. Linux runners create symlinks without asking.
+#
+# ── the secrets this needs, once, in GitHub → Settings → Secrets and variables → Actions ──
+#
+#   CLOUDFLARE_API_TOKEN         a token with "Edit Cloudflare Workers" on the BetaReal
+#                                account. NOT the global API key.
+#   CLOUDFLARE_ACCOUNT_ID        the account id from the Workers dashboard URL
+#   NEXT_PUBLIC_SUPABASE_URL     these two are already public - they are in every browser
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY  bundle the admin serves - but they are needed at BUILD
+#                                time, so they live here rather than as Worker secrets
+#   SUPABASE_SERVICE_ROLE_KEY    server-only, and the strongest credential in the system
+#   R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY   for the upload presign route
+#
+# The two NEXT_PUBLIC_ ORIGINS are deliberately NOT secrets and NOT inputs: they are the
+# addresses of our own two apps, they are in the repo already, and getting them wrong is
+# the failure this whole file is most likely to cause (an admin built with the dev origins
+# prints QR codes that point at 127.0.0.1). They are written here, in the open, where a
+# person can read them.
+
+name: Deploy admin
+
+on:
+  # Deliberately manual. Deploying is outward-facing: it changes what a paying client's
+  # staff open. It should be somebody's decision, not a side effect of a commit.
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which admin to deploy
+        required: true
+        default: production
+        type: choice
+        options: [production]
+
+concurrency:
+  # Two deploys racing would leave whichever finished last in charge, which is not
+  # necessarily the newer one.
+  group: deploy-admin
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: admin
+
+    env:
+      NEXT_PUBLIC_MENU_ORIGIN: https://betareal-menu.betareal-ar.workers.dev
+      NEXT_PUBLIC_ADMIN_ORIGIN: https://betareal-admin.betareal-ar.workers.dev
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - run: npm ci
+
+      # Typecheck before bundling. A type error found here costs 40 seconds; found after a
+      # deploy it costs a client's staff opening a screen that will not render.
+      - run: npx tsc --noEmit
+
+      - name: Build the Worker bundle
+        run: npx opennextjs-cloudflare build
+
+      # The check that the build did not bake a secret into the artifact. Next inlines
+      # `process.env.X` where it can, and the service-role key bypasses row-level security
+      # entirely - it belongs in Cloudflare's encrypted secret store and nowhere else. The
+      # bundle is not public, but "not public" is not the same as "not in the file".
+      - name: Refuse to ship a bundle with the service key in it
+        env:
+          SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SERVICE_KEY" ]; then echo "SUPABASE_SERVICE_ROLE_KEY is not set"; exit 1; fi
+          if grep -rqF "$SERVICE_KEY" .open-next/; then
+            echo "The service-role key is embedded in the build output. Refusing to deploy."
+            exit 1
+          fi
+          echo "clean: no service key in .open-next/"
+
+      - name: Put the server-side secrets on the Worker
+        # `secret bulk` is idempotent and does not print values. Run every deploy so a
+        # rotated key reaches the Worker without anybody remembering a separate step.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          jq -n \
+            --arg a "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            --arg b "${{ secrets.R2_ENDPOINT }}" \
+            --arg c "${{ secrets.R2_ACCESS_KEY_ID }}" \
+            --arg d "${{ secrets.R2_SECRET_ACCESS_KEY }}" \
+            --arg e "$NEXT_PUBLIC_SUPABASE_URL" \
+            --arg f "$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
+            '{SUPABASE_SERVICE_ROLE_KEY:$a, R2_ENDPOINT:$b, R2_ACCESS_KEY_ID:$c,
+              R2_SECRET_ACCESS_KEY:$d, NEXT_PUBLIC_SUPABASE_URL:$e,
+              NEXT_PUBLIC_SUPABASE_ANON_KEY:$f}' \
+            | npx wrangler secret bulk
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx opennextjs-cloudflare deploy
+
+      # Two facts, checked from outside, that catch the deploys that "succeed" and are
+      # broken: the door opens, and it does not accidentally let anyone through it.
+      - name: Prove it actually came up
+        run: |
+          BASE=https://betareal-admin.betareal-ar.workers.dev
+          code=$(curl -s -o /dev/null -w '%{http_code}' --retry 6 --retry-all-errors \
+                 --retry-delay 5 "$BASE/login")
+          echo "GET /login -> $code"
+          [ "$code" = "200" ] || exit 1
+          home=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/home")
+          echo "GET /home signed out -> $home"
+          case "$home" in 302|303|307) ;; *) echo "signed-out /home must redirect"; exit 1;; esac

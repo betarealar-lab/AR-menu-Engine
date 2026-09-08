@@ -1,0 +1,43 @@
+{
+  // The admin panel, as a Cloudflare Worker (see open-next.config.ts for why here).
+  //
+  // This file is committed. Everything in it is a NAME - the worker, a compatibility date,
+  // where the build output lands. The secrets it needs are set once and stored encrypted
+  // by Cloudflare; they never appear here, in the repo, or in the build output:
+  //
+  //   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+  //   npx wrangler secret put R2_ENDPOINT
+  //   npx wrangler secret put R2_ACCESS_KEY_ID
+  //   npx wrangler secret put R2_SECRET_ACCESS_KEY
+  //
+  // The two NEXT_PUBLIC_ origins are NOT secrets and cannot be secrets: Next inlines them
+  // into the browser bundle at BUILD time, so they come from `.env.production.local`
+  // instead. Setting them as Worker vars would do nothing at all - the value a browser
+  // uses was frozen when the bundle was built. That is also the bug to watch for on the
+  // first deploy: with the dev origins baked in, every QR code an owner generates points
+  // at 127.0.0.1.
+  //
+  // Deploy:
+  //   npm run deploy
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "betareal-admin",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-09-01",
+
+  // `nodejs_compat` is not optional here: the admin's presign route imports the AWS S3 SDK,
+  // and Next's own server runtime uses Node built-ins throughout.
+  //
+  // `global_fetch_strictly_public` makes the Worker's own `fetch()` go out to the public
+  // internet rather than being looped back internally. OpenNext needs it so that Next's
+  // server-side fetches of its own routes behave the way they do on Node.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

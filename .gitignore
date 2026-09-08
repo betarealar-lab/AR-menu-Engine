@@ -14,6 +14,12 @@ app/.env
 admin/node_modules/
 admin/.next/
 admin/.env.local
+# The production build's public origins. Not secret - they are baked into the
+# browser bundle by design - but they are per-deployment, so they are not committed.
+admin/.env.production.local
+# OpenNext build output: the Worker bundle and the static assets it serves.
+admin/.open-next/
+admin/.wrangler/
 admin/tsconfig.tsbuildinfo
 
 # Cloudflare's local simulator state (the fake R2 bucket wrangler dev writes to)

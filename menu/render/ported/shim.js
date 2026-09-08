@@ -42,12 +42,36 @@
   // vocabulary grew over two years and has several spellings of the same idea; an open
   // name column becomes a junk drawer within a year and then no query can be trusted.
   // Anything unrecognised is counted locally and never sent.
+  // **Every key on the left is a name the ported code actually calls.** The first version
+  // of this map was written from the platform's vocabulary as I remembered it, and the
+  // three that mattered most were not in it:
+  //
+  //     track('item_view', ...)   the 3D modal opening - the single number this company
+  //                               is a bet on. Dropped. "Opened a dish in 3D" read 0.
+  //     track('ar_tap', ...)      a diner asking for AR. Dropped.
+  //     track('view')             never fired at all, because the platform fires it from
+  //                               `buildMenu`, which we do not have. So the funnel's own
+  //                               DENOMINATOR was zero while later stages were not - a
+  //                               funnel that widens as it goes, which is impossible and
+  //                               reads as broken to the one person paying for it.
+  //
+  // Anything unrecognised is counted locally and never sent, which is the right rule and
+  // is exactly why the gap was silent. So `check_features.py` now reads every `track('x')`
+  // out of the built bundle and fails if `x` is neither translated here nor named in
+  // NOT_COUNTED below. The map cannot drift from the code again without going red.
   const EVENT_NAME = {
     view: "view", page_view: "view", page_load: "view", menu_view: "view",
     hero_pass: "hero_pass", scroll_past_hero: "hero_pass",
     category: "category", category_change: "category", category_filter: "category",
+    // A dish opened in the 3D viewer, however it was reached. `ar_fallback` belongs here
+    // and not under AR: it fires when AR could not start and the diner got the 3D modal
+    // instead, so counting it as an AR open would inflate the number we most need honest.
     open_modal: "item_open", view_3d: "item_open", item_open: "item_open",
-    ar: "ar_open", ar_open: "ar_open", view_ar: "ar_open", ar_success: "ar_open",
+    item_view: "item_open", ar_fallback: "item_open",
+    // Asked for AR, and AR actually started. Both are "reached AR" - the funnel counts
+    // distinct sessions, so a diner who does both is one, not two.
+    ar: "ar_open", ar_open: "ar_open", view_ar: "ar_open",
+    ar_tap: "ar_open", ar_success: "ar_open",
     ar_placed: "ar_placed", ar_place: "ar_placed",
     // The funnel this company is a bet on: a dish added to the basket, and whether the
     // diner had seen it in 3D or in AR first.
@@ -57,6 +81,16 @@
     delivery: "delivery", order: "delivery",
     lang: "lang", theme: "theme", theme_change: "theme",
   };
+
+  // Called by the ported code, and deliberately not sent. Named rather than ignored, so
+  // that "we decided not to count this" and "we forgot this exists" stop looking alike.
+  //
+  //   modal_close   how long a dish was held open. Interesting later, and it would double
+  //                 the rows in `events` to learn it. Not while the question is still
+  //                 "does 3D sell food".
+  //   ar_duration   the same argument, for AR.
+  const NOT_COUNTED = ["modal_close", "ar_duration"];
+  window.__notCounted = NOT_COUNTED;
 
   // Random, per tab, forgotten when it closes. Its only job is to tell one diner opening
   // four dishes apart from four diners opening one each. Deliberately sessionStorage and

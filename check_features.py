@@ -390,6 +390,55 @@ def main() -> int:
           (ROOT / "app" / "src" / "pages" / "w" / "[slug].astro").is_file())
     check("...and the QR points at it", 'location.origin + "/w/"' in bundle)
 
+    # ── 10b. the counts ──────────────────────────────────────────────────────────────
+    #
+    # **Every event the ported code fires must be either translated or explicitly not
+    # counted.** The shim drops any name it does not recognise - correctly, so that an open
+    # name column never becomes a junk drawer - and that is exactly what made this silent:
+    # the map was written from the platform's vocabulary as I remembered it, so
+    # `track('item_view')` and `track('ar_tap')` went nowhere, and the analytics screen
+    # showed a funnel where later stages were larger than the first.
+    #
+    # Read from the BUILT bundle, so a newly ported file that calls something new turns
+    # this red on the next build rather than at the end of a client's first month.
+    print("\n-- every count the viewer takes is actually filed --")
+    # `code`, not `bundle`: the comment in shim.js that explains this very check contains
+    # the words track('x'), and scanning the raw text made the check fail on its own
+    # documentation. Same reason the stub search above is comment-stripped.
+    fired = sorted(set(re.findall(r"""\btrack\(\s*['"]([a-z_]+)['"]""", code)))
+    check("the viewer reports events at all", len(fired) >= 10, f"{len(fired)} names")
+    # The map is read out of the EVENT_NAME literal itself, not line by line: several
+    # entries share a line, and a per-line regex silently reported them as unmapped - which
+    # made this check's own first run cry wolf about six names that were fine.
+    body = bundle.split("const EVENT_NAME = {", 1)[1].split("};", 1)[0]
+    pairs = re.findall(r"([a-z_]+)\s*:\s*\"([a-z_]+)\"", body)
+    mapped = {k for k, _ in pairs}
+    not_counted = set(re.findall(
+        r'"([a-z_]+)"', bundle.split("NOT_COUNTED = [", 1)[1].split("]", 1)[0]))
+    unhandled = [n for n in fired if n not in mapped and n not in not_counted]
+    check("...and none of them is silently dropped", not unhandled,
+          ", ".join(unhandled) or f"{len(fired)} handled")
+    # The three that were actually missing, named individually so a future refactor that
+    # loses one says WHICH one.
+    for name, why in [("view", "the funnel's denominator"),
+                      ("item_view", "a dish opened in 3D"),
+                      ("ar_tap", "a diner asking for AR")]:
+        check(f"{name} is translated ({why})", name in mapped)
+    check("the menu actually fires a view on load", 'window.track("view")' in bundle)
+    # The sink's whitelist is the other half: a name translated to something `record_events`
+    # refuses is dropped one layer further down, which looks identical from the screen.
+    # The NEWEST migration that redefines the whitelist, not 0009 - it has been widened
+    # once already (0017, the basket) and reading the original would have this check
+    # confidently enforcing last month's rules.
+    sinks = sorted((ROOT / "menu" / "migrations").glob("0*.sql"))
+    sink = [f.read_text(encoding="utf-8") for f in sinks if "v_name not in (" in
+            f.read_text(encoding="utf-8")][-1]
+    allowed = set(re.findall(r"'([a-z_]+)'", sink.split("v_name not in (")[1].split(")")[0]))
+    targets = {v for _, v in pairs}
+    strays = sorted(t for t in targets if t not in allowed)
+    check("every name we translate TO is one the sink accepts", not strays,
+          ", ".join(strays) or f"{len(targets)} names")
+
     # ── 11. the page is still complete on arrival ────────────────────────────────────
     print("\n-- and none of this moved a dish out of the HTML --")
     check("every dish name is in the markup",

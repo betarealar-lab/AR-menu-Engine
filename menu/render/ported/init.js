@@ -22,6 +22,21 @@
 
   function start() {
     const cfg = window.__CFG || {};
+
+    // **A diner opened the menu.** The first row of the funnel and the denominator of
+    // every percentage under it.
+    //
+    // The platform fires this from inside `buildMenu`, which is the function that fetches
+    // the dishes - and we deleted that function, because our dishes arrive in the HTML.
+    // The event went with it and nobody noticed, so the analytics screen showed "Opened
+    // the menu: 0" above "Got past the hero: 4" and "Placed it on a table: 1". A funnel
+    // that widens as it goes is not a small reporting bug; it is the one screen a paying
+    // restaurant looks at to decide whether any of this works, saying something obviously
+    // untrue.
+    //
+    // First, before the hero and before the viewer, because it must survive a diner who
+    // closes the tab immediately - which is itself a number worth having.
+    try { window.track("view"); } catch (e) { /* never let a count break a menu */ }
     // hero.js and viewer.js both read the global config the platform sets.
     window._themeConfig = Object.assign(window._themeConfig || {}, cfg);
 

@@ -692,18 +692,43 @@ export default function MenuPage() {
               </table>
             </div>
           </div>
+          {/* Two different empty screens, because they are two different situations and
+              only one of them is a problem.
+
+              A restaurant that has never had a dish was being shown "No matching items -
+              try another search or clear filters", with a Clear filters button that does
+              nothing, because both cases were `filteredItems.length === 0`. That is the
+              FIRST screen a new owner opens after signing up - the one moment the whole
+              self-serve product is being judged - and it told them their empty menu was
+              their own fault and offered them a button that changes nothing.
+              `/models` already gets this right ("No models yet" - "Build your first
+              model"); this is the same shape. */}
           {filteredItems.length === 0 && (
-            <div className="mt-4 rounded-xl p-5 text-center"
-                 style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-              <div className="font-semibold" style={{ color: 'var(--text)' }}>{T.menuNoResultsTitle}</div>
-              <p className="text-sm mt-1" style={{ color: 'var(--dim)' }}>{T.menuNoResultsText}</p>
-              <button type="button"
-                      onClick={clearFilters}
-                      className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold"
-                      style={{ background: 'var(--gold)', color: 'var(--gold-ink)' }}>
-                {T.menuClearFilters}
-              </button>
-            </div>
+            items.length === 0 ? (
+              <div className="mt-4 rounded-xl p-8 text-center"
+                   style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                <div className="font-semibold" style={{ color: 'var(--text)' }}>{T.menuEmptyTitle}</div>
+                <p className="text-sm mt-1" style={{ color: 'var(--dim)' }}>{T.menuEmptyText}</p>
+                <button type="button"
+                        onClick={openNewItem}
+                        className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold"
+                        style={{ background: 'var(--gold)', color: 'var(--gold-ink)' }}>
+                  {T.menuEmptyCta}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl p-5 text-center"
+                   style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                <div className="font-semibold" style={{ color: 'var(--text)' }}>{T.menuNoResultsTitle}</div>
+                <p className="text-sm mt-1" style={{ color: 'var(--dim)' }}>{T.menuNoResultsText}</p>
+                <button type="button"
+                        onClick={clearFilters}
+                        className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold"
+                        style={{ background: 'var(--gold)', color: 'var(--gold-ink)' }}>
+                  {T.menuClearFilters}
+                </button>
+              </div>
+            )
           )}
         </>
       ) : (

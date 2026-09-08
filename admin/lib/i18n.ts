@@ -92,6 +92,11 @@ const en = {
   menuClearFilters: 'Clear filters',
   menuNoResultsTitle: 'No matching items',
   menuNoResultsText: 'Try another search or clear filters to show every menu item.',
+  // A menu that has never had a dish is not a menu with a filter on it. This is the
+  // first screen a new owner opens, so it invites rather than explains a mistake.
+  menuEmptyTitle: 'No dishes yet',
+  menuEmptyText: 'Add your first dish and it goes straight onto your live menu.',
+  menuEmptyCta: 'Add your first dish',
   activeArItems: 'Active AR items',
   unlimited: 'Unlimited',
   saveFailed: 'Save failed: {message}',
@@ -513,6 +518,9 @@ const ka: typeof en = {
   menuClearFilters: 'ფილტრების გასუფთავება',
   menuNoResultsTitle: 'შესაბამისი პუნქტი ვერ მოიძებნა',
   menuNoResultsText: 'სცადე სხვა ძებნა ან გაასუფთავე ფილტრები ყველა პუნქტის საჩვენებლად.',
+  menuEmptyTitle: 'კერძები ჯერ არ არის',
+  menuEmptyText: 'დაამატე პირველი კერძი და ის მაშინვე გამოჩნდება შენს მენიუში.',
+  menuEmptyCta: 'დაამატე პირველი კერძი',
   activeArItems: 'აქტიური AR პუნქტები',
   unlimited: 'ულიმიტო',
   saveFailed: 'შენახვა ვერ მოხერხდა: {message}',
