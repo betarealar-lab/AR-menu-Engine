@@ -135,9 +135,10 @@ def generate(dish: str, variant: str, engine_name: str | None, who: str,
 
         # Cut the dish out before the engine sees the room. Meshy's API has no masking
         # parameter - their background remover is a separate web tool - so this is ours.
-        # On the first real dish it removed a slate board and a white turntable that had
-        # otherwise been reconstructed as part of the food. See engines/mask.py, including
-        # why it is on by default and how to turn it off.
+        #
+        # A NO-OP unless BETAREAL_MASK is set. It shipped on and had to be turned off: it
+        # removes the serving board along with the turntable, and a plate is part of the
+        # dish. See engines/mask.py for what does work instead.
         paths = mask.cutout(paths)
 
         job = EngineJob(dish=key[0], images=paths)

@@ -41,12 +41,19 @@ def main() -> int:
                     help="comma-separated slugs; default is every restaurant")
     ap.add_argument("--super", action="store_true",
                     help="also make them a super admin (sees every restaurant)")
-    ap.add_argument("--base", default=os.environ.get("ADMIN_ORIGIN",
-                                                     "http://127.0.0.1:3001"),
-                    help="where the admin is served from")
+    # No default here, deliberately. It used to be
+    # `os.environ.get("ADMIN_ORIGIN", "http://127.0.0.1:3001")`, which argparse evaluates
+    # when the parser is BUILT - before `load_env()` on the next line has read `.env`. So
+    # the setting was never picked up and every link printed pointed at localhost, which
+    # is worse than useless when the whole point is to email one to a teammate.
+    ap.add_argument("--base", default=None,
+                    help="where the admin is served from "
+                         "(default: ADMIN_ORIGIN from .env)")
     a = ap.parse_args()
 
     load_env()
+    if not a.base:
+        a.base = os.environ.get("ADMIN_ORIGIN", "http://127.0.0.1:3001")
     url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     key = os.environ.get("SUPABASE_SERVICE_KEY", "")
     db = os.environ.get("SUPABASE_DB_URL", "")

@@ -17,18 +17,35 @@ Doing it on our side is better than the flag would have been, for the reason the
 one, a re-run of every dish through something better next year - and a masked photo is a
 better input to all of them. This does not move when the engine does.
 
-**What it removes, which is a product decision and not a technical one.** On the first
-real dish - a sushi roll on a slate board on a white turntable - it kept the sushi and the
-ginger garnish, and removed the board AND the turntable. That is usually right for AR: a
-diner is placing the food on THEIR table, and a slate board floating above it looks like a
-mistake. It is not always right - a dish served in its own bowl needs the bowl. So it is
-on by default and `mask=False` on the request turns it off per dish.
+**OFF by default, and that is a correction.** It shipped on, and Temo looked at the result:
+
+    "i want plates to remain but for turn tables to be removed. u get me that board is
+     good."
+
+He is right and this cannot do that. rembg finds THE salient object; it has no notion of
+"the plate is part of the dish but the thing the plate is standing on is not". On his
+sushi it removed the slate board along with the turntable in three frames out of four,
+and in the fourth it kept both - the object box ran to the very bottom edge of the frame,
+pedestal included. Neither answer is the one he asked for, and the two are not even the
+same answer.
+
+So it is opt-in now: `BETAREAL_MASK=1`, or `mask=True` passed in. Left on, it would be
+quietly making every dish worse for the case he actually has.
+
+**The two things that DO get a turntable out of a model, in order of how well they work:**
+
+  1. Do not photograph it. Shoot from slightly above so the pedestal is behind the plate
+     rather than under it, or stand the dish on the table itself. This is free, it works
+     every time, and it is already what `docs/` says about capture.
+  2. Look at the cut before spending 30 credits. The Studio can show these four PNGs
+     beside the originals and let an owner accept or skip per dish. That is the real fix
+     and it is a screen, not an algorithm.
 
 **It never fails a generation.** A photo it cannot cut is passed through untouched. A
 worse input is a worse model; an exception here would be a lost job and lost credits.
 
     from engines import mask
-    cut = mask.cutout(paths)          # -> new paths, background removed
+    cut = mask.cutout(paths)   # -> new paths; a no-op unless BETAREAL_MASK is set
 """
 from __future__ import annotations
 
@@ -72,7 +89,9 @@ def cutout(paths: list[Path], out_dir: Path | None = None,
     Returns a list the same length and order as `paths` - a photo that could not be cut
     is returned as itself, so a caller can always zip the two together.
     """
-    if os.environ.get("BETAREAL_NO_MASK"):
+    # Opt-in. See the header: on by default it removed serving boards that belong to the
+    # dish, which is worse than leaving the background alone.
+    if not os.environ.get("BETAREAL_MASK"):
         return paths
     if not available():
         if verbose:

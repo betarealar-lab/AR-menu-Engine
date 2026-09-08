@@ -58,6 +58,10 @@ const assetUrl = (key: string | null | undefined) =>
 type ModelRow = {
   id: string; title: string | null; dish: string; variant: string
   poster_key: string | null; draco_key: string | null; usdz_key: string | null
+  // An IMPORTED model's files are absolute URLs on somebody else's bucket rather than
+  // keys in ours - see menu/publish.py. Both travel in one field to the diner's page,
+  // which tells them apart by the scheme; this used to select only our own two columns.
+  external_glb: string | null; external_usdz: string | null
   view_orbit: string | null; scale_cm: number | null; scale_axis: string | null
   width_cm: number | null; length_cm: number | null; height_cm: number | null
   tenant_state: 'draft' | 'approved' | 'rejected'; archived: boolean; created_utc: string
@@ -69,7 +73,8 @@ export async function loadLibrary(tenantId: string) {
   const [{ data: rows }, { data: items }, { data: reqs }, { data: tenant }] =
     await Promise.all([
       supabase.from('models')
-        .select('id, title, dish, variant, poster_key, draco_key, usdz_key, view_orbit, ' +
+        .select('id, title, dish, variant, poster_key, draco_key, usdz_key, ' +
+                'external_glb, external_usdz, view_orbit, ' +
                 'scale_cm, scale_axis, width_cm, length_cm, height_cm, ' +
                 'tenant_state, archived, created_utc')
         .eq('tenant_id', tenantId).order('created_utc', { ascending: false }),
@@ -93,8 +98,15 @@ export async function loadLibrary(tenantId: string) {
     dish: r.dish,
     variant: r.variant,
     poster: assetUrl(r.poster_key),
-    glb: assetUrl(r.draco_key),
-    usdz: assetUrl(r.usdz_key),
+    // **Ours OR imported.** Every Monday Greens model came across from the platform, so
+    // `draco_key` is null on all of them and `external_glb` holds the file - and this read
+    // only the first. The rows appeared in the Studio with no preview, no "Turn it
+    // around", no size QR and no full-screen viewer, because every one of those is gated
+    // on `m.glb` being truthy. From the outside it looked exactly like "Monday Greens has
+    // no 3D models", while the diner's menu showed all five perfectly - `menu.js` has done
+    // `draco_key || external_glb` since the day it was written.
+    glb: assetUrl(r.draco_key || r.external_glb),
+    usdz: assetUrl(r.usdz_key || r.external_usdz),
     view_orbit: r.view_orbit,
     scale_cm: r.scale_cm,
     scale_axis: r.scale_axis,
