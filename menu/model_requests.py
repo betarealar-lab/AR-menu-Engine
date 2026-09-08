@@ -47,6 +47,7 @@ the queue, so a crash in between leaves it `approved` and the next pass re-enque
 from __future__ import annotations
 
 import argparse
+import datetime
 import os
 import sys
 import time
@@ -399,7 +400,20 @@ def main() -> int:
     ap.add_argument("--every", type=int, default=30, help="seconds between passes")
     ap.add_argument("--limit", type=int, default=10,
                     help="most requests to start in one pass")
+    ap.add_argument("--log", type=Path, default=None,
+                    help="append output here as well - used when started at logon, "
+                         "where there is no console to print to")
     a = ap.parse_args()
+
+    if a.log:
+        # Started hidden at logon there is nowhere for print() to go. Without this the
+        # installer's launcher passed `--log`, argparse rejected the unknown flag, and the
+        # bridge exited instantly every time - which looked exactly like "the bridge is not
+        # running" with nothing anywhere saying why.
+        a.log.parent.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = open(a.log, "a", encoding="utf-8", buffering=1)
+        stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{chr(10)}=== bridge started {stamp} ===")
 
     load_env()
     if a.status:
