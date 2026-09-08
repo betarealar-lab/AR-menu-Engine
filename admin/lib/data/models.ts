@@ -202,3 +202,58 @@ export async function cancelRequest(id: string) {
     .update({ state: 'cancelled' }).eq('id', id)
   return error
 }
+
+
+/** A model we uploaded by hand, rather than one the engine built.
+ *
+ *  **This exists because the button already did.** The item editor has had "Upload .glb"
+ *  and "Upload .usdz" behind `canUploadModels` for as long as it has existed. They worked
+ *  as far as R2 - the file arrived, correctly typed and sized - and then the URL went into
+ *  local form state that `saveItem` never persists. Every model uploaded that way was
+ *  paid for in bandwidth and lost on save, with a success message.
+ *
+ *  So the fix and the feature are the same job: put the file where the rest of the system
+ *  looks for one, which is a `models` row keyed to the tenant, and hand back its id for
+ *  `items.model_id`.
+ *
+ *  **Approved, not draft.** The verdict flow exists so an OWNER vets what the engine
+ *  invented; a model a super admin uploads deliberately has already been judged by the
+ *  person uploading it, and leaving it draft would mean it silently does not appear on the
+ *  menu - `public_menu` only serves `tenant_state = 'approved'`. It can still be rejected
+ *  from the Studio like any other.
+ */
+export async function saveUploadedModel(args: {
+  tenantId: string
+  title: string
+  /** The dish it belongs to, when there is one. Only used to key the model row. */
+  itemId?: string | null
+  /** Either may be absent: a GLB with no USDZ is web and Android but no iPhone AR. */
+  glbKey?: string | null
+  usdzKey?: string | null
+  /** Update this row instead of making another - a .usdz landing after its .glb. */
+  modelId?: string | null
+}): Promise<{ id: string | null; error: { message: string } | null }> {
+  const supabase = createClient()
+  const patch: Record<string, unknown> = {}
+  if (args.glbKey) patch.draco_key = args.glbKey
+  if (args.usdzKey) patch.usdz_key = args.usdzKey
+  if (!Object.keys(patch).length) return { id: args.modelId ?? null, error: null }
+
+  if (args.modelId) {
+    const { error } = await supabase.from('models').update(patch).eq('id', args.modelId)
+    return { id: args.modelId, error }
+  }
+
+  const { data, error } = await supabase.from('models').insert({
+    tenant_id: args.tenantId,
+    title: args.title || 'Uploaded model',
+    // `dish` is NOT NULL and is the engine's key for a piece of work. An upload has no
+    // engine job, so the dish it is for is the honest value - and a stable one, so a
+    // second upload for the same dish is recognisably about the same dish.
+    dish: args.itemId || `upload-${Date.now()}`,
+    variant: 'default',
+    tenant_state: 'approved',
+    ...patch,
+  }).select('id').single()
+  return { id: (data as { id: string } | null)?.id ?? null, error }
+}

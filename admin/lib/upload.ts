@@ -11,12 +11,23 @@
 
 export type AssetKind = 'photo' | 'hero' | 'logo' | 'glb' | 'usdz' | 'video'
 
+/** Where the file landed: the R2 KEY and the URL that serves it.
+ *
+ *  Both, because they are used for different things and returning only one has already
+ *  cost something. `models.draco_key` stores a KEY - the admin adds the origin when it
+ *  renders - so a caller handed only a URL cannot record what it uploaded. The .glb button
+ *  in the item editor did exactly that: the file went to R2, the URL went into local form
+ *  state, `saveItem` never persisted it, and the pointer was dropped on save. An upload
+ *  that succeeds and is then forgotten is worse than one that fails.
+ */
+export type Uploaded = { key: string; url: string }
+
 export async function uploadAsset(
   blob: Blob,
   kind: AssetKind,
   tenantId: string | null,
   filename = 'upload',
-): Promise<string> {
+): Promise<Uploaded> {
   if (!tenantId) throw new Error('No restaurant selected')
   const form = new FormData()
   form.append('file', blob, filename)
@@ -30,6 +41,6 @@ export async function uploadAsset(
     const detail = await res.json().catch(() => ({} as { error?: string }))
     throw new Error(detail.error || `Upload failed (${res.status})`)
   }
-  const { url } = await res.json()
-  return url as string
+  const { key, url } = await res.json()
+  return { key: key as string, url: url as string }
 }

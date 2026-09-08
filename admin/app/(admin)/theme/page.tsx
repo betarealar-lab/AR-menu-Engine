@@ -341,7 +341,7 @@ export default function ThemePage() {
     setUploadingKey(key)
     try {
       const blob = await toWebP(file)
-      const publicUrl = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
+      const { url: publicUrl } = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
       set(key, publicUrl)
       setMsg(T.imageUploaded)
     } catch (e) {
@@ -376,7 +376,7 @@ export default function ThemePage() {
     try {
       for (const file of picked) {
         const blob = await toWebP(file)
-        const publicUrl = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
+        const { url: publicUrl } = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
         added.push(publicUrl)
       }
       appendHeroImages(added)
@@ -411,7 +411,7 @@ export default function ThemePage() {
     try {
       // Ours to upload, not an owner's: nothing in a browser trims a video, and a phone
       // hands over tens of megabytes at the top of the page. The route enforces it.
-      const publicUrl = await uploadAsset(file, 'video', plan.restaurantId, file.name)
+      const { url: publicUrl } = await uploadAsset(file, 'video', plan.restaurantId, file.name)
       set(key, publicUrl)
       setMsg(T.heroVideoUploaded)
     } catch (e) {
@@ -438,7 +438,7 @@ export default function ThemePage() {
     setUploadingKey(key)
     try {
       const blob = await toWebP(file)
-      const publicUrl = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
+      const { url: publicUrl } = await uploadAsset(blob, 'hero', plan.restaurantId, file.name)
       set(key, `url("${publicUrl}")`)
       set(`${mode}_bg_size`, 'cover')
       set(`${mode}_bg_repeat`, 'no-repeat')

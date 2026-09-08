@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
 import { usePlan } from '@/lib/usePlan'
 import { uploadAsset } from '@/lib/upload'
+import { saveUploadedModel } from '@/lib/data/models'
 import {
   loadMenu,
   saveItem as saveItemRow,
@@ -468,7 +469,7 @@ export default function MenuPage() {
       return
     }
     try {
-      const publicUrl = await uploadAsset(blob, 'photo', plan.restaurantId, file.name)
+      const { url: publicUrl } = await uploadAsset(blob, 'photo', plan.restaurantId, file.name)
       setItemForm(f => ({ ...f, thumbnail_url: publicUrl, text_only: false }))
       setThumbProgress(text(T.uploadedFile, { name: file.name }))
     } catch (e) {
@@ -489,9 +490,27 @@ export default function MenuPage() {
       // Hand-uploading a model stays OURS - the route enforces it. An owner gets one
       // through "Make a 3D model", where the photos are kept, the quota applies and the
       // result is something we can rebuild. A file dropped in here has none of that.
-      const publicUrl = await uploadAsset(file, kind, plan.restaurantId, file.name)
+      const { key, url: publicUrl } = await uploadAsset(file, kind, plan.restaurantId, file.name)
 
-      setItemForm(f => kind === 'usdz' ? { ...f, model_usdz: publicUrl, text_only: false } : { ...f, model: publicUrl, text_only: false, is_3d: true })
+      // **The file is not the model.** This used to stop at the line above: the bytes
+      // reached R2 and the URL went into form state that `saveItem` does not persist, so
+      // every hand-uploaded model was paid for and lost on save, with a success message.
+      // A `models` row is what the rest of the system looks in - the Studio, the diner's
+      // page, the resize flow - so one is made here and `model_id` carries it into
+      // `saveItem`, which has always written that field.
+      const { id: modelId, error } = await saveUploadedModel({
+        tenantId: plan.restaurantId!,
+        title: itemForm.name_en || file.name,
+        itemId: editItem?.id ?? null,
+        modelId: itemForm.model_id,
+        glbKey: kind === 'glb' ? key : null,
+        usdzKey: kind === 'usdz' ? key : null,
+      })
+      if (error) throw new Error(error.message)
+
+      setItemForm(f => kind === 'usdz'
+        ? { ...f, model_usdz: publicUrl, model_id: modelId ?? f.model_id, text_only: false }
+        : { ...f, model: publicUrl, model_id: modelId ?? f.model_id, text_only: false, is_3d: true })
       setUploadProgress(text(T.uploadedFile, { name: file.name }))
     } catch (e) {
       setUploadProgress(text(T.uploadFailed, { message: e instanceof Error ? e.message : String(e) }))

@@ -108,8 +108,9 @@ export default function Plate(props: {
     setBusySlot(slot)
     try {
       const blob = await shrink(file)
-      const url = await uploadAsset(blob, 'photo', tenantId, `${SLOTS[slot].key}.jpg`)
-      const key = url.split('/a/')[1] || url
+      // The KEY, from the route, rather than `url.split('/a/')[1]` - which is what this
+      // did, and which quietly becomes the whole URL the day the serving path changes.
+      const { key } = await uploadAsset(blob, 'photo', tenantId, `${SLOTS[slot].key}.jpg`)
       const { capture, error } = await saveCapture(tenantId, dishKey, variant, slot, key)
       if (error) throw new Error(error.message)
       setFrames(f => { const n = [...f]; n[slot] = capture; return n })

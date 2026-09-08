@@ -651,6 +651,43 @@ def main() -> int:
                       (part.headers.get("Content-Range") or ""),
                       part.headers.get("Content-Range", "none"))
 
+        # ── an uploaded model has to SURVIVE ─────────────────────────────────
+        #
+        # The item editor has had "Upload .glb" behind `canUploadModels` since it existed,
+        # and it worked as far as R2: the file arrived, correctly typed and sized, and the
+        # URL went into local form state. `saveItem` writes `model_id` and has never
+        # written `model` - there is no such column - so every hand-uploaded model was paid
+        # for in bandwidth and dropped on save, under a success message.
+        #
+        # A file in a bucket is not a model. The row is, so the row is what is checked.
+        glb = b"glTF" + b"\x02\x00\x00\x00" + b"\x00" * 512
+        sent = owner.post(f"{ADMIN}/api/asset", timeout=60,
+                          files={"file": ("hand.glb", glb, "model/gltf-binary")},
+                          data={"kind": "glb", "tenantId": str(tenant_id)})
+        # `uploaded`, not `up` - `up()` is the module-level "is the server answering"
+        # helper, and shadowing it here made the whole suite die on its second line.
+        uploaded = sent.json() if sent.ok else {}
+        check("a .glb we upload by hand reaches the bucket", sent.ok and uploaded.get("key"),
+              sent.text[:140])
+        check("...and the route hands back the KEY, not only a URL",
+              bool(uploaded.get("key")) and not uploaded.get("key", "").startswith("http"),
+              str(uploaded.get("key"))[:60])
+        r = sb.post(tok, "models", {
+            "tenant_id": str(tenant_id), "title": "Hand upload", "dish": str(item_id),
+            "variant": "default", "draco_key": uploaded.get("key"), "tenant_state": "approved"})
+        hand_model = (r.json() or [{}])[0].get("id") if r.ok else None
+        check("a model row can be made from it", r.ok and hand_model, r.text[:140])
+        r = sb.patch(tok, "items", {"model_id": hand_model}, id=f"eq.{item_id}")
+        check("and a dish can point at it", r.ok, r.text[:120])
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select m.draco_key from items i join models m on m.id = i.model_id "
+                        "where i.id = %s", (item_id,))
+            row = cur.fetchone()
+            check("the dish still has it after a round trip through the database",
+                  row and row[0] == uploaded.get("key"), str(row))
+        # Put the dish back where the later checks expect it.
+        sb.patch(tok, "items", {"model_id": model_id}, id=f"eq.{item_id}")
+
         with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
             cur.execute("delete from super_admins where user_id = %s", (owner_id,))
             conn.commit()
