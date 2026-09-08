@@ -33,6 +33,7 @@ from pathlib import Path
 
 import dataset
 import engines
+from engines import mask
 import glb
 import jobs
 import limits
@@ -131,6 +132,13 @@ def generate(dish: str, variant: str, engine_name: str | None, who: str,
             path = tmp / f"{key[0]}-{key[1]}-{i}.jpg"
             path.write_bytes(blob)
             paths.append(path)
+
+        # Cut the dish out before the engine sees the room. Meshy's API has no masking
+        # parameter - their background remover is a separate web tool - so this is ours.
+        # On the first real dish it removed a slate board and a white turntable that had
+        # otherwise been reconstructed as part of the food. See engines/mask.py, including
+        # why it is on by default and how to turn it off.
+        paths = mask.cutout(paths)
 
         job = EngineJob(dish=key[0], images=paths)
         rec = dataset.record(dish, variant)

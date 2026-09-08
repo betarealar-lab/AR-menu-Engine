@@ -24,6 +24,7 @@ import {
 } from '@/lib/data/models'
 import { loadCaptures, requestRescale, setArchived, hasDims, type Capture, type Dims } from '@/lib/data/studio'
 import SizeInput from '@/components/SizeInput'
+import ModelStage from '@/components/ModelStage'
 import SampleDish from '@/components/SampleDish'
 import QrCode from '@/components/QrCode'
 import { ensureViewer } from '@/lib/viewer'
@@ -487,6 +488,10 @@ function Preview({ model: m, pill, open, onOpen }: {
   model: TenantModel; pill: string; open: boolean; onOpen: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
+  // The card is a 250px square. Judging a dish - the sauce, the garnish, whether the back
+  // of the plate is invented nonsense - needs it bigger than that, and approving something
+  // wrong puts it in front of diners.
+  const [stage, setStage] = useState(false)
 
   useEffect(() => {
     if (!open || !m.glb || !host.current) return
@@ -525,17 +530,33 @@ function Preview({ model: m, pill, open, onOpen }: {
               {m.glb ? '' : 'no preview yet'}
             </span>
       )}
+      {/* The whole square opens the big viewer, on top of everything else, so it works
+          whether the card is still showing its poster or already spinning the live model.
+          `open` only controls the small inline one. */}
+      {m.glb && (
+        <button type="button" onClick={() => setStage(true)}
+                aria-label={`View ${m.title} in 3D, full screen`}
+                className="absolute inset-0 z-10 cursor-zoom-in" />
+      )}
       {!open && m.glb && (
         <button type="button" onClick={onOpen}
-                className="absolute inset-0 flex items-end justify-center pb-3 group">
+                className="absolute inset-0 z-20 flex items-end justify-center pb-3 group">
           <span className="btn btn-sm" style={{ background: 'rgba(0,0,0,.6)', borderColor: 'transparent', color: '#fff' }}>
             Turn it around
           </span>
         </button>
       )}
-      <span className={`pill ${pill} absolute top-2 left-2`}>
+      <span className={`pill ${pill} absolute top-2 left-2 z-20`}>
         {m.state === 'draft' ? 'waiting for you' : m.state}
       </span>
+      {stage && m.glb && (
+        <ModelStage src={m.glb} poster={m.poster} orbit={m.view_orbit} title={m.title}
+                    caption={m.scale_cm
+                      ? sizeInWords(m.width_cm ?? m.scale_cm, m.height_cm,
+                                    (m.scale_axis as Axis) || 'width')
+                      : 'no size set'}
+                    onClose={() => setStage(false)} />
+      )}
     </div>
   )
 }

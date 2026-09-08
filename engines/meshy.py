@@ -141,6 +141,8 @@ class MeshyEngine(Engine):
         target_polycount: int | None = None,
         topology: str = "triangle",
         should_remesh: bool | None = None,
+        image_enhancement: bool = True,
+        remove_lighting: bool = True,
         variant: str | None = None,
     ):
         # Ask for the most detail the API will give and decimate ourselves.
@@ -160,6 +162,21 @@ class MeshyEngine(Engine):
         self.target_polycount = target_polycount
         self.topology = topology
         self.should_remesh = should_remesh
+        # The two preprocessing switches the API actually has. Both DEFAULT to true at
+        # Meshy's end, so sending them changes nothing today - they are sent because a
+        # default is somebody else's decision and this one is ours. If Meshy flips either
+        # default, our models do not silently change.
+        #
+        #   image_enhancement  "Optimizes the input images for better results" - the
+        #                      upscaling Temo asked for, and the only thing in the API
+        #                      that resembles it.
+        #   remove_lighting    strips baked highlights and shadows out of the base colour,
+        #                      so a dish photographed under a hard restaurant spotlight
+        #                      does not arrive with that spotlight painted onto it.
+        #
+        # Object masking is NOT here because the API has none - see engines/mask.py.
+        self.image_enhancement = image_enhancement
+        self.remove_lighting = remove_lighting
         self.variant = variant or f"{ai_model}-{texture_resolution if should_texture else 'notex'}"
         self.cost_per_job = _cost(ai_model, should_texture)
         # Measured on real returns: a raw meshy-7 master came back at 1.9M triangles,
@@ -181,6 +198,8 @@ class MeshyEngine(Engine):
             "ai_model": self.ai_model,
             "topology": self.topology,
             "should_texture": self.should_texture,
+            "image_enhancement": self.image_enhancement,
+            "remove_lighting": self.remove_lighting,
         }
         if self.should_remesh is not None:
             body["should_remesh"] = self.should_remesh
