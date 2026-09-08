@@ -1,0 +1,25 @@
+-- 0019: drop the quota view 0018 should not have created.
+--
+-- 0018 added `tenant_quota_overview`, a view over `tenants` for the super-admin quota
+-- screen. It was wrong in two ways and the screen never used it:
+--
+--   it returned nothing, because `authenticated` has no SELECT on views in this schema;
+--
+--   and had that been "fixed" with a grant it would have leaked every restaurant's numbers
+--   to every signed-in owner. A plain Postgres view runs as its OWNER, so RLS on `tenants`
+--   would never have been consulted - the exact opposite of what a view over a
+--   tenant-scoped table looks like it does.
+--
+-- `admin_overview()` (0014) already returns quota and quota_used for every restaurant,
+-- gated by `is_super_admin()` inside a SECURITY DEFINER function, which is this codebase's
+-- pattern for data that is ours rather than a tenant's. Two ways to read one number is one
+-- way for them to disagree, so there is one.
+--
+-- **Why this is a migration and not an edit to 0018.** It was an edit to 0018, briefly, and
+-- `migrate.py` refused the next run: "applied as 91275eeb…, file is now 9f3c17db… Write a
+-- new migration instead of editing this one." That guard is the reason two databases with
+-- the same version number cannot quietly disagree about their contents, and the right
+-- response to it is this file, not a way around it. 0018 has been restored byte for byte
+-- to what actually ran.
+
+drop view if exists tenant_quota_overview;

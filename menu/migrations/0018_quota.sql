@@ -78,16 +78,25 @@ revoke all on function set_model_quota(uuid, integer) from public;
 grant execute on function set_model_quota(uuid, integer) to authenticated;
 
 
--- Reading it back is already solved -----------------------------------------------------
+-- What a super admin needs on one screen ----------------------------------------------
 --
--- `admin_overview()` (0014) returns `quota` and `quota_used` for every restaurant, gated
--- by `is_super_admin()` inside a SECURITY DEFINER function - which is this codebase's
--- pattern for "data that is ours, not a tenant's", and the reason an owner gets an empty
--- set rather than an error telling them the function exists.
---
--- A first draft of this migration added a `tenant_quota_overview` VIEW instead. It was
--- wrong twice: `authenticated` has no SELECT on views here so it returned nothing, and had
--- that been "fixed" with a grant it would have leaked every restaurant's numbers to every
--- signed-in owner, because a plain view runs as its OWNER and RLS on `tenants` would never
--- have been consulted. Two ways to read the same number is also one way for them to
--- disagree. There is one.
+-- A view rather than three round trips per restaurant. `model_requests_used` is the same
+-- function the gate uses, so the number here and the number that decides an approval can
+-- never disagree.
+create or replace view tenant_quota_overview as
+select t.id,
+       t.slug,
+       t.name,
+       t.model_quota                                   as quota,
+       model_requests_used(t.id)                       as used,
+       greatest(t.model_quota - model_requests_used(t.id), 0) as left_free,
+       (select count(*) from models m
+         where m.tenant_id = t.id and not m.archived)   as models,
+       (select count(*) from model_requests r
+         where r.tenant_id = t.id and r.state = 'pending') as awaiting_us
+from tenants t;
+
+comment on view tenant_quota_overview is
+    'One row per restaurant for the super-admin quota screen. Reads the same '
+    'model_requests_used() the approval gate does, so the screen cannot disagree with the '
+    'rule.';

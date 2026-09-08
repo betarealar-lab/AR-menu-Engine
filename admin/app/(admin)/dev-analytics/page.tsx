@@ -170,7 +170,10 @@ export default function DevAnalyticsPage() {
                     <Link href={`/home?tenant=${r.slug}`} className="font-semibold hover:underline">
                       {r.name}
                     </Link>
-                    <div className="text-xs" style={{ color: 'var(--dim)' }}>/{r.slug}</div>
+                    <div className="text-xs flex items-center gap-2" style={{ color: 'var(--dim)' }}>
+                      <span>/{r.slug}</span>
+                      <CopyRestaurant row={r} onSaved={load} onSay={say} />
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-right">{r.dishes}</td>
                   <td className="px-3 py-2.5 text-right"
@@ -260,5 +263,49 @@ function QuotaCell({ row, onSaved, onSay }: {
              aria-label={`Free model limit for ${row.name}`}
              className="w-16 text-right" style={{ padding: '2px 6px' }} />
     </span>
+  )
+}
+
+
+/** Duplicate a restaurant into a sandbox.
+ *
+ *  What it is for: there are two live restaurants and a two-dish demo, so every experiment
+ *  - reordering 170 dishes, a template change, the language switch - has had to be run
+ *  against a paying client or against something that exercises nothing. This makes a copy
+ *  with real, awkward data in it that costs nothing to break.
+ *
+ *  Confirmed before it runs, because it makes a whole restaurant and a list of five that
+ *  quietly becomes a list of nine is its own kind of mess.
+ *
+ *  The copy carries the menu, the look and the model ROWS (pointing at the same R2 files,
+ *  so nothing is duplicated and no credit is spent). It does not carry the free-model
+ *  quota, the diners, or anything in flight - see copy_tenant in 0020, where those choices
+ *  are the reasoning rather than the code.
+ */
+function CopyRestaurant({ row, onSaved, onSay }: {
+  row: Row; onSaved: () => void; onSay: (m: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+
+  async function copy() {
+    if (!confirm(`Make a copy of ${row.name} to test on?
+
+`
+      + `It gets the menu, the look and the 3D — but no free models, no diners, and `
+      + `nothing that is currently building.`)) return
+    setBusy(true)
+    const { data, error } = await createClient().rpc('copy_tenant', { p_source: row.tenant_id })
+    setBusy(false)
+    if (error) { onSay(`Could not copy it: ${error.message}`); return }
+    const made = Array.isArray(data) ? data[0] : data
+    onSay(`Copied to /${made?.slug} — ${made?.items} dishes, ${made?.models} models.`)
+    onSaved()
+  }
+
+  return (
+    <button type="button" onClick={() => void copy()} disabled={busy}
+            className="underline" title="Duplicate this restaurant to test on">
+      {busy ? 'copying…' : 'copy'}
+    </button>
   )
 }

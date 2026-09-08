@@ -130,6 +130,7 @@ def main() -> int:
 
     owner_id = other_id = None
     code = slug = None
+    copy_slug = None
     created_users: list[str] = []
 
     try:
@@ -517,9 +518,81 @@ def main() -> int:
                     if x.get("tenant_id") == str(tenant_id)), {})
         check("the developer overview shows the new limit and what is used",
               row.get("quota") == 25 and row.get("quota_used") == 2, str(row)[:140])
+        # ── copying a restaurant, so testing never lands on a client ─────────
+        #
+        # Why it exists: there are two live restaurants and a two-dish demo, so every
+        # experiment - reordering 170 items, a template change, the language switch - has
+        # had to run against a paying client or against something that exercises nothing.
+        #
+        # Most of these checks are about what it must NOT carry over. A copy that brings
+        # the quota brings permission to spend our credits into the one place somebody
+        # presses Build without thinking; one that brings the events reports somebody
+        # else's diners as its own.
+        r = sb.rpc(tok, "copy_tenant", {"p_source": str(tenant_id)})
+        made = (r.json() or [{}])[0] if r.ok else {}
+        copy_slug = made.get("slug")
+        check("a super admin can copy a restaurant", r.ok and copy_slug, r.text[:140])
+        check("...to a slug that says it is a copy and is not the original",
+              (copy_slug or "").startswith(slug) and copy_slug != slug, str(copy_slug))
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select id, model_quota, setup_done, name, template_id, theme "
+                        "from tenants where slug = %s", (copy_slug,))
+            cid, cq, cdone, cname, ctpl, ctheme = cur.fetchone()
+            cur.execute("select template_id, theme from tenants where id = %s", (tenant_id,))
+            stpl, stheme = cur.fetchone()
+            check("the copy gets ZERO free models", cq == 0, str(cq))
+            check("and opens on setup, like a real new restaurant", cdone is False)
+            check("and looks like the original", ctpl == stpl and ctheme == stheme)
+            check("and is named so nobody edits the wrong one", "(copy)" in (cname or ""))
+
+            for table, one in (("categories", "category"), ("items", "dish"),
+                               ("models", "model")):
+                cur.execute(f"select count(*) from {table} where tenant_id = %s", (tenant_id,))
+                a = cur.fetchone()[0]
+                cur.execute(f"select count(*) from {table} where tenant_id = %s", (cid,))
+                b = cur.fetchone()[0]
+                check(f"every {one} came across", a == b and a > 0, f"{a} -> {b}")
+
+            # The part most likely to be wrong, and silently: an item in the copy must
+            # point at the COPY's category and the COPY's model, never back at the
+            # original's. A cross-tenant pointer renders as a dish with no category and no
+            # 3D, which reads as bad data rather than as a bad copy.
+            cur.execute(
+                "select count(*) from items i where i.tenant_id = %s "
+                "and i.category_id is not null and not exists ("
+                "  select 1 from categories c where c.id = i.category_id and c.tenant_id = %s)",
+                (cid, cid))
+            check("no item points at a category outside the copy", cur.fetchone()[0] == 0)
+            cur.execute(
+                "select count(*) from items i where i.tenant_id = %s "
+                "and i.model_id is not null and not exists ("
+                "  select 1 from models m where m.id = i.model_id and m.tenant_id = %s)",
+                (cid, cid))
+            check("nor at a model outside it", cur.fetchone()[0] == 0)
+            cur.execute("select count(*) from items where tenant_id = %s and model_id is not null",
+                        (cid,))
+            check("...and the 3D actually came with it", cur.fetchone()[0] > 0)
+
+            # The same R2 objects, not copies of them. Duplicating a 4 MB file per test copy
+            # would be the expensive way to be wrong.
+            cur.execute(
+                "select count(*) from models a join models b "
+                "on a.draco_key is not distinct from b.draco_key "
+                "where a.tenant_id = %s and b.tenant_id = %s and a.draco_key is not null",
+                (tenant_id, cid))
+            check("the copy shares the original's files rather than duplicating them",
+                  cur.fetchone()[0] > 0)
+
+            for table in ("events", "model_requests", "captures"):
+                cur.execute(f"select count(*) from {table} where tenant_id = %s", (cid,))
+                check(f"no {table} came across", cur.fetchone()[0] == 0)
+
         with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
             cur.execute("delete from super_admins where user_id = %s", (owner_id,))
             conn.commit()
+        r = sb.rpc(tok, "copy_tenant", {"p_source": str(tenant_id)})
+        check("an owner cannot copy a restaurant", not r.ok, f"HTTP {r.status_code}")
 
         # Hiding, not deleting.
         r = sb.patch(tok, "models", {"archived": True}, id=f"eq.{model_id}")
@@ -832,6 +905,8 @@ def main() -> int:
             with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
                 if slug:
                     cur.execute("delete from tenants where slug = %s", (slug,))
+                if copy_slug:
+                    cur.execute("delete from tenants where slug = %s", (copy_slug,))
                 if code:
                     cur.execute("delete from invites where code = %s", (code,))
                 conn.commit()
