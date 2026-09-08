@@ -6,9 +6,9 @@
   // by Cloudflare; they never appear here, in the repo, or in the build output:
   //
   //   npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-  //   npx wrangler secret put R2_ENDPOINT
-  //   npx wrangler secret put R2_ACCESS_KEY_ID
-  //   npx wrangler secret put R2_SECRET_ACCESS_KEY
+  //
+  // That is the only one. Uploads write through the R2 binding below, so the Worker holds
+  // no storage credentials - there is nothing else here to leak or to rotate.
   //
   // The two NEXT_PUBLIC_ origins are NOT secrets and cannot be secrets: Next inlines them
   // into the browser bundle at BUILD time, so they come from `.env.production.local`
@@ -36,6 +36,27 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+
+  // R2, bound rather than called over HTTP - the same arrangement as the menu app.
+  //
+  // The upload route used the AWS S3 SDK with an access key, which works on Node and does
+  // not work here: the SDK walks its configuration chain before using the credentials it
+  // was given, reaches for `~/.aws/config`, and workerd answers
+  // `[unenv] fs.readFile is not implemented yet`. Every upload was a 500 with an empty body.
+  //
+  // A binding is an account-level grant made at deploy time, so the running Worker holds no
+  // access key, no secret and no endpoint. There is nothing here to leak and nothing to
+  // rotate - which is worth more than the bug it fixed.
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "betareal-photos"
+    },
+    {
+      "binding": "MODELS",
+      "bucket_name": "betareal-models"
+    }
+  ],
 
   "observability": {
     "enabled": true

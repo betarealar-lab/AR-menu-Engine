@@ -1,14 +1,16 @@
 # Deploy the admin panel to Cloudflare Workers.
 #
-# **Why this exists rather than `npm run deploy` on a laptop.** OpenNext's bundler creates
-# symlinks while it traces dependencies, and Windows refuses to create symlinks at all
-# unless Developer Mode is on or the shell is elevated. Temo's machine has it off, so the
-# local build stops with `EPERM: operation not permitted, symlink`.
+# **Why this exists when `npm run deploy` already works.** It works because Developer Mode
+# was turned on: OpenNext's bundler creates symlinks while tracing dependencies, and Windows
+# refuses to create any without it, so the local build used to stop with
+# `EPERM: operation not permitted, symlink`.
 #
-# Developer Mode would fix it in fifteen seconds, and it is worth turning on. But a deploy
-# that only works from one particular laptop is the same dependency the BetaReal Cloudflare
-# account was created to end - so the durable answer is to build somewhere that is nobody's
-# machine. Linux runners create symlinks without asking.
+# That is one machine's setting. A deploy that only works from one particular laptop is the
+# same dependency the BetaReal Cloudflare account was created to end, so this builds
+# somewhere that is nobody's machine. Linux runners create symlinks without asking.
+#
+# Both paths run the same two commands (`npm run build:cf`, then the secret scan), so
+# neither can quietly diverge into producing a different artifact.
 #
 # ── the secrets this needs, once, in GitHub → Settings → Secrets and variables → Actions ──
 #
@@ -18,8 +20,10 @@
 #   NEXT_PUBLIC_SUPABASE_URL     these two are already public - they are in every browser
 #   NEXT_PUBLIC_SUPABASE_ANON_KEY  bundle the admin serves - but they are needed at BUILD
 #                                time, so they live here rather than as Worker secrets
-#   SUPABASE_SERVICE_ROLE_KEY    server-only, and the strongest credential in the system
-#   R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY   for the upload presign route
+#   SUPABASE_SERVICE_ROLE_KEY    server-only, and the strongest credential in the system.
+#                                It is the ONLY secret the admin Worker holds: uploads go
+#                                through the R2 binding, so there are no storage
+#                                credentials to keep here or to rotate.
 #
 # The two NEXT_PUBLIC_ ORIGINS are deliberately NOT secrets and NOT inputs: they are the
 # addresses of our own two apps, they are in the repo already, and getting them wrong is
@@ -76,8 +80,12 @@ jobs:
       # deploy it costs a client's staff opening a screen that will not render.
       - run: npx tsc --noEmit
 
+      # `build:cf`, not the bare OpenNext build. OpenNext writes every `.env*` file into
+      # the Worker bundle verbatim, so the wrapper parks `.env.local` for the duration -
+      # see admin/scripts/build-cf.mjs. Harmless on a runner that has no `.env.local`, and
+      # the point is that the same command is used here and on a laptop.
       - name: Build the Worker bundle
-        run: npx opennextjs-cloudflare build
+        run: npm run build:cf
 
       # The check that the build did not bake a secret into the artifact. Next inlines
       # `process.env.X` where it can, and the service-role key bypasses row-level security
@@ -93,6 +101,9 @@ jobs:
             exit 1
           fi
           echo "clean: no service key in .open-next/"
+          # The same check a laptop runs, which compares against every credential in
+          # .env.local rather than just this one.
+          node scripts/no-secrets.mjs
 
       - name: Put the server-side secrets on the Worker
         # `secret bulk` is idempotent and does not print values. Run every deploy so a
@@ -100,18 +111,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # One secret, because uploads go through the R2 binding: the Worker holds no
+        # storage credentials at all, so there is nothing else here to leak or rotate.
         run: |
-          jq -n \
-            --arg a "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            --arg b "${{ secrets.R2_ENDPOINT }}" \
-            --arg c "${{ secrets.R2_ACCESS_KEY_ID }}" \
-            --arg d "${{ secrets.R2_SECRET_ACCESS_KEY }}" \
-            --arg e "$NEXT_PUBLIC_SUPABASE_URL" \
-            --arg f "$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
-            '{SUPABASE_SERVICE_ROLE_KEY:$a, R2_ENDPOINT:$b, R2_ACCESS_KEY_ID:$c,
-              R2_SECRET_ACCESS_KEY:$d, NEXT_PUBLIC_SUPABASE_URL:$e,
-              NEXT_PUBLIC_SUPABASE_ANON_KEY:$f}' \
-            | npx wrangler secret bulk
+          jq -n --arg a "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            '{SUPABASE_SERVICE_ROLE_KEY:$a}' | npx wrangler secret bulk
 
       - name: Deploy
         env:

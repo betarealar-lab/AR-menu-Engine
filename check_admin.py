@@ -499,7 +499,7 @@ def main() -> int:
                             files={"file": (name, blob, ctype)},
                             data={"kind": kind, "tenantId": str(tenant_id)})
             body = sent.json() if sent.ok else {}
-            if not check(f"a {kind} uploads", sent.ok and body.get("url"), sent.text[:160]):
+            if not check(f"a {kind} uploads", sent.ok and body.get("url"), f"HTTP {sent.status_code} {sent.text[:200]!r}"):
                 continue
 
             # The URL it handed back must actually serve the bytes. This is the assertion

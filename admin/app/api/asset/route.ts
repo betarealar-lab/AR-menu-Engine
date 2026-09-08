@@ -16,9 +16,22 @@
 // before an upload works anywhere. One-step through here needs none of that, and it is one
 // round trip instead of two.
 
+// **How the bytes reach R2, and why it changed on the way to production.**
+//
+// This wrote through the AWS S3 SDK with an access key. That works on Node and does NOT
+// work on Cloudflare: the SDK walks its default configuration chain before it uses the
+// credentials you handed it, reaches for `~/.aws/config`, and workerd answers
+// `[unenv] fs.readFile is not implemented yet`. Every upload returned 500, and the SDK
+// swallowed it into an empty body - four checks in `check_admin.py` went red with no
+// message on either side.
+//
+// So on Cloudflare it writes through the R2 BINDING, exactly as the menu app serves from
+// one. A binding is an account-level grant made at deploy time: the running Worker holds
+// no access key, no secret and no endpoint, so there is nothing here to leak and nothing
+// to rotate. The SDK stays only for `npm run dev`, where there are no bindings.
 import { NextRequest, NextResponse } from 'next/server'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { createClient } from '@/lib/supabase/server'
+import { getCloudflareContext } from '@opennextjs/cloudflare'
 
 type Kind = 'photo' | 'hero' | 'logo' | 'glb' | 'usdz' | 'video'
 
@@ -45,6 +58,45 @@ const RULES: Record<Kind, { ext: string; type: string; ours: boolean; max: numbe
  *  output. One rule, matching the serving route with nothing to keep in step. */
 function bucketName() {
   return process.env.R2_BUCKET_PHOTOS || 'betareal-photos'
+}
+
+/** The binding on Cloudflare, the SDK on Node. Same bucket either way.
+ *
+ *  The binding is looked up rather than assumed: `getCloudflareContext` throws outside a
+ *  Worker, and `npm run dev` is outside a Worker.
+ */
+async function put(key: string, bytes: Uint8Array, contentType: string) {
+  // Typed here, narrowly, rather than by generating `cloudflare-env.d.ts`. That file pulls
+  // workerd's global type definitions in over the DOM ones, which retypes `Response.json()`
+  // and `Request.json()` as `unknown` across the whole app and breaks six unrelated files.
+  // One method is used; one method is declared.
+  type Put = { put(k: string, v: Uint8Array,
+                   o?: { httpMetadata?: { contentType?: string } }): Promise<unknown> }
+  let bucket: Put | undefined
+  try {
+    bucket = (getCloudflareContext().env as unknown as Record<string, Put>).PHOTOS
+  } catch {
+    // Not running on Workers - fall through to the SDK below.
+  }
+  if (bucket) {
+    await bucket.put(key, bytes, { httpMetadata: { contentType } })
+    return
+  }
+
+  // Development only. Imported here, not at the top of the file, so the SDK is not in the
+  // Worker bundle at all - it is 3 MB and it cannot run there.
+  const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3')
+  const s3 = new S3Client({
+    region: 'auto',
+    endpoint: process.env.R2_ENDPOINT,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    },
+  })
+  await s3.send(new PutObjectCommand({
+    Bucket: bucketName(), Key: key, Body: bytes, ContentType: contentType,
+  }))
 }
 
 export async function POST(req: NextRequest) {
@@ -97,17 +149,7 @@ export async function POST(req: NextRequest) {
     .slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('')
   const key = `t/${tenantId}/${kind}/${hash}.${rule.ext}`
 
-  const s3 = new S3Client({
-    region: 'auto',
-    endpoint: process.env.R2_ENDPOINT,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-    },
-  })
-  await s3.send(new PutObjectCommand({
-    Bucket: bucketName(), Key: key, Body: bytes, ContentType: rule.type,
-  }))
+  await put(key, bytes, rule.type)
 
   // The buckets are private and ONE service serves them - the menu app, which already has
   // the route, the cache headers and the CORS a 3D viewer needs. The admin points at it
