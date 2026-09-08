@@ -721,6 +721,59 @@ def main() -> int:
         # Checked against the DATABASE, and by reading the loader as text, because the cast
         # is precisely what stopped TypeScript from seeing it. The compiler cannot be the
         # thing that catches a lie told to the compiler.
+        # ── templates: a policy that could not fire ──────────────────────────
+        #
+        # `templates` had the right rules and none of the permission to use them:
+        # `templates_write` is `is_super_admin()`, and `authenticated` was granted SELECT
+        # and nothing else. A policy decides WHICH ROWS a grant may touch; it never grants
+        # anything. So the write policy could not fire for anybody, and every save from a
+        # template screen would have failed with a permission error naming the table rather
+        # than the reason. 0021 added the grant.
+        #
+        # This is 0018's mismatch in the opposite direction - there a grant was wider than
+        # the rule anybody intended, here it was narrower - and both are invisible until
+        # somebody tries the thing. So both are checked by trying the thing.
+        print("\n== templates ==")
+        r = sb.get(tok, "templates", select="id,name,listed")
+        seen = {t["id"] for t in (r.json() if r.ok else [])}
+        check("an owner sees the templates they may choose from",
+              r.ok and "monday_greens" in seen, r.text[:120])
+        check("...and not the unlisted ones", "plain" not in seen, str(sorted(seen)))
+        r = sb.patch(tok, "templates", {"listed": True}, id="eq.plain")
+        listed_after = None
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select listed from templates where id = 'plain'")
+            listed_after = cur.fetchone()[0]
+        check("an owner cannot offer themselves a hidden template", listed_after is False,
+              f"HTTP {r.status_code}, listed now {listed_after}")
+        r = sb.post(tok, "templates", {"id": "sneaky", "name": "Sneaky"})
+        check("nor invent one", not r.ok, f"HTTP {r.status_code}")
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("insert into super_admins (user_id) values (%s) "
+                        "on conflict do nothing", (owner_id,))
+            conn.commit()
+        r = sb.post(tok, "templates",
+                    {"id": "check_tmpl", "name": "Check Template", "listed": False,
+                     "defaults": {"day_bg": "#ffffff"}})
+        check("a super admin can create a template", r.ok, r.text[:140])
+        r = sb.patch(tok, "templates", {"name": "Check Template 2"}, id="eq.check_tmpl")
+        check("...and rename it", r.ok, r.text[:120])
+        r = sb.patch(tok, "templates", {"defaults": {"day_bg": "#eeeeee", "font_body": "Inter"}},
+                     id="eq.check_tmpl")
+        check("...and change the palette a new restaurant would start with", r.ok,
+              r.text[:120])
+        r = sb.get(tok, "templates", select="id,defaults", id="eq.check_tmpl")
+        got = (r.json() or [{}])[0].get("defaults", {}) if r.ok else {}
+        check("...and it is what comes back", got.get("font_body") == "Inter", str(got)[:80])
+        r = requests.delete(f"{url}/rest/v1/templates?id=eq.check_tmpl", timeout=30,
+                            headers={"apikey": anon, "Authorization": f"Bearer {tok}"})
+        check("...and delete it again", r.ok, f"HTTP {r.status_code}")
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("delete from templates where id = 'check_tmpl'")
+            cur.execute("delete from super_admins where user_id = %s", (owner_id,))
+            conn.commit()
+
         print("\n== one shape for a translation ==")
         with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
             cur.execute("""
