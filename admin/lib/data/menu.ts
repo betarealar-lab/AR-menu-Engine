@@ -138,7 +138,18 @@ export async function loadMenu(tenantId: string) {
   const categories: Category[] = ((cats || []) as unknown as CategoryRow[]).map(c => ({
     id: c.id,
     name_en: c.name || '',
-    name_ka: (c.i18n as Record<string, string> | null)?.ka || '',
+    // `i18n` is a bag of LANGUAGE OBJECTS - {"ka": {"name": "…"}} - not a bag of strings.
+    // This read `.ka`, which is the whole object, and the cast to Record<string, string>
+    // told TypeScript it was a string so nothing complained. It then went straight into
+    // JSX as `{catName(item.category_id)}` and React threw error #31, "objects are not
+    // valid as a React child", killing the entire Menu Editor.
+    //
+    // Only in Georgian: `categoryName` reads `name_ka` when lang is 'ka' and `name_en`
+    // otherwise, so the screen worked perfectly in English and died the moment anyone
+    // switched language - and only on a restaurant that HAS categories with translations,
+    // which is why a two-item test tenant looked fine while the two real ones did not.
+    // The items loader two lines down has always done this correctly (`ka.name`).
+    name_ka: ((c.i18n as Record<string, { name?: string }> | null)?.ka?.name) || '',
     sort_order: c.position ?? 0,
   }))
 
@@ -248,7 +259,12 @@ export async function saveCategory(
   const row = {
     tenant_id: tenantId,
     name: form.name_en.trim(),
-    i18n: form.name_ka.trim() ? { ka: form.name_ka.trim() } : {},
+    // The same shape the reader above and `public_menu` (0015) expect. This wrote
+    // {"ka": "text"} - a bare string where every other writer and reader in the system
+    // puts {"name": "text"} - so the first Georgian category saved from this screen would
+    // have been the one row nothing could read. None exist yet: all 39 in the database
+    // have the right shape, because no category translation has ever been saved here.
+    i18n: form.name_ka.trim() ? { ka: { name: form.name_ka.trim() } } : {},
     position: form.sort_order ?? 0,
   }
   if (id) {

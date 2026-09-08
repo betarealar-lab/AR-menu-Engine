@@ -540,6 +540,45 @@ def main() -> int:
                         data={"kind": "photo", "tenantId": str(tenant_id)})
         check("but their own photos still go up", sent.ok, sent.text[:140])
 
+        # ── the language bag has ONE shape ───────────────────────────────────
+        #
+        # `i18n` is a bag of language OBJECTS - {"ka": {"name": "…"}} - and every reader and
+        # writer has to agree on that. One did not: the admin's category loader took
+        # `i18n.ka`, which is the whole object, cast it to `Record<string, string>` so the
+        # compiler would not complain, and put it straight into JSX. React threw "objects
+        # are not valid as a React child" and the entire Menu Editor died.
+        #
+        # It died ONLY in Georgian - `categoryName` reads `name_ka` when lang is 'ka' and
+        # `name_en` otherwise - and only for a restaurant whose categories have
+        # translations. So it looked perfect in English and perfect on a two-dish test
+        # tenant, and took out both real restaurants the moment the language was switched.
+        #
+        # Checked against the DATABASE, and by reading the loader as text, because the cast
+        # is precisely what stopped TypeScript from seeing it. The compiler cannot be the
+        # thing that catches a lie told to the compiler.
+        print("\n== one shape for a translation ==")
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("""
+                select count(*) filter (where jsonb_typeof(i18n->'ka') = 'string'), count(*)
+                from categories where i18n ? 'ka'
+            """)
+            bare, total = cur.fetchone()
+            check("every category translation is {ka:{name}}, never {ka:'text'}",
+                  bare == 0, f"{bare} of {total} are a bare string")
+            cur.execute("""
+                select count(*) filter (where jsonb_typeof(i18n->'ka') = 'string'), count(*)
+                from items where i18n ? 'ka'
+            """)
+            ibare, itotal = cur.fetchone()
+            check("and so is every dish translation", ibare == 0,
+                  f"{ibare} of {itotal} are a bare string")
+
+        loader = (Path(__file__).resolve().parent / "admin" / "lib" / "data"
+                  / "menu.ts").read_text(encoding="utf-8")
+        check("the admin reads the name OUT of the language object",
+              "?.ka?.name" in loader and "?.ka || ''" not in loader)
+        check("...and writes it back in the same shape", "{ ka: { name:" in loader)
+
         # ── the team ─────────────────────────────────────────────────────────
         print("\n== the team ==")
         with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
