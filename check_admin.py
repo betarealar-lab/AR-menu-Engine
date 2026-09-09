@@ -645,6 +645,61 @@ def sizes_and_extras_are_editable() -> None:
     print()
 
 
+
+# -- the capture protocol, said before it costs anything ---------------------------------
+#
+# Almost every way a model comes out wrong is decided at capture time, and every one of
+# them is free to avoid and thirty credits to discover. The engine is trained on evenly
+# spaced views of an object, so four photos of the pretty side produce a confident, wrong
+# model - and nothing in the product said so. The Studio's only guidance was one line
+# about even light.
+#
+# The rules come from the capture protocol, not from general photography advice: four
+# quarter turns, one height in all four, diffuse light and no flash, a plain background,
+# and ONE edit copied to all four - grading each frame separately feeds inconsistent
+# colour to the texture stage and bakes patchiness into the material.
+
+def owners_are_told_how_to_shoot() -> None:
+    print("== an owner is told how to photograph a dish ==")
+    guide = ADMIN_SRC / "components" / "CaptureGuide.tsx"
+    if not check("the guide exists", guide.exists()):
+        return
+    src = guide.read_text(encoding="utf-8")
+    plate = (ADMIN_SRC / "components" / "Plate.tsx").read_text(encoding="utf-8")
+    i18n = (ADMIN_SRC / "lib" / "i18n.ts").read_text(encoding="utf-8")
+
+    check("the capture screen shows it", "<CaptureGuide" in plate)
+    check("it opens itself the first time", "useCaptureGuide(" in plate)
+    check("...and can be reopened afterwards", "guide.show" in plate)
+    check("the next photo's instruction appears with the slots", "<NextShot" in plate)
+    check("...and follows the first EMPTY slot, not the count",
+          "frames.findIndex(f => !f)" in plate)
+
+    # The four turns are the method. If the guide ever stops saying "quarter turn" it has
+    # stopped teaching the thing that matters.
+    for deg in ("0°", "90°", "180°", "270°"):
+        check(f"the guide names the {deg} turn", deg in src)
+
+    # Each rule that costs a credit when broken.
+    for key, what in (("ruleHeight", "one height in all four"),
+                      ("ruleLight", "soft light, no flash"),
+                      ("ruleBackground", "a plain background"),
+                      ("ruleEdit", "one edit copied to all four")):
+        check(f"it teaches {what}", key in src)
+
+    # And in both languages, like everything else an owner reads.
+    i_en = i18n.index("const en = {")
+    i_ka = i18n.index("const ka", i_en)
+    keys = lambda b: set(re.findall(r"^  ([a-zA-Z][a-zA-Z0-9_]*):", b, re.M))
+    en, ka = keys(i18n[i_en:i_ka]), keys(i18n[i_ka:])
+    guide_keys = {k for k in en if k.startswith(("guide", "shot", "rule", "mistake"))}
+    check("every line of it exists in Georgian", guide_keys <= ka,
+          "missing: " + ", ".join(sorted(guide_keys - ka)[:6]))
+    check("...and there are enough of them to be a guide", len(guide_keys) >= 18,
+          f"{len(guide_keys)} keys")
+    print()
+
+
 def main() -> int:
     load_env()
     url = os.environ.get("SUPABASE_URL", "")
@@ -672,6 +727,7 @@ def main() -> int:
     files_can_get_in()
     nothing_is_only_in_english()
     sizes_and_extras_are_editable()
+    owners_are_told_how_to_shoot()
     print(f"The product  (menu {MENU}, admin {ADMIN})\n")
 
     owner_id = other_id = None

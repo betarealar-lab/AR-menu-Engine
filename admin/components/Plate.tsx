@@ -18,6 +18,7 @@ import {
   requestBuild, EMPTY_DIMS, hasDims, type Capture, type CaptureTask, type Dims,
 } from '@/lib/data/studio'
 import { useFileDrop } from '@/lib/useFileDrop'
+import CaptureGuide, { useCaptureGuide, NextShot } from '@/components/CaptureGuide'
 import { useLang } from '@/lib/useLang'
 import { text } from '@/lib/i18n'
 
@@ -107,6 +108,10 @@ export default function Plate(props: {
   // stays disabled until one number is typed.
   const [dims, setDims] = useState<Dims>({ ...EMPTY_DIMS })
   const [sending, setSending] = useState(false)
+  // Opens itself the first time this restaurant reaches the capture screen, and from the
+  // button afterwards. Every failure mode the engine has is capture-time, free to avoid
+  // here and thirty credits to discover later.
+  const guide = useCaptureGuide(tenantId)
   const fileRefs = useRef<(HTMLInputElement | null)[]>([])
 
   // Picking a dish moves the plate onto that dish's frames - whatever was photographed
@@ -181,6 +186,8 @@ export default function Plate(props: {
   }
 
   const filled = frames.filter(Boolean).length
+  // The first gap, not the count: somebody who fills 1, 3, 4 should be told about 2.
+  const nextSlot = Math.max(0, frames.findIndex(f => !f))
   const predictedOnce = tasks.length > 0
   const canPredict = filled === 1 && !predictedOnce
 
@@ -206,15 +213,26 @@ export default function Plate(props: {
       <div className="card p-5">
         <div className="flex items-baseline gap-3 mb-1">
           <h2 className="font-semibold">{T.viewPhotos}</h2>
+          <button type="button" className="underline text-xs" onClick={guide.show}
+                  style={{ color: 'var(--gold)' }}>{T.guideOpen}</button>
           <span className={`pill ml-auto ${filled === 4 ? 'pill-on' : filled ? 'pill-wait' : 'pill-mute'}`}>
             {filled === 0 ? T.plateNoneYet
               : filled < 4 ? text(T.plateSomeOfFour, { n: filled })
               : T.plateAllFour}
           </span>
         </div>
-        <p className="text-xs mb-4" style={{ color: 'var(--dim)' }}>
+        <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
           {T.plateHint}
         </p>
+
+        {/* The instruction for the photo they are about to take. It changes on every
+            upload - "turn the plate a quarter turn" is different from "start here" - which
+            is why it can appear every time without becoming wallpaper. `nextSlot` is the
+            first EMPTY slot, so it follows them rather than the order they happen to
+            fill. */}
+        <div className="mb-4">
+          <NextShot slot={nextSlot} done={filled} />
+        </div>
 
         <div className="grid grid-cols-2 gap-3">
           {SLOTS.map((slot, i) => {
@@ -293,6 +311,8 @@ export default function Plate(props: {
           </button>
         </div>
       </div>
+
+      <CaptureGuide open={guide.open} onClose={guide.close} />
 
       {/* ── what it is, how big, build ──────────────────────────────────── */}
       <div className="grid gap-4 content-start">

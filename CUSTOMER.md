@@ -189,3 +189,69 @@ Fourteen checks in `check_admin.py`, plus nine unit tests on the cleaner — run
 **Monday Greens' real thirty variant sets**, which come back byte-identical, `image_url`
 and all. The cleaner is plain JS beside its own tests *and imported by the data layer and
 the editor*, because a tested copy nothing runs proves nothing.
+
+---
+
+## 7. Teaching the shot — 2026-09-09
+
+**The most expensive thing in the product is a photo taken wrong**, and nothing said how to
+take one. The Studio's entire guidance was a single line about even light.
+
+Almost every way a model comes out wrong is decided at capture time. Each one is free to
+avoid and **30 credits to discover.** The engine is trained on evenly spaced views of an
+object, so four photos of the pretty side produce a confident, wrong model — and an owner
+had no way to know that.
+
+### What an owner sees now
+
+**A guide, the first time.** Opens by itself on the capture screen, remembered per
+restaurant, and reachable from a *How to photograph* link forever after. Four numbered
+turns — **0° / 90° / 180° / 270°** — then the rules that hold across all four, then the
+four things that go wrong most often.
+
+**A line that changes with every photo.** Under the slots: *"Photo 2 of 4: turn the plate a
+quarter turn. Turn the plate, not yourself — the background and the framing must stay
+exactly the same. Same height, same distance, same light as the others."*
+
+It follows the first **empty** slot rather than the count, so somebody who fills 1, 3 and 4
+is told about 2. And because it says something different every time, it can appear on
+every upload without becoming wallpaper.
+
+### The rules are the protocol, not photography advice
+
+Straight from `betareal-capture-protocol`:
+
+- **Four quarter turns, evenly spaced** — not four angles of the best-looking side
+- **One height in all four** — consistency beats the exact angle
+- **Soft light, no flash, not beside a window** — glare is the geometry stage's weakness
+- **A plain background, the same one throughout**
+- **One edit, copied to all four** — grading each frame separately feeds inconsistent
+  colour to the texture stage and bakes patchiness into the material. This is the trap in
+  our own workflow, now told to the owner before it costs them.
+
+**Turn the plate, not yourself** is a deliberate translation of "evenly spaced azimuths".
+It is easier to do standing in a restaurant *and* it keeps the background and framing
+identical — which the model also wants. Same result, less to get wrong.
+
+Sixteen checks, and every line exists in Georgian.
+
+### open — menu import is scaffolded and switched off
+
+`lib/menuImport.ts` and `/api/menu-import` exist, define the shape, and answer **501**.
+There is no `ANTHROPIC_API_KEY` and no feature flag, so nothing renders and nothing is
+billed.
+
+The shape is the decision, and it is the same whichever way the file is read:
+
+```
+a file  →  rows  →  a screen where the owner fixes what came out wrong  →  saved
+```
+
+Everything upstream of `DraftRow[]` is interchangeable — a spreadsheet, a PDF text layer, a
+vision model, or a person typing. Everything downstream is one code path. That is why
+manual entry and AI import are one feature rather than two.
+
+**Cost, so the decision is a number:** a menu page photo is ~4,200 tokens. Monday Greens'
+170 dishes across eight pages is roughly 35,000 in and 12,000 out — **about $0.19 on
+Sonnet 5, once, for the whole menu.** Against ₾300 setup and 30 credits per model that is
+noise, but it is a real line and it is Temo's call.
