@@ -337,3 +337,53 @@ regex turns the hero check red and prints the payload verbatim.
   `e()`.
 - **The palette** uses a tight allow-list that excludes `<`, `;` and braces, so a colour
   cannot close a declaration, open a rule, or leave the style element.
+
+---
+
+## 10. A privileged side effect that happened before the authorisation check
+
+### fixed — anyone signed in could force an account into existence
+
+`/api/members` runs with the service key, which bypasses RLS, so it has to authorise its
+own caller. It did — through `add_tenant_member`, called as the signed-in user, which
+refuses correctly. Nobody was ever added to a restaurant they had no right to.
+
+The bug was the **order**. By the time that refusal happened, the route had already created
+a confirmed auth account with the service key, and the account stayed. Any signed-in user
+could post a stranger's email address with any tenant id, collect a `403`, and have made
+that address exist.
+
+It is not a takeover: no password is set, and the recovery link is generated only on the
+success path. What it does is let anybody pollute `auth.users` and, more usefully to an
+attacker, **take an email address out of circulation** — the real person can no longer sign
+up, because `createUser` in the signup route then fails with "already registered".
+
+Demonstrated before fixing: a throwaway attacker, a restaurant they were not in, a stranger's
+address. `403`, and the account existed. Fixed by asking the database the same question
+`add_tenant_member` will, as the same user, *before* the service key touches anything —
+`tenants_read` is `is_member_of(id)`, which is membership or super admin. One authority,
+consulted twice, rather than a second rule written in the route that could drift from the
+first.
+
+Three checks in `check_admin.py`, which needed a second cookie jar to run: the routes
+authenticate by cookie and the suite only had the owner's.
+
+### verified — every other privileged route authorises first
+
+Seven routes hold the service key. `account-log` and `admin-links` gate on
+`requireSuperAdmin()` as their first act; `branches` and `tenants` check `is_super_admin()`
+at the top of each handler and reach the service key only from helpers called afterwards;
+`signup` is deliberately unauthenticated and gated by an invite code instead.
+
+### open — four privileged routes nothing calls
+
+`/api/branches`, `/api/tenants`, `/api/admin-links` and `/api/account-log` have **zero call
+sites**, and `/api/categories/reorder` is referenced only by a comment explaining why it is
+bypassed. They belong to an older schema — `brands`, `restaurants`, integer ids — and none
+of those tables exist.
+
+They are inert today: unauthenticated they answer `401`, and to an ordinary signed-in user
+`branches` fails on the missing table while `tenants` and `account-log` answer `403`. But
+they are dead code carrying the RLS bypass into the deployed Worker, and one of them is
+built around a `storeInitialPassword` helper — a pattern nobody should inherit from a file
+they assumed was live.

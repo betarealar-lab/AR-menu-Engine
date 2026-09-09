@@ -22,6 +22,7 @@ generated here, used once, never printed.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -77,6 +78,16 @@ class Supa:
                           headers=self._h(self.service),
                           json={"email": email, "password": password, "email_confirm": True})
         return r.json().get("id") if r.ok else None
+
+    def find_user(self, email: str):
+        """The account for an address, or None. Service key, on auth.users only."""
+        r = requests.get(f"{self.url}/auth/v1/admin/users", timeout=30,
+                         headers=self._h(self.service),
+                         params={"page": 1, "per_page": 1000})
+        if not r.ok:
+            return None
+        return next((u for u in r.json().get("users", [])
+                     if (u.get("email") or "").lower() == email.lower()), None)
 
     def drop_user(self, uid: str) -> None:
         requests.delete(f"{self.url}/auth/v1/admin/users/{uid}", timeout=30,
@@ -319,6 +330,29 @@ def failed_requests_read_honestly() -> None:
     check("and there is no dismiss, which would refund the generation",
           "cancelRequest" not in tail)
     print()
+
+
+def browser_for(sb: "Supa", email: str, password: str) -> requests.Session | None:
+    """A signed-in browser session for anybody.
+
+    The Next routes authenticate by COOKIE, and the run only has one cookie jar - the
+    owner's, from `/api/signup`. Testing what a route does for somebody who is NOT that
+    owner needs a second one, so the session is fetched from Supabase and written into the
+    cookie `@supabase/ssr` reads: `sb-<project ref>-auth-token`, holding `base64-` and then
+    the session as JSON. That is the format the library writes; if it ever changes, the
+    checks that use this go red rather than quietly passing.
+    """
+    r = requests.post(f"{sb.url}/auth/v1/token", params={"grant_type": "password"},
+                      timeout=30,
+                      headers={"apikey": sb.anon, "Content-Type": "application/json"},
+                      json={"email": email, "password": password})
+    if not r.ok:
+        return None
+    ref = sb.url.split("://", 1)[1].split(".", 1)[0]
+    blob = base64.b64encode(json.dumps(r.json()).encode()).decode()
+    sess = requests.Session()
+    sess.cookies.set(f"sb-{ref}-auth-token", "base64-" + blob)
+    return sess
 
 
 def main() -> int:
@@ -1076,6 +1110,35 @@ def main() -> int:
               r.text[:160])
         check("and the link points at the admin, not at Supabase",
               str(inv.get("link", "")).startswith(f"{ADMIN}/set-password"), str(inv.get("link")))
+
+        # The same route, from somebody with no business in this restaurant.
+        #
+        # `add_tenant_member` is called as the signed-in user and has always refused
+        # correctly, so nobody was ever added to a restaurant they had no right to. The
+        # bug was the ORDER: the refusal came after the route had already created a
+        # confirmed auth account with the service key, and that account stayed. Any
+        # signed-in user could post a stranger's address with any tenant id, collect a
+        # 403, and have made that address exist - which is not a takeover, but does take
+        # the address out of circulation, because signup then fails with "already
+        # registered".
+        outsider_pw = secrets.token_urlsafe(18)
+        outsider_mail = f"check-out-{uuid.uuid4().hex[:8]}@betareal.test"
+        outsider_id = sb.make_user(outsider_mail, outsider_pw)
+        if outsider_id:
+            created_users.append(outsider_id)
+        stranger_mail = f"check-nobody-{uuid.uuid4().hex[:8]}@betareal.test"
+        browser = browser_for(sb, outsider_mail, outsider_pw)
+        if check("a second browser session can be made", browser is not None):
+            r = browser.post(f"{ADMIN}/api/members", timeout=45,
+                             json={"tenantId": str(tenant_id), "email": stranger_mail,
+                                   "role": "staff"})
+            check("somebody outside the restaurant cannot add a member",
+                  r.status_code == 403, f"HTTP {r.status_code} {r.text[:120]}")
+            made = sb.find_user(stranger_mail)
+            check("and the refusal leaves no account behind", made is None,
+                  "an account was created for an address the caller had no right to name")
+            if made:
+                created_users.append(made["id"])
 
         chosen = secrets.token_urlsafe(18)
         otp = str(inv.get("link", "")).split("token=")[-1].split("&")[0]

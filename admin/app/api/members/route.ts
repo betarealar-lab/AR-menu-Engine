@@ -34,6 +34,27 @@ export async function POST(req: NextRequest) {
   if (!tenantId) return bad('Which restaurant?')
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) return bad('That is not an email address')
 
+  // **Before the service key touches anything.**
+  //
+  // `add_tenant_member` below is called as the signed-in user and refuses correctly, so
+  // nobody was ever added to a restaurant they had no right to. But the refusal came
+  // AFTER this route had already created a confirmed auth account with the service key,
+  // and the account was left behind: any signed-in user could post a stranger's address
+  // with any tenant id, collect a 403, and have made that account exist.
+  //
+  // That is not a takeover - no password is set, and the recovery link is generated only
+  // on the success path - but it lets anybody pollute `auth.users` and, worse, take an
+  // email address out of circulation: the real person can no longer sign up, because
+  // `createUser` in the signup route fails with "already registered".
+  //
+  // The check asks the DATABASE the same question `add_tenant_member` will, as the same
+  // user: `tenants_read` is `is_member_of(id)`, which is membership or super admin. One
+  // authority, consulted twice, rather than a second rule written here that could drift
+  // away from the first.
+  const { data: allowed } = await supabase
+    .from('tenants').select('id').eq('id', tenantId).maybeSingle()
+  if (!allowed) return bad('You are not in that restaurant', 403)
+
   const service = createAdminClient()
   if (!service) return bad('The server is missing its Supabase service key', 500)
 
