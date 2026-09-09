@@ -512,3 +512,45 @@ Fixing `ported/shim.js` and rebuilding `app/public/viewer.js` left `menu/render/
 stale, and `check_render.py` went red on *"the shim is the only adapter"* — a check written
 after `_parseConfigList` shipped broken exactly this way. Two artefacts are built from that
 shim and both had to be regenerated.
+
+---
+
+## 13. The bridge died on the first blip
+
+### fixed — one transient error killed the engine until somebody logged in
+
+`worker.py` has always wrapped each pass in `try/except`, with a comment saying exactly
+why: *"A worker that exits on the first blip is a worker nobody notices has stopped, and
+then nothing ships."*
+
+The **bridge** — installed by the same script, started by the same launcher, half of the
+same engine — had no exception handling in its loop at all. One transient error propagated
+straight out of `main()` and the process exited: Supabase unreachable for a second, a DNS
+blip, R2 timing out, a row half-written by an interrupted pass. Any of them, once, at any
+hour, and the bridge was gone until somebody logged in and started it again — because it
+launches from the Startup folder.
+
+This is the worst shape of failure in the system. Nothing crashes visibly, nothing alerts,
+and approved requests sit in the queue looking like they are about to run. It is precisely
+what §11's *"no engine?"* warning was added to catch, and the better answer is for there to
+be nothing to catch.
+
+**The wording is copied deliberately.** `install-engine.ps1 -Status` judges health by
+grepping the log for `pass failed`, so a bridge that failed in its own phrasing would not
+have been counted at all.
+
+**No traceback, on purpose.** The first version printed one. `-Status` reads the *last 60
+lines*, so a stack trace every thirty seconds while the database is unreachable would push
+every real line out of that window and turn the health check into a view of nothing but the
+current outage. One line, exactly like the worker.
+
+**`--once` is the opposite contract** and is left unprotected: a manual pass exists to show
+what happened, so it raises and exits non-zero rather than printing a line and claiming
+success.
+
+### the check drives it rather than reading it
+
+Six checks in `check_jobs.py`. They run the real loop with the pass functions replaced, so
+nothing touches the database, R2 or a credit — the pass genuinely raises, and the assertion
+is that the loop came back round, said it in the words `-Status` counts, and still stopped
+cleanly on Ctrl-C. Removing the guard turns four of them red.

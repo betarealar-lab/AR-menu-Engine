@@ -315,6 +315,85 @@ def main() -> int:
     ]:
         check(f"left alone when {why}", optimize.scale_factor(measured, scale) == 1.0)
 
+    # -- the two long-running processes must outlive a bad pass --------------------
+    #
+    # `worker.py` has always caught per-pass exceptions; the BRIDGE, installed by the same
+    # script and started by the same launcher, had no exception handling in its loop at
+    # all. One transient error - Supabase unreachable for a second, DNS, R2 timing out, a
+    # row half-written by an interrupted pass - propagated out of main() and the process
+    # exited. It then stayed dead until somebody logged in, because it launches from the
+    # Startup folder.
+    #
+    # That is the worst shape of failure here: nothing crashes visibly, nothing alerts,
+    # and approved requests sit in the queue looking like they are about to run. The
+    # developer queue's "no engine?" warning exists to catch it; this exists so there is
+    # nothing to catch.
+    #
+    # Driven, not read: the loop really runs, the pass really raises, and the assertion is
+    # that it came back round. Nothing real is touched - the pass functions are replaced.
+    print("\n-- a bad pass does not kill the engine --")
+    import contextlib
+    import io as _io
+    from menu import model_requests as bridge
+
+    real = (bridge.multiview, bridge.pull, bridge.collect, bridge.load_env)
+    calls = {"n": 0}
+
+    def _explode():
+        calls["n"] += 1
+        if calls["n"] > 2:
+            raise KeyboardInterrupt      # ends the loop the way Ctrl-C does
+        raise RuntimeError("supabase unreachable")
+
+    argv = sys.argv
+    try:
+        bridge.multiview = _explode
+        bridge.pull = lambda limit=10: 0
+        bridge.collect = lambda: 0
+        bridge.load_env = lambda *a, **k: None
+
+        buf = _io.StringIO()
+        sys.argv = ["model_requests.py", "--watch", "--every", "0"]
+        escaped, rc = None, None
+        with contextlib.redirect_stdout(buf):
+            try:
+                rc = bridge.main()
+            except BaseException as exc:                      # noqa: BLE001
+                escaped = exc
+        out = buf.getvalue()
+
+        check("a failing pass does not kill the bridge", escaped is None,
+              f"{type(escaped).__name__}: {escaped}" if escaped else "")
+        check("it comes back round instead of exiting", calls["n"] >= 3,
+              f"{calls['n']} passes")
+        # Worded to match worker.py, because `install-engine.ps1 -Status` judges health by
+        # grepping the log for this phrase. A bridge failing in its own private phrasing
+        # would not be counted at all.
+        check("and says it in the words -Status counts",
+              out.count("pass failed, continuing") >= 2)
+        check("Ctrl-C still stops it cleanly", rc == 0, f"rc={rc}")
+
+        # `--once` is the opposite contract: a manual pass exists to show what happened.
+        calls["n"] = 0
+        raised = None
+        sys.argv = ["model_requests.py", "--once"]
+        with contextlib.redirect_stdout(_io.StringIO()):
+            try:
+                bridge.main()
+            except Exception as exc:                          # noqa: BLE001
+                raised = exc
+        check("but --once still raises, so a manual pass cannot look like a success",
+              isinstance(raised, RuntimeError),
+              type(raised).__name__ if raised else "nothing was raised")
+    finally:
+        bridge.multiview, bridge.pull, bridge.collect, bridge.load_env = real
+        sys.argv = argv
+
+    # The worker's own guard, which is where the pattern came from.
+    worker_src = (Path(__file__).with_name("worker.py")).read_text(encoding="utf-8")
+    check("the worker still has the guard the bridge copied",
+          "pass failed, continuing" in worker_src)
+
     print("\n" + "=" * 58)
     bad_names = [n for n, ok, _ in RESULTS if not ok]
     print(f"{len(RESULTS) - len(bad_names)}/{len(RESULTS)} passed")

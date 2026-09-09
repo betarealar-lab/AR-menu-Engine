@@ -422,17 +422,50 @@ def main() -> int:
     if not (a.once or a.watch):
         ap.error("pick --once, --watch or --status")
 
-    while True:
-        print("multiview")
-        predicted = multiview()
-        print("pulling")
-        started = pull(limit=a.limit)
-        print("collecting")
-        finished = collect()
-        print(f"{predicted} predicted, {started} started, {finished} finished")
-        if a.once:
-            return 0
-        time.sleep(a.every)
+    # The same protection `worker.py` has had, for the same reason, missing here.
+    #
+    # This loop had no exception handling at all. One transient error - Supabase
+    # unreachable for a second, a DNS blip, R2 timing out, a row half-written by a pass
+    # that was interrupted - propagated straight out of main() and the process exited.
+    # The bridge then stayed dead until somebody logged in and started it again, because
+    # it launches from the Startup folder.
+    #
+    # That is the worst shape of failure this system has: no crash anybody sees, no alert,
+    # and approved requests sitting in the queue looking like they are about to run. It is
+    # exactly what the developer queue's "no engine?" warning was added to catch - and the
+    # right answer is for there to be nothing to catch.
+    #
+    # `--once` is deliberately NOT protected: a manual pass exists to show what happened,
+    # so it should fail loudly and exit non-zero rather than print a line and claim
+    # success.
+    try:
+        while True:
+            try:
+                print("multiview")
+                predicted = multiview()
+                print("pulling")
+                started = pull(limit=a.limit)
+                print("collecting")
+                finished = collect()
+                print(f"{predicted} predicted, {started} started, {finished} finished")
+            except Exception as e:                            # noqa: BLE001
+                if a.once:
+                    raise
+                # Worded to match worker.py exactly: `install-engine.ps1 -Status` counts
+                # health by grepping the log for 'pass failed', and a bridge that failed
+                # in its own private phrasing would not be counted at all.
+                # One line, exactly like worker.py, and deliberately NOT a traceback.
+                # `-Status` judges health from the last 60 lines of this log; a stack
+                # trace every 30 seconds while the database is unreachable would push
+                # every real line out of that window and turn the health check into a
+                # view of nothing but the current outage.
+                print(f"  pass failed, continuing: {type(e).__name__}: {e}")
+            if a.once:
+                return 0
+            time.sleep(a.every)
+    except KeyboardInterrupt:
+        print("\nstopped")
+    return 0
 
 
 if __name__ == "__main__":
