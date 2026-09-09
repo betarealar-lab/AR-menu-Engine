@@ -628,6 +628,10 @@ const en = {
   modelNameLabel: 'Name',
   variantWord: 'Variant',
   optionalWord: 'optional',
+  menuTapToHide: 'Tap to hide from the menu',
+  menuTapToShow: 'Tap to show on the menu',
+  menuHiddenNow: '{name} is off the menu',
+  menuShownNow: '{name} is back on the menu',
 }
 
 const ka: typeof en = {
@@ -1256,6 +1260,10 @@ const ka: typeof en = {
   modelNameLabel: 'სახელი',
   variantWord: 'ვარიანტი',
   optionalWord: 'სურვილისამებრ',
+  menuTapToHide: 'შეეხეთ მენიუდან დასამალად',
+  menuTapToShow: 'შეეხეთ მენიუზე გამოსაჩენად',
+  menuHiddenNow: '{name} მენიუდან მოიხსნა',
+  menuShownNow: '{name} მენიუზე დაბრუნდა',
 }
 
 export const translations = { en, ka }

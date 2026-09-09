@@ -323,6 +323,23 @@ export async function saveSettings(tenantId: string, patch: Record<string, strin
 /** The starting camera angle, onto the MODEL the dish points at. A dish with no model has
  *  nothing to frame, which the screen should not let happen but the data layer must not
  *  assume. */
+/** Show or hide one dish, on its own.
+ *
+ *  "We are out of the sea bass" is the most frequent thing that happens to a menu, it
+ *  happens during service, and it happened through the edit modal: open the row, find the
+ *  toggle, save, wait for the list to reload. Four steps and a full round trip for one
+ *  boolean, on a phone, with a table waiting.
+ *
+ *  Its own writer rather than `saveItem`, deliberately. `saveItem` sends the WHOLE row -
+ *  name, price, translations, variants - so using it here would mean a half-finished edit
+ *  sitting in someone's form could be written to the menu by a sold-out tap.
+ */
+export async function setItemVisible(id: string, visible: boolean) {
+  const supabase = createClient()
+  const { error } = await supabase.from('items').update({ visible }).eq('id', id)
+  return error
+}
+
 export async function saveItemScale(modelId: string | null, scale: number) {
   if (!modelId) return null
   // Out of range means the caller has a bug, and writing it would ship a menu whose AR

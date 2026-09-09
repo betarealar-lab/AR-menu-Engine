@@ -15,6 +15,7 @@ import {
   saveSettings,
   saveItemView,
   saveItemScale,
+  setItemVisible,
 } from '@/lib/data/menu'
 import {
   DEFAULT_MENU_FILTERS,
@@ -371,6 +372,25 @@ export default function MenuPage() {
       ? text(T.saveFailed, { message: modelError.message })
       : editItem ? T.itemUpdated : T.itemAdded)
   }
+  // Optimistic, because the whole point is that it feels instant while a table waits.
+  // The row is put back if the write fails, and the failure is said out loud - a dish
+  // that looks hidden and is not is worse than one that never changed.
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+
+  async function toggleVisible(item: MenuItem) {
+    const next = !item.visible
+    setTogglingId(item.id)
+    setItems(list => list.map(i => (i.id === item.id ? { ...i, visible: next } : i)))
+    const error = await setItemVisible(item.id, next)
+    setTogglingId(null)
+    if (error) {
+      setItems(list => list.map(i => (i.id === item.id ? { ...i, visible: item.visible } : i)))
+      flash(text(T.saveFailed, { message: error.message }))
+      return
+    }
+    flash(text(next ? T.menuShownNow : T.menuHiddenNow, { name: item.name_en || item.name_ka }))
+  }
+
   async function confirmDelete() {
     if (!deleteId) return
     // No second delete for the camera angle any more: it lives on the model, and the model
@@ -744,9 +764,20 @@ export default function MenuPage() {
                           : <span style={{ color: 'var(--dim)' }}>—</span>}
                       </td>
                       <td className="px-3 py-2">
-                        <span className={`pill ${item.visible ? 'pill-on' : 'pill-off'}`}>
+                        {/* The pill IS the switch. It already showed the state in the
+                            right place; it just could not be pressed, so "we are out of
+                            the sea bass" meant opening the row, finding the toggle,
+                            saving and waiting for a reload - four steps for one boolean,
+                            during service, on a phone. */}
+                        <button type="button"
+                                title={item.visible ? T.menuTapToHide : T.menuTapToShow}
+                                disabled={togglingId === item.id}
+                                onClick={e => { e.stopPropagation(); void toggleVisible(item) }}
+                                className={`pill ${item.visible ? 'pill-on' : 'pill-off'}`}
+                                style={{ cursor: 'pointer',
+                                         opacity: togglingId === item.id ? 0.5 : 1 }}>
                           {item.visible ? T.visible : T.hidden}
-                        </span>
+                        </button>
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         <button onClick={e => { e.stopPropagation(); setDeleteId(item.id) }}
