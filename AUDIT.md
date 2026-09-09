@@ -468,3 +468,47 @@ catch a mismatch between the two language blocks. That makes this a safe cleanup
 It is not done because it is not a defect: it costs a few hundred bytes in a bundle and
 misleads nobody who greps for a key and finds no caller. Sized and written down here so it
 can be done deliberately rather than discovered again.
+
+---
+
+## 12. The theme editor was counting itself as diners
+
+### fixed — every preview load wrote a `view` into the restaurant's analytics
+
+The theme editor renders the real menu in an iframe at `/{slug}?preview`. That page is the
+real page: same markup, same viewer bundle, same `__CFG.tenant_id`. The event sink guarded
+on `TENANT` and nothing else, so `init.js` fired `track("view")` on every load and it went
+straight into the restaurant's own numbers — along with a `category` for every filter the
+owner clicked while choosing colours, and a `hero_pass` each time click-to-edit scrolled
+the frame.
+
+**`view` is the denominator of the funnel.** Inflating it produces no visible spike and
+nothing that looks like a bug. It quietly drags every percentage underneath it *down*, so
+"13% of diners open a 3D model" reads worse than the truth — and the conclusion drawn from
+it is wrong in the direction nobody thinks to check, because a disappointing number
+provokes work rather than suspicion.
+
+The sink now reads `?preview` from the URL, which is the same fact `[slug].astro` uses to
+decide it is a preview. One source, two readers, no way for them to drift — and the check
+asserts they still agree on the parameter name rather than merely that each mentions it. A
+diner who types `?preview` themselves suppresses their own counts, which is opting out,
+not poisoning.
+
+`window.__events` still records everything in the page, so a preview stays debuggable and
+the existing "every count the viewer takes is actually filed" checks still work. Only the
+sink is closed.
+
+### the impact today is small, which is the reason to do it now
+
+The events table here holds four `view` rows for Monday Greens. The real diner funnel that
+the business reads lives in the production system, not this database — this is the
+self-serve half, still filling up. That is precisely why this was worth closing now: the
+cost of the bug is zero today and unrecoverable once the table has a year of mixed traffic
+in it, because nothing distinguishes an owner's preview from a diner after the fact.
+
+### and the build caught a stale bundle
+
+Fixing `ported/shim.js` and rebuilding `app/public/viewer.js` left `menu/render/ported.mjs`
+stale, and `check_render.py` went red on *"the shim is the only adapter"* — a check written
+after `_parseConfigList` shipped broken exactly this way. Two artefacts are built from that
+shim and both had to be regenerated.

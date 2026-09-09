@@ -505,6 +505,40 @@ def main() -> int:
     check("a dish with only a USDZ still offers 3D", 'data-is3d="1"' in hcard)
     check("...because iOS Quick Look needs nothing else", "data-usdz=" in hcard)
 
+    # -- 11b2. the theme editor is not a diner ---------------------------------------
+    #
+    # The editor renders the real menu in an iframe at `/{slug}?preview` - same markup,
+    # same viewer, same `__CFG.tenant_id` - so `init.js` fired `track("view")` on every
+    # load and it landed in the restaurant's own analytics, with a `category` for every
+    # filter the owner clicked while choosing colours.
+    #
+    # `view` is the DENOMINATOR of the funnel. Inflating it produces no visible spike; it
+    # drags every percentage underneath it down, so "13% of diners open a 3D model" reads
+    # worse than the truth and the decision taken from it is wrong in the direction nobody
+    # thinks to check. The events table is nearly empty today, which is exactly why this is
+    # the moment to close it.
+    print("")
+    print("-- the theme editor is not a diner --")
+    built = (ROOT / "app" / "public" / "viewer.js").read_text(encoding="utf-8")
+    check("the sink knows what a preview is", "const PREVIEW = " in built)
+    # The point is not that a string exists, it is that the two readers agree. The page
+    # decides it is a preview in `[slug].astro`; the sink decides it in the bundle. If one
+    # ever changed the parameter name the other would keep counting.
+    page = (ROOT / "app" / "src" / "pages" / "[slug].astro").read_text(encoding="utf-8")
+    check("...on the same parameter the server reads",
+          'searchParams.has("preview")' in page and '.has("preview")' in built)
+    check("nothing is queued in preview", "!TENANT || PREVIEW" in built)
+    check("and nothing is sent either", "!TENANT || PREVIEW) return" in built)
+    # The counts still exist in the page, so a preview stays debuggable and the check in
+    # section 10b can still read them.
+    check("but the page still records them for us", "window.__events.push(" in built)
+    # And the guard has to be in the BUILT bundle, not only in the source it came from -
+    # an edit to ported/shim.js that is never rebuilt is a silently missing function on a
+    # diner's page, which has happened here before.
+    shim = (ROOT / "menu" / "render" / "ported" / "shim.js").read_text(encoding="utf-8")
+    check("the built bundle matches the shim it came from",
+          ("const PREVIEW = " in shim) and ("const PREVIEW = " in built))
+
     # -- 11c. nothing an owner types can become script on a diner's phone -----------
     #
     # Every owner-controlled string on the menu goes one of two ways: into MARKUP, where

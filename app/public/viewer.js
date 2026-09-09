@@ -1144,13 +1144,36 @@ window.UI = {
     } catch (_) { return ""; }
   })();
 
+  // **The theme editor is not a diner.**
+  //
+  // The editor renders the real menu in an iframe at `/{slug}?preview`, and that page is
+  // the real page: same markup, same viewer, same `__CFG.tenant_id`. So `init.js` fired
+  // `track("view")` on every load and the count went into the restaurant's own analytics
+  // - along with a `category` for every filter the owner clicked while choosing colours,
+  // and a `hero_pass` every time click-to-edit scrolled the frame.
+  //
+  // `view` is the DENOMINATOR of the funnel. Inflating it does not add a visible spike;
+  // it quietly drags every percentage underneath it down, so "13% of diners open a 3D
+  // model" reads worse than the truth and the conclusion drawn from it is wrong in the
+  // direction nobody checks.
+  //
+  // Read from the URL rather than passed in from the server, because that is the same
+  // fact the page itself uses to decide it is a preview (`Astro.url.searchParams.has
+  // ("preview")` in `[slug].astro`). One source, two readers, no way for them to drift.
+  // A diner who types `?preview` on the end suppresses their own counts, which is
+  // opting out, not poisoning.
+  const PREVIEW = (function () {
+    try { return new URLSearchParams(location.search).has("preview"); }
+    catch (_) { return false; }
+  })();
+
   let pending = [];
   let timer = null;
 
   function flush() {
     clearTimeout(timer);
     timer = null;
-    if (!pending.length || !TENANT) return;
+    if (!pending.length || !TENANT || PREVIEW) return;
     const body = JSON.stringify({
       tenant: TENANT, session: sessionId(), events: pending.splice(0, 50),
     });
@@ -1168,7 +1191,9 @@ window.UI = {
   window.track = function (event, itemIndex, extra) {
     window.__events.push({ event, itemIndex, extra, t: Date.now() });
     const name = EVENT_NAME[event];
-    if (!name || !TENANT) return;
+    // `window.__events` above still records everything: it is what `check_features.py`
+    // reads and what makes a preview debuggable. Only the SINK is closed.
+    if (!name || !TENANT || PREVIEW) return;
 
     // The viewer counts in its own array positions; the sink wants the dish's real id,
     // which the card already carries because the page was rendered complete.
