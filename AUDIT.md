@@ -452,3 +452,19 @@ free, while `NEXT_PUBLIC_ADMIN_ORIGIN` is pinned to `:3001` and the members rout
 set-password links from it. A dev server that landed on `:3000` therefore produced invite
 links pointing at a server that is not running — and the link looks perfectly ordinary
 until somebody clicks it. The dev script pins the port now.
+
+### open, deliberately not done — 183 of 417 i18n keys are unreferenced
+
+Found while confirming the route deletion had not broken a screen: `branchesTitle`,
+`branchesCreateDesc` and friends survive in the bundle, and no page uses them. Nothing is
+broken — there is no branches screen either — they are the copy for the same old
+brands-and-restaurants admin whose routes went in §11.
+
+**44% of the file is dead**, in both languages, clustering around `accountLog*`, `branch*`,
+`brand*`, `adminPassword`, `appRole`. Every key is referenced literally — there is no
+dynamic `T[key]` access anywhere — so the set is exactly knowable and TypeScript would
+catch a mismatch between the two language blocks. That makes this a safe cleanup.
+
+It is not done because it is not a defect: it costs a few hundred bytes in a bundle and
+misleads nobody who greps for a key and finds no caller. Sized and written down here so it
+can be done deliberately rather than discovered again.
