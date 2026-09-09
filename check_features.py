@@ -113,6 +113,16 @@ MENU = {
         # a fixture rather than a query.
         item(id="h", name_en="Quicklook", category_id="c2",
              thumbnail_url="https://x/h.webp", model_usdz="/a/h.usdz", is_3d=True),
+        # A price no size offers. Monday Greens has exactly this - Mgaloblishvili Tvishi
+        # advertises 28 over a Glass of 16 and a Bottle of 48, and the basket charges 16.
+        # The same rows are on the live platform, so it is not an import error.
+        item(id="i", name_en="Tvishi", category_id="c2", price="28 ₾",
+             variants=[{"en": "Glass", "price": "16 ₾"},
+                       {"en": "Bottle", "price": "48 ₾"}]),
+        # ...and the shape that must NOT be touched: a deliberate summary.
+        item(id="j", name_en="Saperavi", category_id="c2", price="16 / 70 ₾",
+             variants=[{"en": "Glass", "price": "16 ₾"},
+                       {"en": "Bottle", "price": "70 ₾"}]),
     ],
 }
 
@@ -306,8 +316,15 @@ def main() -> int:
     check("...priced as an extra", 'class="addon-price">+3 ₾' in html)
     # The one thing that cannot be scraped back out of markup, because the basket does
     # arithmetic on it.
+    # Derived, not written in. This was `== {"3", "4"}`, which was right while exactly two
+    # fixture dishes had sizes and became wrong the moment a third did - the assertion is
+    # about the RULE (only dishes with sizes or add-ons carry data), so it is computed
+    # from the same fixture the page was rendered from.
+    with_choices = {str(n) for n, it in enumerate(MENU["items"])
+                    if it["variants"] or it["addons"]}
     check("sizes and add-ons also travel as data for the basket",
-          set(page["items"].keys()) == {"3", "4"}, str(sorted(page["items"])))
+          set(page["items"].keys()) == with_choices,
+          f'{sorted(page["items"])} vs {sorted(with_choices)}')
     check("...and nothing else is duplicated into it",
           all(set(v) <= {"v", "a"} for v in page["items"].values()))
 
@@ -538,6 +555,33 @@ def main() -> int:
     shim = (ROOT / "menu" / "render" / "ported" / "shim.js").read_text(encoding="utf-8")
     check("the built bundle matches the shim it came from",
           ("const PREVIEW = " in shim) and ("const PREVIEW = " in built))
+
+    # -- 11b3. the card never shows a price nobody can choose -------------------------
+    #
+    # The first size is marked `selected` in the markup, and `platform.js` rewrites the
+    # price line to the chosen size the moment a diner taps one - but until they tap, the
+    # card printed the ITEM's price, which is not always a price any size offers. Monday
+    # Greens has one: Tvishi advertises 28 over a Glass of 16 and a Bottle of 48, and the
+    # basket charges 16. The same rows are on the live platform, so the data is faithfully
+    # imported and the display was the thing that was wrong.
+    #
+    # Narrow on purpose: "16 / 70" is a DELIBERATE summary - the platform's own comment
+    # calls it that - so only a single number matching no size is replaced.
+    print("")
+    print("-- the price on the card is one a diner can actually pick --")
+    def price_of(dish_id):
+        card = html[html.index(f'data-id="{dish_id}"'):]
+        m = re.search(r'<p class="price">(.*?)</p>', card, re.S)
+        return re.sub(r"<[^>]+>", "", m.group(1)).strip() if m else ""
+
+    check("a price no size offers is replaced by the first size",
+          price_of("i") == "16 ₾", price_of("i"))
+    check("a summary like 16 / 70 is left alone", price_of("j") == "16 / 70 ₾",
+          price_of("j"))
+    check("a dish with no sizes is untouched", price_of("b") == "10 ₾", price_of("b"))
+    check("and the basket still charges the chosen size",
+          "_parsePrice(item.variants[entry.vIdx].price)"
+          in (ROOT / "app" / "public" / "viewer.js").read_text(encoding="utf-8"))
 
     # -- 11c. nothing an owner types can become script on a diner's phone -----------
     #

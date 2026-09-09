@@ -138,6 +138,34 @@ const label = (c, lang) =>
  *  first choice that has a PHOTO, so a pictureless "Veggie" does not become the default
  *  card state when the photo on file is the chicken one. Server-side that is a repaint of
  *  one pill, not a flash of the whole card. */
+/** The price to print on the card, given the sizes underneath it.
+ *
+ *  The first size is marked `selected` in the markup, and `platform.js` rewrites this line
+ *  to the chosen size the moment a diner taps one - but until they tap, the card printed
+ *  the ITEM's price, which is not always a price any size offers. Monday Greens has one:
+ *  Mgaloblishvili Tvishi advertises 28 GEL over a Glass of 16 and a Bottle of 48, and the
+ *  basket charges 16. The same rows are on the live platform, so this is not an import
+ *  error - it is a price nobody can select, shown until somebody taps.
+ *
+ *  Narrow on purpose. A summary like "16 / 70" is DELIBERATE - the platform's own comment
+ *  calls it that, and resolving it early would replace useful information with one number.
+ *  So only a single-number price that matches no size is replaced, which is exactly the
+ *  case that cannot be true.
+ */
+function cardPrice(item) {
+  const sizes = item.variants || [];
+  if (!sizes.length || !item.price) return item.price;
+  const numbers = String(item.price).match(/\d+(?:[.,]\d+)?/g) || [];
+  // More than one number is a summary, and a summary is meant to be a summary.
+  if (numbers.length !== 1) return item.price;
+  const shown = numbers[0].replace(",", ".");
+  const offered = sizes.some((v) => {
+    const n = String(v.price || "").match(/\d+(?:[.,]\d+)?/);
+    return n && n[0].replace(",", ".") === shown;
+  });
+  return offered ? item.price : (sizes[0].price || item.price);
+}
+
 /** The label for a variant or add-on, in this language.
  *
  *  Item NAMES have always been language-generic - `item[`${field}_${lang}`]` - but this
@@ -276,7 +304,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
 
   const actions = `<div class="item-actions"><p class="price">` +
     (item.price_old ? `<span class="price-was">${e(item.price_old)}</span>` : "") +
-    `${e(item.price)}</p>${qtyCtrl(i)}</div>`;
+    `${e(cardPrice(item))}</p>${qtyCtrl(i)}</div>`;
   const nameHtml =
     `<p class="item-name" data-field="name" data-idx="${i}">${e(name)}</p>`;
   const descHtml =
