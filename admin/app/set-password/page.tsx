@@ -7,8 +7,10 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useLang } from '@/lib/useLang'
 
 function SetPasswordForm() {
+  const [T] = useLang()
   const params = useSearchParams()
   const router = useRouter()
   const token = params.get('token') || ''
@@ -39,13 +41,13 @@ function SetPasswordForm() {
       <div className="w-full max-w-sm">
         <div className="mb-6">
           <div className="eyebrow mb-2">BetaReal</div>
-          <h1 className="text-2xl font-bold">Set your password</h1>
+          <h1 className="text-2xl font-bold">{T.setPwTitle}</h1>
           {email && <p className="text-sm mt-1" style={{ color: 'var(--dim)' }}>for {email}</p>}
         </div>
 
         {!token || !email ? (
           <div className="card p-5">
-            <p className="text-sm" style={{ color: 'var(--danger)' }}>That link is missing something.</p>
+            <p className="text-sm" style={{ color: 'var(--danger)' }}>{T.setPwLinkBad}</p>
             <p className="text-xs mt-2" style={{ color: 'var(--dim)' }}>
               Ask for a new one and open it whole — some chat apps cut long links in half.
             </p>
@@ -53,12 +55,12 @@ function SetPasswordForm() {
         ) : (
           <form onSubmit={submit} className="card p-6 space-y-4">
             <div>
-              <label className="eyebrow block mb-1">Password</label>
+              <label className="eyebrow block mb-1">{T.passwordLabel2}</label>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                      minLength={8} required autoFocus autoComplete="new-password" />
             </div>
             <div>
-              <label className="eyebrow block mb-1">Again</label>
+              <label className="eyebrow block mb-1">{T.againLabel}</label>
               <input type="password" value={again} onChange={e => setAgain(e.target.value)}
                      minLength={8} required autoComplete="new-password" />
             </div>

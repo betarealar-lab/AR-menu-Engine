@@ -493,6 +493,87 @@ def _strip_comments(src: str) -> str:
     return re.sub(r"^\s*//.*$", "", out, flags=re.M)
 
 
+
+# -- the admin speaks Georgian, or it does not ------------------------------------------
+#
+# The i18n FILE was never the problem: 417 keys, both languages, nothing missing. The
+# problem was 127 owner-facing strings that had never been put through it at all - typed
+# straight into the JSX - so a Georgian restaurant owner read a half-English admin, and
+# the two worst screens were the first one a restaurant ever sees and the one the whole
+# product is about.
+#
+# A missing key is loud: TypeScript refuses to build. A string that never became a key is
+# silent, and it stays silent forever, which is why this counts them instead.
+#
+# Three screens are deliberately exempt. They are ours - creating tenants, the queue
+# across every restaurant, editing templates - and nobody who opens them needs Georgian.
+# Translating them would be work with no reader.
+
+ENGLISH_ONLY_SCREENS = {
+    "app/(admin)/tenants/page.tsx": "super admin: creating restaurants and invites",
+    "app/(admin)/dev-analytics/page.tsx": "super admin: the queue across every restaurant",
+    "app/(admin)/templates/page.tsx": "super admin: stylesheets and starting palettes",
+}
+
+#: Not language. A brand name, a worked example, and the shape of a code.
+NOT_TRANSLATABLE = {"BetaReal", "Monday Greens", "XXXX-XXXX"}
+
+#: What the crude JSX scan below mistakes for prose. `Promise.all(` and a parameter
+#: called `template` are code, and no amount of regex tells them apart from a heading.
+SCANNER_FALSE_POSITIVES = {"Promise", "template"}
+
+
+def _visible_english(path: Path) -> set[str]:
+    """Rough, and deliberately so: anything that LOOKS like a sentence in the markup."""
+    src = path.read_text(encoding="utf-8", errors="ignore")
+    src = re.sub(r"\{/\*.*?\*/\}", "", src, flags=re.S)
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    src = re.sub(r"^\s*//.*$", "", src, flags=re.M)
+    found = set()
+    for m in re.findall(r">\s*([A-Z][A-Za-z0-9'’,.!?&%:/()\- ]{3,70})\s*<", src):
+        if re.search(r"[a-z]{2}", m):
+            found.add(m.strip())
+    for attr in ("placeholder", "title", "aria-label", "alt"):
+        for m in re.findall(attr + r'="([A-Za-z][^"{}]{3,70})"', src):
+            found.add(m.strip())
+    return found - NOT_TRANSLATABLE - SCANNER_FALSE_POSITIVES
+
+
+def nothing_is_only_in_english() -> None:
+    print("== the admin speaks Georgian too ==")
+    src = (ADMIN_SRC / "lib" / "i18n.ts").read_text(encoding="utf-8")
+    i_en = src.index("const en = {")
+    i_ka = src.index("const ka", i_en)
+    keys = lambda b: set(re.findall(r"^  ([a-zA-Z][a-zA-Z0-9_]*):", b, re.M))
+    en, ka = keys(src[i_en:i_ka]), keys(src[i_ka:])
+
+    check("every English key has a Georgian one", not (en - ka),
+          "missing: " + ", ".join(sorted(en - ka)[:8]))
+    check("and nothing is stranded in Georgian only", not (ka - en),
+          "extra: " + ", ".join(sorted(ka - en)[:8]))
+
+    stranded = {}
+    for f in sorted(list((ADMIN_SRC / "app").rglob("*.tsx"))
+                    + list((ADMIN_SRC / "components").rglob("*.tsx"))):
+        rel = f.relative_to(ADMIN_SRC).as_posix()
+        if rel in ENGLISH_ONLY_SCREENS:
+            continue
+        found = _visible_english(f)
+        if found:
+            stranded[rel] = sorted(found)
+
+    total = sum(len(v) for v in stranded.values())
+    check("no owner-facing string is typed straight into the markup", total == 0,
+          "; ".join(f"{k}: {', '.join(v[:4])}" for k, v in list(stranded.items())[:4]))
+
+    # The exempt list is a decision, not a hiding place: if one of those screens is ever
+    # opened up to owners, the line here has to be deleted first and the check goes red.
+    for rel in ENGLISH_ONLY_SCREENS:
+        check(f"{rel.split('/')[-2]} is still ours alone",
+              (ADMIN_SRC / rel).exists())
+    print()
+
+
 def main() -> int:
     load_env()
     url = os.environ.get("SUPABASE_URL", "")
@@ -518,6 +599,7 @@ def main() -> int:
     failed_requests_read_honestly()
     privileged_routes_are_the_ones_we_meant()
     files_can_get_in()
+    nothing_is_only_in_english()
     print(f"The product  (menu {MENU}, admin {ADMIN})\n")
 
     owner_id = other_id = None

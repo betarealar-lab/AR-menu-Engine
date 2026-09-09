@@ -459,7 +459,7 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
         <input value={name} onChange={e => setName(e.target.value)}
                onBlur={() => { if (name.trim() !== m.title) run(() => renameModel(m.id, name)) }}
                className="font-semibold bg-transparent border-0 p-0 rounded-none text-[15px]"
-               style={{ boxShadow: 'none' }} aria-label="Name" />
+               style={{ boxShadow: 'none' }} aria-label={T.modelNameLabel} />
 
         <div className="flex items-center gap-2 text-xs flex-wrap" style={{ color: 'var(--dim)' }}>
           {m.variant !== 'default' && <span>{m.variant}</span>}
@@ -499,8 +499,7 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
                            `&s=${encodeURIComponent(m.scale_cm ? sizeInWords(m.width_cm ?? m.scale_cm, m.height_cm,
                              (m.scale_axis as Axis) || 'width') : '')}`} />
             <p className="text-[11px] mt-2" style={{ color: 'var(--dim)' }}>
-              Scan with your phone. It appears on your table at the size it will ship at.
-              Wrong? Resize below — that is free.
+              {T.studioScanHint}
             </p>
           </div>
         )}
@@ -560,8 +559,8 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
                     onClick={() => run(() => requestRescale({
                       tenantId: plan.restaurantId!, dish: m.dish, variant: m.variant,
                       itemId: m.usedBy?.id ?? null, title: m.title, dims,
-                    }), 'Resizing — a few seconds')}>
-              Resize
+                    }), T.studioResizing)}>
+              {T.resizeWord}
             </button>
           </div>
         )}

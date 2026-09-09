@@ -597,7 +597,7 @@ export default function ThemePage() {
               {/* SHAPE. Which stylesheet the page is rendered with - and only the ones we
                   ship, read from the catalogue rather than from the preset list below. */}
               <div className="card p-4">
-                <div className="eyebrow mb-1">Layout</div>
+                <div className="eyebrow mb-1">{T.themeLayout}</div>
                 <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
                   The shape of the page. Colours, fonts and photos sit on top of it and
                   carry across when you switch.
@@ -641,7 +641,7 @@ export default function ThemePage() {
               {/* PALETTE. A starting set of colours, applied ON TOP of whatever layout is
                   chosen - so these stopped carrying a template_key with them. That was the
                   bug: twenty-two "templates" for two stylesheets. */}
-              <div className="eyebrow px-1 pt-2">Colour palettes</div>
+              <div className="eyebrow px-1 pt-2">{T.themePalettes}</div>
               {TEMPLATE_PRESETS.map(preset => (
                 <button
                   key={preset.key}
@@ -728,7 +728,7 @@ export default function ThemePage() {
           {tab === 'fonts' && (
             <>
               <div className="card p-4">
-                <div className="eyebrow mb-0.5">Headings</div>
+                <div className="eyebrow mb-0.5">{T.themeHeadings}</div>
                 <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
                   The restaurant name and the category names. This one can have character.
                 </p>
@@ -738,7 +738,7 @@ export default function ThemePage() {
               </div>
 
               <div className="card p-4">
-                <div className="eyebrow mb-0.5">Body</div>
+                <div className="eyebrow mb-0.5">{T.themeBody}</div>
                 <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
                   Dish names, descriptions and prices. It has to stay readable at 14px on a
                   phone in a dim room, so plainer is better here.
@@ -759,9 +759,9 @@ export default function ThemePage() {
           {tab === 'branding' && (
             <>
               <div className="card p-4">
-                <div className="eyebrow mb-0.5">Name</div>
+                <div className="eyebrow mb-0.5">{T.nameLabel}</div>
                 <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
-                  What diners see at the top of the menu.
+                  {T.themeNameHint}
                 </p>
                 <BrandRow label={T.brandNameEn} value={config.site_name ?? ''}
                           onChange={v => set('site_name', v)} />
@@ -770,7 +770,7 @@ export default function ThemePage() {
               </div>
 
               <div className="card p-4">
-                <div className="eyebrow mb-0.5">Logo</div>
+                <div className="eyebrow mb-0.5">{T.themeLogo}</div>
                 <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
                   Sits in the header, above the dishes. A transparent PNG or WebP reads
                   best on both the day and night palettes.
@@ -782,7 +782,7 @@ export default function ThemePage() {
               </div>
 
               <div className="card p-4">
-                <div className="eyebrow mb-0.5">Hero</div>
+                <div className="eyebrow mb-0.5">{T.themeHero}</div>
                 <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
                   The first thing a diner sees. One photo is a still hero; two or more
                   crossfade. About three quarters of diners scroll past this - it is the

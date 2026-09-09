@@ -10,6 +10,7 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import SampleDish from '@/components/SampleDish'
+import { useLang } from '@/lib/useLang'
 
 const COUNTRIES: [string, string][] = [
   ['GE', 'Georgia'], ['AM', 'Armenia'], ['AZ', 'Azerbaijan'], ['TR', 'Türkiye'],
@@ -19,6 +20,7 @@ const COUNTRIES: [string, string][] = [
 ]
 
 function StartForm() {
+  const [T] = useLang()
   const router = useRouter()
   const params = useSearchParams()
   const [code, setCode] = useState(params.get('code') || '')
@@ -70,14 +72,14 @@ function StartForm() {
         <div className="order-2 lg:order-1">
           <div className="eyebrow mb-2">BetaReal</div>
           <h1 className="text-3xl font-bold leading-tight mb-3" style={{ color: 'var(--text)' }}>
-            Your dishes, in 3D,<br />on the menu diners scan.
+            {T.startHeadline}
           </h1>
           <p className="text-sm mb-6" style={{ color: 'var(--dim)' }}>
-            Four phone photos become a model a diner can turn around and put on their table.
+            {T.startSub}
           </p>
           <SampleDish height={280} />
           <ul className="text-sm grid gap-1.5 mt-6" style={{ color: 'var(--dim)' }}>
-            <li>· The first three models are free.</li>
+            <li>· {T.startFreeThree}</li>
             <li>· Nothing goes on your menu until you approve it.</li>
           </ul>
         </div>
@@ -86,7 +88,7 @@ function StartForm() {
 
         <form onSubmit={submit} className="card p-6 space-y-5">
           <div>
-            <label className="eyebrow block mb-1">Invite code</label>
+            <label className="eyebrow block mb-1">{T.startInviteCode}</label>
             <input value={code} onChange={e => setCode(formatCode(e.target.value))}
                    placeholder="XXXX-XXXX" autoCapitalize="characters" spellCheck={false}
                    className="font-mono tracking-widest"
@@ -94,43 +96,43 @@ function StartForm() {
                                        : codeOk ? 'var(--success)' : undefined }} />
             {codeOk === false && (
               <p className="text-xs mt-1" style={{ color: 'var(--danger)' }}>
-                That code is not valid, or has already been used.
+                {T.startCodeBad}
               </p>
             )}
             {codeOk === null && (
               <p className="text-xs mt-1" style={{ color: 'var(--dim)' }}>
-                We are letting restaurants in a few at a time. Ask us for one.
+                {T.startCodeAsk}
               </p>
             )}
           </div>
 
           <div>
-            <label className="eyebrow block mb-1">Restaurant</label>
+            <label className="eyebrow block mb-1">{T.startRestaurant}</label>
             <input value={name} onChange={e => setName(e.target.value)}
                    placeholder="Monday Greens" required />
           </div>
 
           <div>
-            <label className="eyebrow block mb-1">Country</label>
+            <label className="eyebrow block mb-1">{T.countryLabel}</label>
             <select value={country} onChange={e => setCountry(e.target.value)}>
               {COUNTRIES.map(([c, label]) => <option key={c} value={c}>{label}</option>)}
             </select>
             <p className="text-xs mt-1" style={{ color: 'var(--dim)' }}>
-              Sets the currency your prices are in. It cannot be changed later.
+              {T.startCurrencyHint}
             </p>
           </div>
 
           <div>
-            <label className="eyebrow block mb-1">Email</label>
+            <label className="eyebrow block mb-1">{T.emailLabel2}</label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                    autoComplete="email" required />
           </div>
 
           <div>
-            <label className="eyebrow block mb-1">Password</label>
+            <label className="eyebrow block mb-1">{T.passwordLabel2}</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)}
                    autoComplete="new-password" minLength={8} required />
-            <p className="text-xs mt-1" style={{ color: 'var(--dim)' }}>At least 8 characters.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--dim)' }}>{T.startMin8}</p>
           </div>
 
           {error && (
@@ -139,11 +141,12 @@ function StartForm() {
           )}
 
           <button type="submit" className="btn btn-primary w-full" disabled={busy || codeOk !== true}>
-            {busy ? 'Creating…' : 'Create my menu'}
+            {busy ? T.startCreating : T.startCreate}
           </button>
 
           <p className="text-center text-xs" style={{ color: 'var(--dim)' }}>
-            Already have an account? <a href="/login" className="underline">Sign in</a>
+            {T.startHaveAccount}{' '}
+            <a href="/login" className="underline">{T.startSignIn}</a>
           </p>
         </form>
         </div>

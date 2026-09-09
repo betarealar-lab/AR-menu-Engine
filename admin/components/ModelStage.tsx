@@ -17,6 +17,7 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ensureViewer } from '@/lib/viewer'
+import { useLang } from '@/lib/useLang'
 
 export default function ModelStage({ src, poster, orbit, title, caption, onClose }: {
   src: string
@@ -26,6 +27,7 @@ export default function ModelStage({ src, poster, orbit, title, caption, onClose
   caption?: string
   onClose: () => void
 }) {
+  const [T] = useLang()
   const host = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   // Rendered into <body>, not where it sits in the tree. `position: fixed` is relative to
@@ -107,7 +109,7 @@ export default function ModelStage({ src, poster, orbit, title, caption, onClose
             <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,.55)' }}>{caption}</div>
           )}
         </div>
-        <button ref={closeRef} type="button" onClick={onClose} aria-label="Close"
+        <button ref={closeRef} type="button" onClick={onClose} aria-label={T.close}
                 className="shrink-0 w-9 h-9 rounded-full grid place-items-center text-lg leading-none"
                 style={{ background: 'rgba(255,255,255,.12)', color: '#fff' }}>
           &#10005;

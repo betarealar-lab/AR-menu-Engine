@@ -18,15 +18,20 @@ import {
   requestBuild, EMPTY_DIMS, hasDims, type Capture, type CaptureTask, type Dims,
 } from '@/lib/data/studio'
 import { useFileDrop } from '@/lib/useFileDrop'
+import { useLang } from '@/lib/useLang'
+import { text } from '@/lib/i18n'
 
 // dataset.SLOTS, in the engine's order. The first frame is what the generator builds
 // from, and four photos of the same side make a confident, wrong model.
+// `key` is the ENGINE's name for the angle and stays English in every language - it
+// becomes part of the uploaded filename and the dataset slot. Only what the owner reads
+// is translated, looked up at render time so it follows the language switch.
 export const SLOTS = [
-  { key: 'front', label: 'Front', help: 'Straight on, at the height a diner sees it. The model is built from this one first.' },
-  { key: 'right', label: 'Right', help: 'A quarter turn clockwise. Same distance, same light.' },
-  { key: 'back',  label: 'Back',  help: 'The far side. It is what stops the back being invented.' },
-  { key: 'left',  label: 'Left',  help: 'A quarter turn the other way.' },
-]
+  { key: 'front', label: 'slotFront', help: 'slotFrontHelp' },
+  { key: 'right', label: 'slotRight', help: 'slotRightHelp' },
+  { key: 'back',  label: 'slotBack',  help: 'slotBackHelp' },
+  { key: 'left',  label: 'slotLeft',  help: 'slotLeftHelp' },
+] as const
 
 type Dish = { id: string; name: string }
 
@@ -45,6 +50,7 @@ function SlotBox({ primary, accept, disabled, onFiles, children }: {
   onFiles: (files: File[]) => void
   children: React.ReactNode
 }) {
+  const [T] = useLang()
   const { dropProps, over } = useFileDrop(onFiles, { accept, disabled })
   return (
     <div {...dropProps} className="rounded-xl overflow-hidden relative transition-colors"
@@ -58,7 +64,7 @@ function SlotBox({ primary, accept, disabled, onFiles, children }: {
       {over && (
         <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none"
              style={{ background: 'rgba(0,0,0,.45)', color: 'var(--gold)' }}>
-          drop to use this photo
+          {T.plateDropHere}
         </div>
       )}
     </div>
@@ -79,6 +85,7 @@ export default function Plate(props: {
   onSent: (state: string) => void
   onError: (message: string) => void
 }) {
+  const [T] = useLang()
   const { tenantId, dishes, left } = props
 
   const [itemId, setItemId] = useState(props.forItem || '')
@@ -198,13 +205,15 @@ export default function Plate(props: {
       {/* ── the four photos ─────────────────────────────────────────────── */}
       <div className="card p-5">
         <div className="flex items-baseline gap-3 mb-1">
-          <h2 className="font-semibold">Photos</h2>
+          <h2 className="font-semibold">{T.viewPhotos}</h2>
           <span className={`pill ml-auto ${filled === 4 ? 'pill-on' : filled ? 'pill-wait' : 'pill-mute'}`}>
-            {filled === 0 ? 'none yet' : filled < 4 ? `${filled} of 4` : 'all four'}
+            {filled === 0 ? T.plateNoneYet
+              : filled < 4 ? text(T.plateSomeOfFour, { n: filled })
+              : T.plateAllFour}
           </span>
         </div>
         <p className="text-xs mb-4" style={{ color: 'var(--dim)' }}>
-          Even light, no hands in shot, the plate filling the frame. More angles, better model.
+          {T.plateHint}
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -214,7 +223,7 @@ export default function Plate(props: {
               <SlotBox key={slot.key} primary={i === 0} accept="image/*"
                        disabled={busySlot === i}
                        onFiles={files => {
-                         if (!files.length) { props.onError('That is not an image.'); return }
+                         if (!files.length) { props.onError(T.plateNotAnImage); return }
                          void putFrame(i, files[0])
                        }}>
                 <div className="flex items-center gap-2 px-3 pt-2.5 pb-1 text-[11px]">
@@ -222,20 +231,20 @@ export default function Plate(props: {
                     0{i + 1}
                   </span>
                   <span className="eyebrow" style={{ color: i === 0 ? 'var(--gold)' : undefined }}>
-                    {slot.label}{i === 0 ? ' · primary' : ''}
+                    {T[slot.label]}{i === 0 ? ' · ' + T.slotPrimary : ''}
                   </span>
-                  {f?.generated && <span className="pill pill-mute ml-auto">predicted</span>}
+                  {f?.generated && <span className="pill pill-mute ml-auto">{T.platePredicted}</span>}
                 </div>
 
                 <button type="button" onClick={() => fileRefs.current[i]?.click()}
                         disabled={busySlot === i}
                         className="w-full aspect-[4/3] flex items-center justify-center text-xs"
                         style={{ color: 'var(--dim)' }}>
-                  {busySlot === i ? 'Uploading…'
+                  {busySlot === i ? T.plateUploading
                     : f ? <img src={f.url} alt="" className="w-full h-full object-cover" />
                     : <span className="flex flex-col items-center gap-1">
                         <span className="text-xl leading-none">+</span>
-                        <span>{f === null && predicting ? 'predicting…' : 'add photo'}</span>
+                        <span>{f === null && predicting ? T.platePredicting : T.plateAddPhoto}</span>
                       </span>}
                 </button>
 
@@ -254,12 +263,12 @@ export default function Plate(props: {
                   <button type="button" onClick={() => clearFrame(i)}
                           className="absolute top-9 right-2 text-[11px] px-2 py-1 rounded"
                           style={{ background: 'rgba(0,0,0,.65)', color: '#fff' }}>
-                    {f.generated ? 'Replace' : 'Remove'}
+                    {f.generated ? T.plateReplace : T.plateRemove}
                   </button>
                 )}
                 {!props.compact && (
                   <p className="px-3 pb-3 text-[11px] leading-4" style={{ color: 'var(--dim)' }}>
-                    {slot.help}
+                    {T[slot.help]}
                   </p>
                 )}
               </SlotBox>
@@ -271,16 +280,16 @@ export default function Plate(props: {
         <div className="mt-4 flex items-center gap-3 flex-wrap rounded-xl p-3"
              style={{ background: 'var(--card2)' }}>
           <div className="flex-1 min-w-[200px]">
-            <div className="text-sm font-semibold">Only have one photo?</div>
+            <div className="text-sm font-semibold">{T.plateOneOnly}</div>
             <p className="text-xs" style={{ color: 'var(--dim)' }}>
-              {predicting ? 'Predicting the other three angles — about a minute.'
-                : predictedOnce ? 'The other angles were predicted for this dish. Real photos beat predicted ones — replace any you can.'
-                : 'We can predict the other three angles from it. Once per dish, free. A real photo always beats a prediction.'}
+              {predicting ? T.platePredictingNow
+                : predictedOnce ? T.platePredictedAlready
+                : T.platePredictOffer}
             </p>
           </div>
           <button type="button" className="btn btn-sm" onClick={predict}
                   disabled={!canPredict || predicting}>
-            {predicting ? 'Predicting…' : 'Predict the other angles'}
+            {predicting ? T.platePredicting : T.platePredictButton}
           </button>
         </div>
       </div>
@@ -288,31 +297,31 @@ export default function Plate(props: {
       {/* ── what it is, how big, build ──────────────────────────────────── */}
       <div className="grid gap-4 content-start">
         <div className="card p-5">
-          <label className="eyebrow block mb-1.5">Which dish</label>
+          <label className="eyebrow block mb-1.5">{T.plateWhichDish}</label>
           <select value={itemId} onChange={e => setItemId(e.target.value)} className="mb-3">
-            <option value="">Not on the menu yet</option>
+            <option value="">{T.plateNotOnMenu}</option>
             {dishes.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
           {!itemId && (
             <>
-              <label className="eyebrow block mb-1.5">Name</label>
+              <label className="eyebrow block mb-1.5">{T.nameLabel}</label>
               <input value={title} onChange={e => setTitle(e.target.value)}
-                     placeholder="Khachapuri" className="mb-3" />
+                     placeholder={T.phDish} className="mb-3" />
             </>
           )}
-          <label className="eyebrow block mb-1.5">Variant <span style={{ color: 'var(--dim)', textTransform: 'none', letterSpacing: 0 }}>· optional</span></label>
+          <label className="eyebrow block mb-1.5">{T.variantWord} <span style={{ color: 'var(--dim)', textTransform: 'none', letterSpacing: 0 }}>· {T.optionalWord}</span></label>
           <input value={variant === 'default' ? '' : variant}
                  onChange={e => setVariant(e.target.value.trim() || 'default')}
-                 placeholder="with sauce, large, …" />
+                 placeholder={T.plateVariantPh} />
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--dim)' }}>
             The same dish, made differently. Each variant gets its own photos and model.
           </p>
         </div>
 
         <div className="card p-5">
-          <label className="eyebrow block mb-1.5">How big is it</label>
+          <label className="eyebrow block mb-1.5">{T.plateHowBig}</label>
           <p className="text-[11px] mb-3" style={{ color: 'var(--dim)' }}>
-            Wrong size is the number one reason a model looks wrong in AR.
+            {T.plateSizeWhy}
           </p>
           <SizeInput value={dims} onChange={setDims} />
         </div>
@@ -322,12 +331,12 @@ export default function Plate(props: {
               a model gets remade, and the fix costs nothing here and 30 credits later. */}
           <button type="button" onClick={send} disabled={sending || !filled || !hasDims(dims)}
                   className="btn btn-primary w-full">
-            {sending ? 'Sending…' : 'Build the model'}
+            {sending ? T.plateSending : T.plateBuild}
           </button>
           <p className="text-[11px] mt-3 leading-4" style={{ color: 'var(--dim)' }}>
             {left > 0
-              ? `${left} of ${props.quota} free models left. A few minutes, then it lands in your library for you to approve before any diner sees it.`
-              : 'You have used your free models. Send it and we will be in touch — it will not start until we say yes.'}
+              ? text(T.plateLeftHint, { left, quota: props.quota })
+              : T.plateNoneLeftHint}
           </p>
         </div>
       </div>

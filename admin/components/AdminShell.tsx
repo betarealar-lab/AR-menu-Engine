@@ -84,7 +84,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 flex"
              style={{ background: 'var(--card)', borderTop: '1px solid var(--border)',
                       paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-             aria-label="Sections">
+             aria-label={T.navSections}>
           {TABS.map(t => {
             const active = pathname.startsWith(t.match)
             return (

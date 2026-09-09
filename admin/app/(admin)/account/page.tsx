@@ -53,7 +53,7 @@ export default function AccountPage() {
 
   return (
     <div className="page-content max-w-2xl">
-      <h1 className="page-title mb-5">Account</h1>
+      <h1 className="page-title mb-5">{T.accountTitle}</h1>
 
       {msg && (
         <div className="card px-4 py-3 mb-4 text-sm"
@@ -62,7 +62,7 @@ export default function AccountPage() {
 
       <div className="grid gap-4">
         <div className="card p-5">
-          <div className="eyebrow mb-1">Signed in as</div>
+          <div className="eyebrow mb-1">{T.accountSignedInAs}</div>
           <div className="font-semibold">{plan.email || '—'}</div>
           <p className="text-xs mt-1" style={{ color: 'var(--dim)' }}>
             Changing the email address is a support job for now — it is the address every
@@ -71,19 +71,19 @@ export default function AccountPage() {
         </div>
 
         <form onSubmit={changePassword} className="card p-5">
-          <div className="eyebrow mb-1">Password</div>
+          <div className="eyebrow mb-1">{T.passwordWord}</div>
           <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
             We never see it and never store it. Use a password manager — this is the only
             thing standing in front of your menu.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="eyebrow block mb-1">New password</span>
+              <span className="eyebrow block mb-1">{T.accountNewPassword}</span>
               <input type="password" value={pw} onChange={e => setPw(e.target.value)}
                      minLength={8} autoComplete="new-password" />
             </label>
             <label className="block">
-              <span className="eyebrow block mb-1">Again</span>
+              <span className="eyebrow block mb-1">{T.againLabel}</span>
               <input type="password" value={again} onChange={e => setAgain(e.target.value)}
                      minLength={8} autoComplete="new-password" />
             </label>
@@ -98,7 +98,7 @@ export default function AccountPage() {
             {plan.tenants.length === 1 ? 'Your restaurant' : 'Restaurants you can edit'}
           </div>
           <p className="text-xs mb-3" style={{ color: 'var(--dim)' }}>
-            Somebody can be added to a restaurant from its own Team section.
+            {T.accountTeamNote}
           </p>
           <div className="grid gap-1">
             {plan.tenants.map(t => (
@@ -114,10 +114,10 @@ export default function AccountPage() {
         </div>
 
         <div className="card p-5">
-          <div className="eyebrow mb-3">This device</div>
+          <div className="eyebrow mb-3">{T.accountThisDevice}</div>
           <button className="btn btn-danger" onClick={signOut}>{T.signOut}</button>
           <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>
-            Signs out of this browser only. Your menu stays live.
+            {T.accountSignOutNote}
           </p>
         </div>
       </div>

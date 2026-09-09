@@ -833,7 +833,7 @@ export default function MenuPage() {
             </div>
             {categories.length === 0 && (
               <p className="p-8 text-center text-sm" style={{ color: 'var(--dim)' }}>
-                No categories yet. Dishes without one still show, grouped together.
+                {T.menuNoCategories}
               </p>
             )}
           </div>

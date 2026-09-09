@@ -10,12 +10,14 @@
 
 import { useEffect, useState } from 'react'
 import QR from 'qrcode'
+import { useLang } from '@/lib/useLang'
 
 export default function QrCode({ value, size = 200, label }: {
   value: string
   size?: number
   label?: string
 }) {
+  const [T] = useLang()
   const [svg, setSvg] = useState('')
 
   useEffect(() => {
@@ -43,7 +45,7 @@ export default function QrCode({ value, size = 200, label }: {
     <div className="inline-block">
       <div className="rounded-lg overflow-hidden bg-white p-2 mx-auto" style={{ width: size + 16 }}
            dangerouslySetInnerHTML={{ __html: svg }} />
-      <button onClick={download} className="btn btn-sm mt-3 no-print">Download SVG</button>
+      <button onClick={download} className="btn btn-sm mt-3 no-print">{T.downloadSvg}</button>
     </div>
   )
 }

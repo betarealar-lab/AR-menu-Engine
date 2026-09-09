@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { VAR_MAP } from '@/lib/paletteVars'
 import { PICK_MAP } from '@/lib/palette'
+import { useLang } from '@/lib/useLang'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
@@ -32,6 +33,7 @@ export default function ThemePreview({ slug, config, mode, onMode, template, onP
   /** Tapping a part of the menu opens the row that governs its colour. */
   onPick?: (field: string) => void
 }) {
+  const [T] = useLang()
   const frame = useRef<HTMLIFrameElement>(null)
   const [device, setDevice] = useState<PreviewDevice>('phone')
   const [ready, setReady] = useState(false)
@@ -82,7 +84,7 @@ export default function ThemePreview({ slug, config, mode, onMode, template, onP
     <div className="w-full xl:w-[420px] shrink-0 sticky top-0 xl:top-4 z-10 pb-3 xl:pb-0"
          style={{ background: 'var(--bg)' }}>
       <div className="flex items-center gap-2 mb-3 flex-wrap pt-3 xl:pt-0">
-        <span className="eyebrow mr-auto">Preview</span>
+        <span className="eyebrow mr-auto">{T.previewWord}</span>
 
         <div className="flex rounded-lg p-0.5" style={{ background: 'var(--card2)' }}>
           {(['phone', 'desktop'] as PreviewDevice[]).map(d => (
@@ -106,7 +108,7 @@ export default function ThemePreview({ slug, config, mode, onMode, template, onP
           ))}
         </div>
 
-        <button className="btn btn-sm btn-ghost" title="Reload the page from saved data"
+        <button className="btn btn-sm btn-ghost" title={T.previewReload}
                 onClick={() => { setReady(false); setNonce(n => n + 1) }}>
           ↻
         </button>
@@ -123,7 +125,7 @@ export default function ThemePreview({ slug, config, mode, onMode, template, onP
         <iframe
           key={nonce}
           ref={frame}
-          title="Your menu"
+          title={T.yourMenu}
           src={`${MENU_ORIGIN}/${slug}?preview=1`}
           className={`w-full border-0 block h-[340px] ${
             device === 'phone' ? 'xl:h-[680px]' : 'xl:h-[620px]'}`}

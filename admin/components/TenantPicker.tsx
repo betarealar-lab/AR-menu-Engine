@@ -13,8 +13,10 @@
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import type { PlanAccess } from '@/lib/usePlan'
+import { useLang } from '@/lib/useLang'
 
 export default function TenantPicker({ plan }: { plan: PlanAccess }) {
+  const [T] = useLang()
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -82,7 +84,7 @@ export default function TenantPicker({ plan }: { plan: PlanAccess }) {
                   autoFocus
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="Search"
+                  placeholder={T.searchWord}
                   className="text-sm"
                 />
               </div>
@@ -90,7 +92,7 @@ export default function TenantPicker({ plan }: { plan: PlanAccess }) {
             <div className="max-h-72 overflow-y-auto py-1">
               {shown.length === 0 && (
                 <div className="px-3 py-3 text-xs" style={{ color: 'var(--dim)' }}>
-                  Nothing matches that.
+                  {T.nothingMatches}
                 </div>
               )}
               {shown.map(t => {

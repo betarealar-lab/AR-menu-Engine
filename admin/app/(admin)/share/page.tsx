@@ -9,16 +9,19 @@
 import { useState } from 'react'
 import { usePlan } from '@/lib/usePlan'
 import QrCode from '@/components/QrCode'
+import { useLang } from '@/lib/useLang'
+import { text } from '@/lib/i18n'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
 export default function SharePage() {
+  const [T] = useLang()
   const plan = usePlan()
   const [tables, setTables] = useState(0)
   const [copied, setCopied] = useState(false)
 
   if (plan.loading) return <p style={{ color: 'var(--dim)' }}>Loading…</p>
-  if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>Pick a restaurant first.</p>
+  if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</p>
 
   const url = `${MENU_ORIGIN}/${plan.restaurantSlug}`
 
@@ -33,22 +36,21 @@ export default function SharePage() {
   return (
     <div className="page-content max-w-3xl">
       <div className="flex items-center gap-3 flex-wrap mb-6 no-print">
-        <h1 className="page-title mr-auto">QR &amp; share</h1>
-        <button className="btn btn-sm" onClick={() => window.print()}>Print codes</button>
+        <h1 className="page-title mr-auto">{T.shareTitle}</h1>
+        <button className="btn btn-sm" onClick={() => window.print()}>{T.sharePrint}</button>
       </div>
 
       <div className="grid gap-5 md:grid-cols-[1fr_260px] no-print">
         <div className="card p-5">
-          <div className="eyebrow mb-1">Your menu&apos;s address</div>
+          <div className="eyebrow mb-1">{T.shareAddress}</div>
           <a href={url} target="_blank" rel="noreferrer" className="font-semibold break-all"
              style={{ color: 'var(--gold)' }}>{url}</a>
           <div className="flex gap-2 mt-4">
-            <button className="btn btn-sm" onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
-            <a className="btn btn-sm" href={url} target="_blank" rel="noreferrer">Open</a>
+            <button className="btn btn-sm" onClick={copy}>{copied ? T.shareCopied : T.shareCopyLink}</button>
+            <a className="btn btn-sm" href={url} target="_blank" rel="noreferrer">{T.shareOpen}</a>
           </div>
           <p className="text-xs mt-4" style={{ color: 'var(--dim)' }}>
-            Put the code on tables, at the door, on the bill. It goes straight to the menu —
-            no app to install, nothing to type.
+            {T.shareHint}
           </p>
         </div>
 
@@ -60,13 +62,13 @@ export default function SharePage() {
       <div className="card p-5 mt-5">
         <div className="flex items-baseline gap-3 flex-wrap mb-3 no-print">
           <div>
-            <div className="font-semibold">One code per table</div>
+            <div className="font-semibold">{T.sharePerTable}</div>
             <p className="text-xs" style={{ color: 'var(--dim)' }}>
-              Optional. Same menu; later you will see which tables scan most.
+              {T.sharePerTableHint}
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <label className="eyebrow">Tables</label>
+            <label className="eyebrow">{T.shareTables}</label>
             <input type="number" min={0} max={60} value={tables || ''} placeholder="0"
                    onChange={e => setTables(Math.max(0, Math.min(60, Number(e.target.value) || 0)))}
                    style={{ width: 80 }} />
@@ -81,7 +83,7 @@ export default function SharePage() {
                     out and carried to a table, where it is the only thing anybody sees -
                     so it has to name the restaurant itself. */}
                 <div className="hidden print:block text-[10px] mt-1">{plan.restaurantName || plan.restaurantSlug}</div>
-                <div className="text-xs mt-1 font-semibold">Table {n}</div>
+                <div className="text-xs mt-1 font-semibold">{text(T.shareTableN, { n })}</div>
               </div>
             ))}
           </div>

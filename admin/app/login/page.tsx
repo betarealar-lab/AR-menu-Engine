@@ -32,7 +32,7 @@ export default function LoginPage() {
         <div className="order-2 lg:order-1 hidden lg:block">
           <div className="eyebrow mb-2">BetaReal</div>
           <h1 className="text-2xl font-bold leading-tight mb-6" style={{ color: 'var(--text)' }}>
-            Your dishes, in 3D.
+            {T.loginTagline}
           </h1>
           <SampleDish height={260} />
         </div>
@@ -71,7 +71,7 @@ export default function LoginPage() {
                 {T.forgotPassword}
               </a>
               <a href="/start" className="hover:underline" style={{ color: 'var(--dim)' }}>
-                Have an invite code?
+                {T.loginHaveCode}
               </a>
             </div>
           </form>

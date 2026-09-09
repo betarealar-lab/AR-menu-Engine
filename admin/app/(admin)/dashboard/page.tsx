@@ -16,6 +16,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { usePlan } from '@/lib/usePlan'
 import { createClient } from '@/lib/supabase/client'
+import { useLang } from '@/lib/useLang'
+import { text } from '@/lib/i18n'
 
 type Funnel = { name: string; sessions: number; hits: number }
 type TopItem = { item_id: string; name: string; opens: number; ar: number }
@@ -31,6 +33,7 @@ const RANGES: [string, number][] = [
 ]
 
 export default function DashboardPage() {
+  const [T] = useLang()
   const plan = usePlan()
   const [minutes, setMinutes] = useState(43200)
   const [custom, setCustom] = useState({ n: '', unit: 'days' as 'minutes' | 'hours' | 'days' })
@@ -90,17 +93,17 @@ export default function DashboardPage() {
     : `${Math.round(minutes / 1440)} days`
 
   if (!plan.loading && !plan.restaurantId) {
-    return <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>Pick a restaurant first.</div>
+    return <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</div>
   }
 
   return (
     <div className="page-content">
       <div className="flex items-center gap-3 flex-wrap mb-5">
         <div className="mr-auto">
-          <h1 className="page-title">Analytics</h1>
+          <h1 className="page-title">{T.dashTitle}</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--dim)' }}>
-            Last {rangeLabel}
-            {visits === 0 && <> · nothing counted yet</>}
+            {text(T.dashLastRange, { range: rangeLabel })}
+            {visits === 0 && <> · {T.dashNothingYet}</>}
           </p>
         </div>
 
@@ -143,7 +146,7 @@ export default function DashboardPage() {
       <div className="grid gap-4">
         {/* the funnel */}
         <div className="card p-5">
-          <div className="eyebrow mb-4">The funnel</div>
+          <div className="eyebrow mb-4">{T.dashFunnel}</div>
           <div className="grid gap-3">
             {steps.map((s, i) => {
               const share = pct(s.value)
@@ -179,12 +182,12 @@ export default function DashboardPage() {
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="card p-5">
-            <div className="eyebrow mb-4">Visits over time</div>
+            <div className="eyebrow mb-4">{T.dashVisitsOverTime}</div>
             <Chart points={series} minutes={minutes} />
           </div>
 
           <div className="card p-5">
-            <div className="eyebrow mb-4">Most opened dishes</div>
+            <div className="eyebrow mb-4">{T.dashMostOpened}</div>
             {items.length === 0 ? (
               <Placeholder rows={['Your busiest dish', 'The next one', '…']} />
             ) : (
@@ -199,7 +202,7 @@ export default function DashboardPage() {
               </div>
             )}
             <p className="text-xs mt-4" style={{ color: 'var(--dim)' }}>
-              Which dish is worth building next.
+              {T.dashWorthBuilding}
             </p>
           </div>
         </div>
@@ -207,21 +210,22 @@ export default function DashboardPage() {
         {/* per table */}
         <div className="card p-5">
           <div className="flex items-baseline gap-3 mb-4">
-            <div className="eyebrow">By table</div>
+            <div className="eyebrow">{T.dashByTable}</div>
             <span className="text-xs ml-auto" style={{ color: 'var(--dim)' }}>
-              From the per-table QR codes under QR &amp; share
+              {T.dashFromTableCodes}
             </span>
           </div>
           {tables.length === 0 ? (
-            <Placeholder rows={['Table 1', 'Table 2', 'No table (door, bill)']} />
+            <Placeholder rows={[text(T.shareTableN, { n: 1 }), text(T.shareTableN, { n: 2 }),
+                                 T.dashNoTableRow]} />
           ) : (
             <div className="table-scroll">
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    <th className="text-left eyebrow py-2">Table</th>
-                    <th className="text-right eyebrow py-2">Diners</th>
-                    <th className="text-right eyebrow py-2">3D opens</th>
+                    <th className="text-left eyebrow py-2">{T.dashTable}</th>
+                    <th className="text-right eyebrow py-2">{T.dashDiners}</th>
+                    <th className="text-right eyebrow py-2">{T.dashOpens3d}</th>
                     <th className="text-right eyebrow py-2">AR</th>
                   </tr>
                 </thead>
@@ -229,7 +233,9 @@ export default function DashboardPage() {
                   {tables.map(r => (
                     <tr key={r.table_no} style={{ borderTop: '1px solid var(--border)' }}>
                       <td className="py-2 font-semibold">
-                        {r.table_no === '—' ? <span style={{ color: 'var(--dim)' }}>no table</span> : `Table ${r.table_no}`}
+                        {r.table_no === '—'
+                          ? <span style={{ color: 'var(--dim)' }}>{T.dashNoTable}</span>
+                          : text(T.shareTableN, { n: r.table_no })}
                       </td>
                       <td className="py-2 text-right">{r.sessions}</td>
                       <td className="py-2 text-right">{r.opens}</td>
