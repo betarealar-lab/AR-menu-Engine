@@ -449,6 +449,39 @@ def main() -> int:
     check("the camera angle rides on the card", 'data-orbit="10 20 100"' in html)
     check("the dish's real id does too, for the sink and the QR", 'data-id="a"' in html)
 
+    # -- 12. the page a diner gets when there is no page ----------------------------
+    #
+    # The widest-reach surface in the product: a phone held over a QR code, in a
+    # restaurant, usually with somebody waiting. It was two bare English strings in
+    # text/plain, and the 503 printed the exception - so a database error would have shown
+    # an anonymous visitor a PostgREST message naming our tables. It reads as the
+    # RESTAURANT being broken, not us, which is why it is checked here with the features
+    # rather than filed as cosmetics.
+    print("")
+    print("-- and when there is no menu to show --")
+    oops = (ROOT / "app" / "src" / "lib" / "nomenu.js").read_text(encoding="utf-8")
+    for name, page in (("the menu", "[slug].astro"),
+                       ("the waiter's page", "w/[slug].astro")):
+        src = (ROOT / "app" / "src" / "pages" / page).read_text(encoding="utf-8")
+        check(name + " answers a bad address with a real page",
+              "return noMenu()" in src and "No menu for" not in src)
+        check(name + " answers a load failure with a real page",
+              "return menuUnavailable(slug, error)" in src
+              and "Menu unavailable:" not in src)
+    check("both answers are HTML, not text/plain",
+          oops.count('content-type": "text/html') == 2)
+    check("they speak Georgian first", 'lang="ka"' in oops and "\u10db\u10d4\u10dc\u10d8\u10e3" in oops)
+    check("and English too", "ask a member of staff" in oops)
+    check("the 503 never prints what went wrong to the diner",
+          "${err}" not in oops and "${error}" not in oops)
+    check("it goes to the log instead", "console.error(" in oops)
+    check("a broken menu is never cached in place of a working one",
+          '"cache-control": "no-store"' in oops)
+    check("and the page renders with nothing else working",
+          "<style>" in oops and "<link" not in oops and "<script" not in oops)
+
+    print("")
+
     print("\n" + "=" * 62)
     bad = [n for n, ok, _ in RESULTS if not ok]
     print(f"{len(RESULTS) - len(bad)}/{len(RESULTS)} passed")

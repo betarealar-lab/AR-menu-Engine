@@ -15,6 +15,7 @@
 // decodes the hash against it. One request, no anon key in the markup, no round trip while
 // a waiter stands at a table.
 import { loadMenu } from "../../lib/menu.js";
+import { noMenu, menuUnavailable } from "../../lib/nomenu.js";
 
 const { slug } = Astro.params;
 
@@ -25,8 +26,8 @@ try {
 } catch (err) {
   error = err.message;
 }
-if (!menu && !error) return new Response(`No menu for "${slug}"`, { status: 404 });
-if (error) return new Response(`Menu unavailable: ${error}`, { status: 503 });
+if (!menu && !error) return noMenu();
+if (error) return menuUnavailable(slug, error);
 
 // Short keys because this is a whole menu inlined: n name, k Georgian name, p price,
 // v sizes, a add-ons. ~170 dishes is about 20 KB, and it is a staff page opened once per

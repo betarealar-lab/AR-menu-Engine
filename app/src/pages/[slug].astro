@@ -20,6 +20,7 @@
 // against the live page to prove each further cut.
 import { envFrom } from "../lib/env.js";
 import { loadMenu, themeMode } from "../lib/menu.js";
+import { noMenu, menuUnavailable } from "../lib/nomenu.js";
 import { paletteCss, settingsCss, fontLinks } from "../lib/theme.js";
 import { hero, header, catBar, menuList, toggles, itemsJson } from "../lib/markup.js";
 // The platform's overlay markup, extracted verbatim (menu/render/extract_chrome.py):
@@ -63,8 +64,8 @@ try {
   error = err.message;
 }
 
-if (!menu && !error) return new Response(`No menu for "${slug}"`, { status: 404 });
-if (error) return new Response(`Menu unavailable: ${error}`, { status: 503 });
+if (!menu && !error) return noMenu();
+if (error) return menuUnavailable(slug, error);
 
 // Is this the theme editor looking at itself? The listener below is emitted ONLY then,
 // so a diner's page never contains a way to repaint it from another window - not gated at
