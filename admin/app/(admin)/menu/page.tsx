@@ -6,6 +6,7 @@ import { usePlan } from '@/lib/usePlan'
 import { useFileDrop } from '@/lib/useFileDrop'
 import { uploadAsset } from '@/lib/upload'
 import { saveUploadedModel } from '@/lib/data/models'
+import ChoiceRows from '@/components/ChoiceRows'
 import {
   loadMenu,
   saveItem as saveItemRow,
@@ -16,6 +17,9 @@ import {
   saveItemView,
   saveItemScale,
   setItemVisible,
+  type MenuItem,
+  type Choice,
+  choiceLabel,
 } from '@/lib/data/menu'
 import {
   DEFAULT_MENU_FILTERS,
@@ -30,22 +34,10 @@ import {
 // only ever passed back to a query - so this is a type change and not a logic change.
 type Category = { id: string; name_en: string; name_ka: string; sort_order: number }
 type MenuGroup = 'food' | 'drink'
-type MenuItem = {
-  id: string; name_en: string; name_ka: string
-  description_en: string; description_ka: string
-  price: string; category_id: string | null; model: string; model_usdz: string
-  sort_order: number; visible: boolean; ar_scale: number; thumbnail_url: string; thumb_3d: boolean; is_3d: boolean; text_only: boolean; featured: boolean
-  // The R2 KEY behind `thumbnail_url`, which is a display URL with the origin on it.
-  // `items.photo_key` stores the key, and until this existed the form only ever held
-  // the URL - so `saveItem` had nothing to write and every photo an owner uploaded was
-  // dropped on save.
-  photo_key: string
-  // The library is pointers, not copies (MENU-PLATFORM §3): `model` is the url a viewer
-  // loads, `model_id` is which row it came from and the only thing that can be changed.
-  model_id: string | null
-  // A dish priced more than one way. 30 of the 170 live dishes have these.
-  variants: { [lang: string]: string }[]
-}
+// One definition, imported. This screen used to keep its own copy of the shape the data
+// layer already exports - two lists of fields that had to be edited together forever, and
+// the first time they disagreed (`variants` gaining a real type) TypeScript pointed at a
+// setState call rather than at the duplication that caused it.
 type MenuItemPayload = Partial<Omit<MenuItem, 'id'>> & Pick<
   Omit<MenuItem, 'id'>,
   'name_en' | 'name_ka' | 'description_en' | 'description_ka' | 'price' | 'category_id' | 'sort_order' | 'visible' | 'thumbnail_url'
@@ -61,7 +53,7 @@ type MenuFilters = {
 const EMPTY_ITEM: Omit<MenuItem, 'id'> = {
   name_en: '', name_ka: '', description_en: '', description_ka: '',
   price: '', category_id: null, model: '', model_usdz: '', sort_order: 0, visible: true, ar_scale: 1.0, thumbnail_url: '', photo_key: '', thumb_3d: false, is_3d: true, text_only: false, featured: false,
-  model_id: null, variants: [],
+  model_id: null, variants: [], addons: [],
 }
 
 function isActiveArItem(item: Pick<MenuItem, 'visible' | 'model' | 'is_3d'>) {
@@ -160,6 +152,8 @@ export default function MenuPage() {
     setSpinEnabled(settings.spinEnabled)
     setDrinkCategoryNames(parseDrinkCategories(settings.drinkCategories))
     setDrinkCategoriesConfigured(settings.drinkCategories != null)
+    setLanguages(settings.languages)
+    setCurrencySymbol(settings.currency)
     setLoadedFor(plan.restaurantId)
   }, [plan.loading, plan.restaurantId])
 
@@ -309,7 +303,7 @@ export default function MenuPage() {
       sort_order: item.sort_order, visible: item.visible, ar_scale: item.ar_scale ?? 1.0,
       thumbnail_url: item.thumbnail_url ?? '', photo_key: item.photo_key ?? '',
       thumb_3d: item.thumb_3d ?? false, is_3d: item.is_3d ?? true, featured: item.featured ?? false,
-      model_id: item.model_id ?? null, variants: item.variants ?? [],
+      model_id: item.model_id ?? null, variants: item.variants ?? [], addons: item.addons ?? [],
       text_only: item.text_only ?? (!item.is_3d && !item.thumbnail_url && !item.model && !item.model_usdz) })
     setItemMenuGroup(groupForCategory(item.category_id))
     setViewForm(parseItemView(itemViews[item.id]))
@@ -375,6 +369,10 @@ export default function MenuPage() {
   // Optimistic, because the whole point is that it feels instant while a table waits.
   // The row is put back if the write fails, and the failure is said out loud - a dish
   // that looks hidden and is not is worse than one that never changed.
+  // From `tenants`, not assumed: the sizes editor draws one label box per language,
+  // so a restaurant that adds a third gets a third box with no code change.
+  const [languages, setLanguages] = useState<string[]>(['en'])
+  const [currencySymbol, setCurrencySymbol] = useState('₾')
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
   async function toggleVisible(item: MenuItem) {
@@ -894,7 +892,27 @@ export default function MenuPage() {
                         onChange={e => setItemForm(f => ({ ...f, description_ka: e.target.value }))} />
             </Field>
             <Field label={T.priceLabel}>
-              <input value={itemForm.price} onChange={e => setItemForm(f => ({ ...f, price: e.target.value }))} />
+              <input value={itemForm.price} disabled={itemForm.variants.length > 0}
+                     style={{ opacity: itemForm.variants.length > 0 ? 0.5 : 1 }}
+                     onChange={e => setItemForm(f => ({ ...f, price: e.target.value }))} />
+            </Field>
+
+            {/* Sizes and extras. Not behind a toggle: a dish that HAS sizes needs them
+                visible, and a dish that does not shows two empty lists and one button
+                each, which is cheaper than hiding a feature nobody then finds.
+
+                The plain price box above is disabled while sizes exist, because the two
+                would be saying different things about the same dish and only one of them
+                reaches the card. */}
+            <Field label={T.sizesAndExtras} className="col-span-2">
+              <div className="grid gap-4">
+                <ChoiceRows kind="variant" rows={itemForm.variants}
+                            languages={languages} currency={currencySymbol}
+                            onChange={variants => setItemForm(f => ({ ...f, variants }))} />
+                <ChoiceRows kind="addon" rows={itemForm.addons}
+                            languages={languages} currency={currencySymbol}
+                            onChange={addons => setItemForm(f => ({ ...f, addons }))} />
+              </div>
             </Field>
             <Field label={T.categoryLabel}>
               <select value={itemForm.category_id ?? ''}

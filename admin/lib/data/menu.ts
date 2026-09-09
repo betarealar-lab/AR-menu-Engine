@@ -23,6 +23,10 @@
 // decides whether any of it is allowed.
 
 import { createClient } from '@/lib/supabase/client'
+// The cleaner and the label rule live in plain JS beside their own tests, because
+// this is the path that can damage a live menu: thirty of Monday Greens' dishes
+// carry variants with keys this editor does not know about.
+import { cleanChoices } from '@/lib/choices'
 
 export type Category = { id: string; name_en: string; name_ka: string; sort_order: number }
 
@@ -48,10 +52,43 @@ export type MenuItem = {
   /** Not in the platform's shape. The library is pointers, not copies (MENU-PLATFORM §3),
    *  so the screen needs the id to change which model a dish points at. */
   model_id: string | null
-  variants: { [lang: string]: string }[]
+  /** Pick ONE. The chosen price REPLACES the dish price - Glass / Bottle, Small / Large. */
+  variants: Choice[]
+  /** Pick ANY. Each price ADDS - extra bacon, spicy. Every combination is its own
+   *  basket line, which is why they are a different thing from variants and not a flag. */
+  addons: Choice[]
 }
 
+/** One variant or add-on, in the shape the diner's renderer already reads.
+ *
+ *  **Flat and language-generic on purpose.** A label is stored under its language code -
+ *  `en`, `ka`, and `ru` the day somebody wants it - beside a reserved `price`. Sixty of
+ *  these exist in Monday Greens today, so a nested `{ price, labels: {...} }` would be a
+ *  migration of live rows, every reader in the menu app, and the waiter's price book, in
+ *  exchange for nothing a restaurant can see. Adding a third language to THIS shape is
+ *  adding a key.
+ *
+ *  `[key: string]: string` is not laziness: `platform.js` also reads `image_url` off a
+ *  variant, and an editor that rebuilt these objects from known fields would delete it.
+ *  Everything unknown is carried through untouched.
+ */
+export type Choice = {
+  price?: string
+  image_url?: string
+  [key: string]: string | undefined
+}
+
+export { choiceLabel } from '@/lib/choices'
+
 export type MenuSettings = {
+  /** The languages this restaurant's menu is in, in order, from `tenants.languages`.
+   *  Read rather than assumed: the variant editor draws one label box per language, so a
+   *  restaurant that adds Russian gets a third box without a code change. */
+  languages: string[]
+  /** The restaurant's own currency SYMBOL, from `tenants.currency`. Used to finish a
+   *  price somebody typed as a bare number - `24` becomes `24 ₾` - so the menu never
+   *  shows a naked integer next to a dish. */
+  currency: string
   phoneLayout: 'list' | 'twin'
   spinEnabled: boolean
   drinkCategories: string | null
@@ -65,6 +102,12 @@ export type MenuSettings = {
 const assetUrl = (key: string | null | undefined) =>
   !key ? '' : key.startsWith('http') ? key
     : `${process.env.NEXT_PUBLIC_MENU_ORIGIN || ''}/a/${key}`
+
+/** ISO code to the character a menu prints. Georgian lari is the default because it is
+ *  what every restaurant here uses; the others exist so a price is never shown as a
+ *  bare number if somebody signs up from elsewhere. */
+const CURRENCY_SYMBOL: Record<string, string> =
+  { GEL: '₾', USD: '$', EUR: '€', GBP: '£' }
 
 /** Minor units to what a person reads. `price_text` wins when it is set, because a dish
  *  priced "16 / 70" is a dish no integer can describe. */
@@ -106,7 +149,8 @@ type ItemRow = {
   thumb_3d: boolean
   text_only: boolean
   featured: boolean
-  variants: { [lang: string]: string }[] | null
+  variants: Choice[] | null
+  addons: Choice[] | null
   // PostgREST returns an embedded one-to-one as an object, but has returned an array in
   // past versions and still does for some shapes. Both are handled at the call site.
   models: { id: string; draco_key: string | null; usdz_key: string | null
@@ -133,11 +177,11 @@ export async function loadMenu(tenantId: string) {
     supabase.from('items')
       .select('id, name, description, i18n, price_minor, price_text, category_id, ' +
               'position, visible, photo_key, model_id, is_3d, thumb_3d, text_only, ' +
-              'featured, variants, ' +
+              'featured, variants, addons, ' +
               'models ( id, draco_key, usdz_key, view_orbit, scale_cm, ar_scale )')
       .eq('tenant_id', tenantId).order('position'),
     // Four theme_config lookups in the platform collapse to one row here.
-    supabase.from('tenants').select('settings').eq('id', tenantId).single(),
+    supabase.from('tenants').select('settings, languages, currency').eq('id', tenantId).single(),
   ])
 
   const categories: Category[] = ((cats || []) as unknown as CategoryRow[]).map(c => ({
@@ -198,11 +242,17 @@ export async function loadMenu(tenantId: string) {
       featured: !!r.featured,
       model_id: r.model_id,
       variants: r.variants || [],
+      addons: r.addons || [],
     }
   })
 
   const s = (tenant?.settings as Record<string, string> | null) || {}
   const settings: MenuSettings = {
+    // `en` alone is the honest fallback: every tenant has it, and a menu with no
+    // language list is a menu in one language.
+    languages: (tenant?.languages as string[] | null)?.length
+      ? (tenant!.languages as string[]) : ['en'],
+    currency: CURRENCY_SYMBOL[(tenant?.currency as string) || 'GEL'] || '₾',
     phoneLayout: s.phone_layout === 'twin' ? 'twin' : 'list',
     spinEnabled: /^(1|true|on|yes)$/i.test(String(s.spin_enabled ?? '')),
     drinkCategories: s.drink_categories ?? null,
@@ -222,14 +272,35 @@ export async function loadMenu(tenantId: string) {
   return { categories, items, settings }
 }
 
+/** The two choice lists, cleaned, plus the price they imply.
+ *
+ *  **A dish with variants does not have a price of its own.** Its card shows one, and the
+ *  first variant is the one selected by default - so if they disagree the card advertises
+ *  a number no diner can actually select. Monday Greens' data already holds this
+ *  invariant (Tonino: `price_minor` 2400, first variant "24 ₾"), because the importer
+ *  worked it out; nothing has enforced it since.
+ *
+ *  Empty rows are dropped rather than saved: a half-typed variant with no label is a
+ *  blank button on the menu.
+ */
+function choices(form: Pick<MenuItem, 'variants' | 'addons' | 'price'>) {
+  const variants = cleanChoices(form.variants) as Choice[]
+  const addons = cleanChoices(form.addons) as Choice[]
+  const first = variants[0]?.price
+  return {
+    variants,
+    addons,
+    // Only when there are variants. Without them the dish's own price stands.
+    ...(first ? parsePrice(first) : parsePrice(form.price)),
+  }
+}
+
 export async function saveItem(
   tenantId: string,
   id: string | null,
   form: Omit<MenuItem, 'id'>,
 ) {
   const supabase = createClient()
-  const price = parsePrice(form.price)
-
   const i18n: Record<string, { name?: string; description?: string }> = {}
   if (form.name_ka.trim() || form.description_ka.trim()) {
     i18n.ka = {}
@@ -241,7 +312,6 @@ export async function saveItem(
     tenant_id: tenantId,
     name: form.name_en.trim(),
     description: form.description_en.trim(),
-    ...price,
     category_id: form.category_id || null,
     position: form.sort_order ?? 0,
     visible: form.visible,
@@ -255,7 +325,7 @@ export async function saveItem(
     photo_key: form.photo_key || null,
     model_id: form.model_id || null,
     i18n,
-    variants: form.variants || [],
+    ...choices(form),
   }
 
   if (id) {

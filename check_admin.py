@@ -144,6 +144,7 @@ class Supa:
 # Not `ADMIN`: that is the admin's BASE URL, up at the top of this file, and shadowing
 # it here turned "no admin at http://localhost:3001" into "no admin at C:\...\admin".
 ADMIN_SRC = Path(__file__).with_name("admin")
+ROOT_APP = Path(__file__).with_name("app")
 ADMIN_DATA = ADMIN_SRC / "lib" / "data" / "menu.ts"
 ADMIN_PAGE = ADMIN_SRC / "app" / "(admin)" / "menu" / "page.tsx"
 
@@ -574,6 +575,76 @@ def nothing_is_only_in_english() -> None:
     print()
 
 
+
+# -- the two things the menu could show and the admin could not edit --------------------
+#
+# `variants` - Glass / Bottle, Small / Large - were carried through the item form
+# invisibly: on the type, initialised, loaded, saved, and with no UI anywhere. Thirty of
+# Monday Greens' dishes have them, so an owner could not change their own bottle price.
+# `addons` was worse: the column exists, the diner's renderer draws them, and the admin
+# did not even SELECT the field.
+#
+# The rules that keep this safe at scale, each of which has a way to go wrong quietly:
+#
+#   preserve unknown keys   `platform.js` reads `image_url` off a variant. An editor that
+#                           rebuilt these objects from the fields it knows would delete it
+#   language by CODE        a label lives under `en`/`ka`/`ru`. Both renderers used to
+#                           hardcode two, so a Russian menu showed Georgian size labels
+#   the first size is the   the dish's price_minor must equal the first variant's price,
+#   dish's price            or the card advertises a number the diner cannot select
+
+def sizes_and_extras_are_editable() -> None:
+    print("== sizes and extras can be edited ==")
+    data = (ADMIN_SRC / "lib" / "data" / "menu.ts").read_text(encoding="utf-8")
+    page = (ADMIN_SRC / "app" / "(admin)" / "menu" / "page.tsx").read_text(encoding="utf-8")
+    editor = ADMIN_SRC / "components" / "ChoiceRows.tsx"
+
+    check("there is an editor at all", editor.exists())
+    check("the dish form reaches it", "<ChoiceRows" in page)
+    check("for sizes AND extras", page.count("<ChoiceRows") >= 2)
+    check("the admin reads add-ons, not just variants", "addons," in data and "r.addons" in data)
+    check("and writes them back", "cleanChoices(form.addons)" in data)
+
+    # Driven by the tenant, not by a constant with two languages in it.
+    check("a label box per language the RESTAURANT has",
+          "languages: string[]" in data and "languages={languages}" in page)
+    check("...read from tenants.languages", "select('settings, languages, currency')" in data)
+
+    # The cleaner is plain JS beside its own tests, and the app has to be running THAT
+    # code - a tested copy nothing imports proves nothing.
+    src = (ADMIN_SRC / "lib" / "choices.js")
+    check("the cleaner is tested code", src.exists())
+    check("...and the data layer runs it", "from '@/lib/choices'" in data)
+    check("...and so does the editor",
+          "from '@/lib/choices'" in editor.read_text(encoding="utf-8"))
+
+    # The invariant, in the writer.
+    check("the dish price follows the first size",
+          "first ? parsePrice(first)" in data)
+
+    # Both renderers look a label up by language code now.
+    markup = (ROOT_APP / "src" / "lib" / "markup.js").read_text(encoding="utf-8")
+    platform = (ROOT_APP.parent / "menu" / "render" / "ported"
+                / "platform.js").read_text(encoding="utf-8")
+    check("the menu markup takes any language", "choiceLabel(v, lang)" in markup
+          and "choiceLabel(a, lang)" in markup)
+    check("and so does the basket", "_choiceLabel(v, window.__lang)" in platform
+          and "_choiceLabel(a, window.__lang)" in platform)
+    # Comments stripped first: the note explaining what this replaced contains the very
+    # thing it is looking for, and a check that reads its own documentation as evidence
+    # of a bug is worse than no check.
+    def code(src: str) -> str:
+        """Both comment shapes: the note explaining what this replaced quotes the old
+        expression verbatim, and a JSDoc block is not a `//` line."""
+        src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+        return re.sub(r"^\s*//.*$", "", src, flags=re.M)
+
+    check("no label lookup hardcodes two languages",
+          '&& v.ka' not in code(markup) and '&& v.ka' not in code(platform)
+          and '&& a.ka' not in code(markup) and '&& a.ka' not in code(platform))
+    print()
+
+
 def main() -> int:
     load_env()
     url = os.environ.get("SUPABASE_URL", "")
@@ -600,6 +671,7 @@ def main() -> int:
     privileged_routes_are_the_ones_we_meant()
     files_can_get_in()
     nothing_is_only_in_english()
+    sizes_and_extras_are_editable()
     print(f"The product  (menu {MENU}, admin {ADMIN})\n")
 
     owner_id = other_id = None

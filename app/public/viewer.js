@@ -1555,12 +1555,18 @@ window.UI = {
     return (v && v.image_url) || "";
   }
 
+  function _choiceLabel(c, lang) {
+    return (c && (c[lang] || c.en || c.ka)) || "";
+  }
+
   // Single-select size/price pills (e.g. Glass / Bottle). Empty -> nothing shown.
   function _variantsHtml(item, globalIdx) {
     if (!item.variants || !item.variants.length) return "";
     const sel = _variantIndex(item, globalIdx);
     const rows = item.variants.map(function (v, i) {
-      const n = esc(window.__lang === "ka" && v.ka ? v.ka : (v.en || v.ka || ""));
+      // Same rule as markup.js: the label is stored under its language code, so a
+      // third language needs a key and not a code change.
+      const n = esc(_choiceLabel(v, window.__lang));
       const p = esc(v.price || "");
       const on = i === sel;
       return `<button type="button" class="variant${on ? " selected" : ""}" data-vi="${i}"` +
@@ -1575,7 +1581,7 @@ window.UI = {
     if (!item.addons || !item.addons.length) return "";
     const sel = window.__addonSel[globalIdx] || [];
     const rows = item.addons.map(function (a, i) {
-      const n = esc(window.__lang === "ka" && a.ka ? a.ka : (a.en || a.ka || ""));
+      const n = esc(_choiceLabel(a, window.__lang));
       const p = esc(a.price || "");
       const on = sel.indexOf(i) >= 0;
       return `<button type="button" class="addon${on ? " selected" : ""}" data-ai="${i}"` +
@@ -1702,12 +1708,11 @@ window.UI = {
         const item = entry.item, qty = entry.qty, aIdx = entry.aIdx, vIdx = entry.vIdx;
         const line = _lineUnit(entry) * qty;
         const v = vIdx != null && item.variants && item.variants[vIdx];
-        const varTxt = v
-          ? (window.__lang === "ka" && v.ka ? v.ka : (v.en || v.ka || "")) : "";
+        const varTxt = v ? _choiceLabel(v, window.__lang) : "";
         const addTxt = (aIdx && aIdx.length)
           ? aIdx.map(function (i) {
             const a = (item.addons || [])[i];
-            return a ? (window.__lang === "ka" && a.ka ? a.ka : (a.en || a.ka)) : "";
+            return a ? _choiceLabel(a, window.__lang) : "";
           }).filter(Boolean).join(", ")
           : "";
         const row = document.createElement("div");

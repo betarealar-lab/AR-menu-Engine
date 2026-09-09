@@ -129,3 +129,63 @@ Little to fix, and this is the surface that decides whether the product is worth
 - **The one number that matters** is still how many diners tap into 3D. That is a content
   and motivation question, not a code one, and the analytics answer it per dish — which is
   what "Build these next" on the home screen is for.
+
+---
+
+## 6. Sizes and extras — built 2026-09-09
+
+`variants` and `addons` are two different things, and both were invisible in the admin.
+
+| | **Sizes** (`variants`) | **Extras** (`addons`) |
+|---|---|---|
+| the diner | `radiogroup` — picks **one** | multi-select — picks **any** |
+| the price | **replaces** the dish price | **adds**, shown as `+3 ₾` |
+| the basket | one line | each combination is its own line |
+| in the wild | Glass/Bottle, Small/Large, Cup/Teapot | extra cheese, spicy |
+
+**What was wrong.** `variants` were carried through the item form invisibly — on the type,
+initialised, loaded, saved — with no UI anywhere. Thirty of Monday Greens' dishes have
+them, so **an owner could not change their own bottle price.** `addons` was worse: the
+column exists, the diner's renderer draws them, and the admin never even read the field.
+
+### The four rules that make it safe at scale
+
+Each is a way this goes wrong quietly.
+
+**Unknown keys are preserved.** `platform.js` reads `image_url` off a variant. An editor
+that rebuilt these objects from the fields it knows about would delete it, and nothing
+would say so. Every edit spreads the existing object.
+
+**A label lives under its language code.** The storage shape is flat — `{en, ka, price}` —
+so a third language is a *key*, not a migration of sixty live objects and every reader.
+Both renderers used to hardcode two (`lang !== "en" && v.ka ? v.ka : v.en`), which on a
+Russian menu would have shown the dish name in Russian and the size label in **Georgian**.
+There were **five** such sites, and the check found the two I missed — including the basket
+lines, which are what the waiter's QR carries.
+
+**The editor is driven by `tenants.languages`**, not a constant. A restaurant that adds
+Russian gets a third label box with no code change.
+
+**The first size is the dish's price.** A dish with sizes has no price of its own: its card
+shows one, the first size is selected by default, and if they disagree the card advertises
+a number no diner can select. The plain price box is disabled while sizes exist, and the
+editor says which number will show.
+
+### It found a live wrong price
+
+Every Mgaloblishvili wine has `price_minor` equal to its Glass price — except one:
+
+```
+Mgaloblishvili tvishi(Glass)   card 28 ₾   Glass 16 ₾   Bottle 48 ₾
+```
+
+The card advertises **28 ₾**, the selected pill says **16 ₾**, and `platform.js` charges the
+variant — so the basket says 16. **Not changed:** which number is right is the
+restaurant's call. Worth asking Monday Greens.
+
+### Checked
+
+Fourteen checks in `check_admin.py`, plus nine unit tests on the cleaner — run against
+**Monday Greens' real thirty variant sets**, which come back byte-identical, `image_url`
+and all. The cleaner is plain JS beside its own tests *and imported by the data layer and
+the editor*, because a tested copy nothing runs proves nothing.

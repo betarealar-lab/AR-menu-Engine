@@ -138,12 +138,23 @@ const label = (c, lang) =>
  *  first choice that has a PHOTO, so a pictureless "Veggie" does not become the default
  *  card state when the photo on file is the chicken one. Server-side that is a repaint of
  *  one pill, not a flash of the whole card. */
+/** The label for a variant or add-on, in this language.
+ *
+ *  Item NAMES have always been language-generic - `item[`${field}_${lang}`]` - but this
+ *  read `lang !== "en" && v.ka ? v.ka : v.en`, which is two languages hardcoded. On a
+ *  Russian menu that put the dish name in Russian and the size label in GEORGIAN, on the
+ *  same card. No restaurant has a third language today, which is exactly why it was
+ *  invisible; the shape has always allowed one, because a label is stored under its own
+ *  language code.
+ */
+const choiceLabel = (c, lang) => (c && (c[lang] || c.en || c.ka)) || "";
+
 function variants(item, lang) {
   if (!item.variants?.length) return "";
   return `<div class="variants" role="radiogroup">` + item.variants.map((v, i) =>
     `<button type="button" class="variant${i === 0 ? " selected" : ""}" data-vi="${i}" ` +
     `role="radio" aria-checked="${i === 0}">` +
-    `<span class="variant-name">${e(lang !== "en" && v.ka ? v.ka : v.en || v.ka || "")}</span>` +
+    `<span class="variant-name">${e(choiceLabel(v, lang))}</span>` +
     `<span class="variant-price">${e(v.price || "")}</span></button>`).join("") + `</div>`;
 }
 
@@ -154,7 +165,7 @@ function addons(item, lang) {
   return `<div class="addons">` + item.addons.map((a, i) =>
     `<button type="button" class="addon" data-ai="${i}" aria-pressed="false">` +
     `<span class="addon-l"><span class="addon-check" aria-hidden="true"></span>` +
-    `<span class="addon-name">${e(lang !== "en" && a.ka ? a.ka : a.en || a.ka || "")}</span></span>` +
+    `<span class="addon-name">${e(choiceLabel(a, lang))}</span></span>` +
     `<span class="addon-price">+${e(a.price || "")}</span></button>`).join("") + `</div>`;
 }
 
