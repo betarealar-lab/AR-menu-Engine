@@ -14,10 +14,13 @@ import { useRouter } from 'next/navigation'
 import { usePlan } from '@/lib/usePlan'
 import { createClient } from '@/lib/supabase/client'
 import { loadLibrary, type ModelRequest, type TenantModel } from '@/lib/data/models'
+import { useLang } from '@/lib/useLang'
+import { text } from '@/lib/i18n'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
 export default function HomePage() {
+  const [T] = useLang()
   const plan = usePlan()
   const router = useRouter()
   const [dishes, setDishes] = useState(0)
@@ -69,7 +72,7 @@ export default function HomePage() {
   useEffect(() => { void load() }, [load])
 
   if (loading) return <p style={{ color: 'var(--dim)' }}>Loading…</p>
-  if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>Pick a restaurant first.</p>
+  if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</p>
 
   const url = `${MENU_ORIGIN}/${plan.restaurantSlug}`
   const q = `?tenant=${plan.restaurantSlug}`
@@ -83,33 +86,34 @@ export default function HomePage() {
         <div className="card p-5">
           <div className="flex items-center gap-2 mb-2">
             <span className="w-2 h-2 rounded-full" style={{ background: 'var(--success)' }} />
-            <span className="eyebrow">Live</span>
+            <span className="eyebrow">{T.homeLive}</span>
           </div>
           <a href={url} target="_blank" rel="noreferrer" className="font-semibold break-all"
              style={{ color: 'var(--gold)' }}>{url.replace(/^https?:\/\//, '')}</a>
           <p className="text-xs mt-2" style={{ color: 'var(--dim)' }}>
-            {dishes} dish{dishes === 1 ? '' : 'es'} on the menu · {with3d} in 3D
+            {text(T.homeDishCount, { n: dishes, n3d: with3d })}
           </p>
-          <Link href={`/share${q}`} className="btn btn-sm mt-4">QR code</Link>
+          <Link href={`/share${q}`} className="btn btn-sm mt-4">{T.homeQrCode}</Link>
         </div>
 
         <div className="card p-5">
-          <div className="eyebrow mb-2">Building</div>
+          <div className="eyebrow mb-2">{T.studioBuildingHeading}</div>
           {requests.length === 0 && waiting.length === 0 ? (
-            <p className="text-sm" style={{ color: 'var(--dim)' }}>Nothing in progress.</p>
+            <p className="text-sm" style={{ color: 'var(--dim)' }}>{T.homeNothingInProgress}</p>
           ) : (
             <div className="grid gap-1 text-sm">
               {requests.map(r => (
                 <div key={r.id} className="flex gap-2">
-                  <span className="flex-1 truncate">{r.title || 'Dish'}</span>
+                  <span className="flex-1 truncate">{r.title || T.dishWord}</span>
                   <span className="text-xs" style={{ color: 'var(--dim)' }}>
-                    {r.state === 'running' ? 'building' : r.state === 'pending' ? 'waiting for us' : 'queued'}
+                    {r.state === 'running' ? T.waitRunning
+                      : r.state === 'pending' ? T.waitPending : T.waitApproved}
                   </span>
                 </div>
               ))}
               {waiting.length > 0 && (
                 <Link href={`/models${q}`} className="text-xs mt-1 underline" style={{ color: 'var(--gold)' }}>
-                  {waiting.length} model{waiting.length === 1 ? '' : 's'} ready for you to approve
+                  {text(T.homeReadyToApprove, { n: waiting.length })}
                 </Link>
               )}
             </div>
@@ -117,11 +121,10 @@ export default function HomePage() {
         </div>
 
         <div className="card p-5 md:col-span-2">
-          <div className="eyebrow mb-2">What 3D is doing for you</div>
+          <div className="eyebrow mb-2">{T.homeLiftTitle}</div>
           {lift === null ? (
             <p className="text-sm" style={{ color: 'var(--dim)' }}>
-              Once diners have opened both kinds of dish, this shows how much more often
-              they open the ones in 3D.
+              {T.homeLiftEmpty}
             </p>
           ) : (
             <div className="flex items-baseline gap-3 flex-wrap">
@@ -129,28 +132,27 @@ export default function HomePage() {
                 {lift.toFixed(1)}×
               </span>
               <span className="text-sm">
-                Dishes with a 3D model get opened {lift.toFixed(1)} times more often than
-                dishes without one, in the last 30 days.
+                {text(T.homeLiftBody, { x: lift.toFixed(1) })}
               </span>
             </div>
           )}
           <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>
-            Counted per dish, per session, by your own diners. <Link href={`/dashboard${q}`} className="underline">All the numbers</Link>
+            {T.homeLiftFootnote}{' '}
+            <Link href={`/dashboard${q}`} className="underline">{T.homeAllNumbers}</Link>
           </p>
         </div>
       </div>
 
       {next3d.length > 0 && (
         <div className="card p-5 mt-4">
-          <div className="eyebrow mb-2">Build these next</div>
+          <div className="eyebrow mb-2">{T.homeBuildNext}</div>
           <p className="text-sm mb-3">
-            Your most-opened dishes that are not in 3D yet. Diners are already looking at
-            them — this is where a model earns the most.
+            {T.homeBuildNextHint}
           </p>
           <div className="flex gap-2 flex-wrap">
             {next3d.map(d => (
               <Link key={d.item_id} href={`/models${q}`} className="btn btn-sm">
-                {d.name} <span style={{ color: 'var(--dim)' }}>· {d.opens} opens</span>
+                {d.name} <span style={{ color: 'var(--dim)' }}>· {text(T.homeOpens, { n: d.opens })}</span>
               </Link>
             ))}
           </div>
@@ -158,9 +160,9 @@ export default function HomePage() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-3 mt-4">
-        <Link href={`/menu${q}`} className="btn">Edit the menu</Link>
-        <Link href={`/models${q}`} className="btn btn-primary">Make a 3D model</Link>
-        <Link href={`/theme${q}`} className="btn">Change the look</Link>
+        <Link href={`/menu${q}`} className="btn">{T.homeEditMenu}</Link>
+        <Link href={`/models${q}`} className="btn btn-primary">{T.homeMakeModel}</Link>
+        <Link href={`/theme${q}`} className="btn">{T.homeChangeLook}</Link>
       </div>
     </div>
   )

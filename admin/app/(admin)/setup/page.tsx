@@ -22,14 +22,21 @@ import { setTemplate } from '@/lib/data/theme'
 import Plate from '@/components/Plate'
 import QrCode from '@/components/QrCode'
 import SampleDish from '@/components/SampleDish'
+import { useLang } from '@/lib/useLang'
+import { text, type Translations } from '@/lib/i18n'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
 type Step = 'model' | 'look' | 'dishes' | 'done'
 const ORDER: Step[] = ['model', 'look', 'dishes', 'done']
-const LABEL: Record<Step, string> = { model: 'First 3D model', look: 'Look', dishes: 'Dishes', done: 'Live' }
+// A function of T rather than a module constant: the labels have to change language
+// with the rest of the screen, and a constant is evaluated once at import.
+const labels = (T: Translations): Record<Step, string> =>
+  ({ model: T.setupStepModel, look: T.setupStepLook,
+     dishes: T.setupStepDishes, done: T.setupStepLive })
 
 export default function SetupPage() {
+  const [T] = useLang()
   const plan = usePlan()
   const router = useRouter()
   const [step, setStep] = useState<Step>('model')
@@ -67,8 +74,8 @@ export default function SetupPage() {
     router.push(`/home?tenant=${plan.restaurantSlug}`)
   }
 
-  if (plan.loading) return <p style={{ color: 'var(--dim)' }}>Loading…</p>
-  if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>Pick a restaurant first.</p>
+  if (plan.loading) return <p style={{ color: 'var(--dim)' }}>{T.loading}</p>
+  if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</p>
 
   return (
     <div className="page-content max-w-5xl">
@@ -85,7 +92,7 @@ export default function SetupPage() {
                 {done ? '✓' : i + 1}
               </span>
               <span className="text-xs font-semibold" style={{ color: here ? 'var(--text)' : 'var(--dim)' }}>
-                {LABEL[s]}
+                {labels(T)[s]}
               </span>
               {i < 2 && <span className="w-6 h-px mx-1" style={{ background: 'var(--border)' }} />}
             </div>
@@ -94,11 +101,11 @@ export default function SetupPage() {
         {building && step !== 'model' && (
           <span className="pill pill-wait ml-auto">
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--gold)' }} />
-            your model is building
+            {T.setupModelBuilding}
           </span>
         )}
         {landed && step !== 'done' && (
-          <span className="pill pill-on ml-auto">your model is ready</span>
+          <span className="pill pill-on ml-auto">{T.setupModelReady}</span>
         )}
       </div>
 
@@ -124,6 +131,7 @@ function FirstModel({ plan, onSay, onSent, onSkip }: {
   onSent: () => void
   onSkip: () => void
 }) {
+  const [T] = useLang()
   const [quota, setQuota] = useState(3)
   const [used, setUsed] = useState(0)
   useEffect(() => {
@@ -134,14 +142,13 @@ function FirstModel({ plan, onSay, onSent, onSkip }: {
     <div>
       <div className="grid gap-6 lg:grid-cols-[1fr_300px] items-start mb-6">
         <div>
-          <h1 className="text-2xl font-bold mb-2">Your first 3D model</h1>
+          <h1 className="text-2xl font-bold mb-2">{T.setupFirstModelTitle}</h1>
           <p className="text-sm mb-3" style={{ color: 'var(--dim)' }}>
-            Four photos of one dish, from four sides. A phone is fine. It builds in a few
-            minutes, and you can set up the rest of the menu while it does.
+            {T.setupFirstModelHint}
           </p>
           <ul className="text-sm grid gap-1.5" style={{ color: 'var(--dim)' }}>
-            <li>· Your first {quota} models are free.</li>
-            <li>· Nothing goes on the menu until you approve it.</li>
+            <li>· {text(T.setupFreeModels, { n: String(quota) })}</li>
+            <li>· {T.setupNothingUntilApprove}</li>
           </ul>
         </div>
         <div className="card p-3">
@@ -152,10 +159,10 @@ function FirstModel({ plan, onSay, onSent, onSkip }: {
       <Plate tenantId={plan.restaurantId!} dishes={[]} left={Math.max(0, quota - used)}
              quota={quota} compact
              onError={onSay}
-             onSent={() => { onSay('Building. Set up the menu while it does.'); onSent() }} />
+             onSent={() => { onSay(T.setupBuildingWhileYouWork); onSent() }} />
 
       <div className="mt-5">
-        <button className="btn btn-ghost" onClick={onSkip}>Skip for now</button>
+        <button className="btn btn-ghost" onClick={onSkip}>{T.skipForNow}</button>
       </div>
     </div>
   )
@@ -168,6 +175,7 @@ function Look({ plan, onNext, onSay }: {
   onNext: () => void
   onSay: (m: string) => void
 }) {
+  const [T] = useLang()
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([])
   const [current, setCurrent] = useState('')
   const [nonce, setNonce] = useState(0)
@@ -193,10 +201,9 @@ function Look({ plan, onNext, onSay }: {
   return (
     <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
       <div>
-        <h1 className="text-xl font-bold mb-1">Pick a look</h1>
+        <h1 className="text-xl font-bold mb-1">{T.setupLookTitle}</h1>
         <p className="text-sm mb-5" style={{ color: 'var(--dim)' }}>
-          This is your real menu, with your name on it. Colours, fonts and photos can all
-          be changed later — this is just the shape.
+          {T.setupLookHint}
         </p>
         <div className="grid gap-2">
           {templates.map(t => (
@@ -209,10 +216,10 @@ function Look({ plan, onNext, onSay }: {
             </button>
           ))}
         </div>
-        <button className="btn btn-primary w-full mt-5" onClick={onNext}>Use this one</button>
+        <button className="btn btn-primary w-full mt-5" onClick={onNext}>{T.setupUseThisOne}</button>
       </div>
       <div className="card overflow-hidden" style={{ minHeight: 560 }}>
-        <iframe key={nonce} title="Your menu"
+        <iframe key={nonce} title={T.yourMenu}
                 src={`${MENU_ORIGIN}/${plan.restaurantSlug}?preview=${nonce}`}
                 className="w-full h-[560px] border-0" />
       </div>
@@ -229,6 +236,7 @@ function Dishes({ tenantId, onNext, onSay }: {
   onNext: () => void
   onSay: (m: string) => void
 }) {
+  const [T] = useLang()
   const [rows, setRows] = useState<Row[]>([
     { name: '', price: '', category: '' }, { name: '', price: '', category: '' }, { name: '', price: '', category: '' },
   ])
@@ -268,13 +276,13 @@ function Dishes({ tenantId, onNext, onSay }: {
 
   return (
     <div>
-      <h1 className="text-xl font-bold mb-1">Your first dishes</h1>
+      <h1 className="text-xl font-bold mb-1">{T.setupDishesTitle}</h1>
       <p className="text-sm mb-5" style={{ color: 'var(--dim)' }}>
-        Three is enough to start. The full editor has photos, sizes and translations.
+        {T.setupDishesHint}
       </p>
       <div className="card p-4">
         <div className="hidden sm:grid grid-cols-[1fr_120px_160px] gap-2 mb-2 px-1">
-          <span className="eyebrow">Dish</span><span className="eyebrow">Price</span><span className="eyebrow">Category</span>
+          <span className="eyebrow">{T.colDish}</span><span className="eyebrow">{T.colPrice}</span><span className="eyebrow">{T.colCategory}</span>
         </div>
         <div className="grid gap-2">
           {rows.map((r, i) => (
@@ -289,16 +297,16 @@ function Dishes({ tenantId, onNext, onSay }: {
             // got "edit text, edit text, edit text".
             <div key={i} className="grid sm:grid-cols-[1fr_120px_160px] gap-2">
               <label className="grid gap-1">
-                <span className="eyebrow sm:sr-only">Dish</span>
-                <input value={r.name} placeholder="Khachapuri" autoFocus={i === 0} onChange={e => set(i, { name: e.target.value })} />
+                <span className="eyebrow sm:sr-only">{T.colDish}</span>
+                <input value={r.name} placeholder={T.phDish} autoFocus={i === 0} onChange={e => set(i, { name: e.target.value })} />
               </label>
               <label className="grid gap-1">
-                <span className="eyebrow sm:sr-only">Price</span>
+                <span className="eyebrow sm:sr-only">{T.colPrice}</span>
                 <input value={r.price} placeholder="18" inputMode="decimal" onChange={e => set(i, { price: e.target.value })} />
               </label>
               <label className="grid gap-1">
-                <span className="eyebrow sm:sr-only">Category</span>
-                <input value={r.category} placeholder="Starters" list="cats" onChange={e => set(i, { category: e.target.value })} />
+                <span className="eyebrow sm:sr-only">{T.colCategory}</span>
+                <input value={r.category} placeholder={T.phCategory} list="cats" onChange={e => set(i, { category: e.target.value })} />
               </label>
             </div>
           ))}
@@ -307,16 +315,16 @@ function Dishes({ tenantId, onNext, onSay }: {
           {[...new Set(rows.map(r => r.category.trim()).filter(Boolean))].map(c => <option key={c} value={c} />)}
         </datalist>
         <button className="btn btn-ghost btn-sm mt-3" onClick={() => setRows(rs => [...rs, { name: '', price: '', category: '' }])}>
-          + Another dish
+          {T.setupAnotherDish}
         </button>
       </div>
       <div className="flex items-center gap-3 mt-5 flex-wrap">
         <button className="btn btn-primary" onClick={save} disabled={saving || !filled}>
-          {saving ? 'Saving…' : `Save ${filled || ''} and finish`}
+          {saving ? T.saving : text(T.setupSaveAndFinish, { n: String(filled || '') })}
         </button>
-        <button className="btn btn-ghost" onClick={onNext}>Skip for now</button>
+        <button className="btn btn-ghost" onClick={onNext}>{T.skipForNow}</button>
         <span className="ml-auto text-xs" style={{ color: 'var(--dim)' }}>
-          Import from a file · coming soon
+          {T.setupImportSoon}
         </span>
       </div>
     </div>
@@ -331,48 +339,49 @@ function Done({ plan, landed, building, onFinish }: {
   building: ModelRequest | null
   onFinish: () => void
 }) {
+  const [T] = useLang()
   const url = `${MENU_ORIGIN}/${plan.restaurantSlug}`
   const q = `?tenant=${plan.restaurantSlug}`
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_260px] items-start">
       <div>
-        <h1 className="text-2xl font-bold mb-1">Your menu is live.</h1>
+        <h1 className="text-2xl font-bold mb-1">{T.setupLiveTitle}</h1>
         <p className="text-sm mb-5" style={{ color: 'var(--dim)' }}>
-          Anyone who scans the code, or opens the address, sees it now.
+          {T.setupLiveHint}
         </p>
 
         {landed ? (
           <div className="card p-5 mb-4 flex items-center gap-4">
-            <span className="pill pill-on">ready</span>
+            <span className="pill pill-on">{T.ready}</span>
             <div className="flex-1">
-              <div className="font-semibold">Your first 3D model is ready.</div>
+              <div className="font-semibold">{T.setupModelReadyTitle}</div>
               <p className="text-xs" style={{ color: 'var(--dim)' }}>
-                Turn it around, check the size, approve it.
+                {T.setupModelReadyHint}
               </p>
             </div>
-            <a href={`/models${q}`} className="btn btn-primary btn-sm">See it</a>
+            <a href={`/models${q}`} className="btn btn-primary btn-sm">{T.setupSeeIt}</a>
           </div>
         ) : building ? (
           <div className="card p-5 mb-4 grid gap-4 md:grid-cols-[140px_1fr] items-center">
             <SampleDish height={120} />
             <div>
-              <div className="font-semibold">Your first model is still building.</div>
+              <div className="font-semibold">{T.setupStillBuildingTitle}</div>
               <p className="text-xs" style={{ color: 'var(--dim)' }}>
-                A few more minutes. It will be in the 3D Studio, waiting for you.
+                {T.setupStillBuildingHint}
               </p>
             </div>
           </div>
         ) : null}
 
         <div className="card p-4 mb-4">
-          <div className="eyebrow mb-1">Address</div>
+          <div className="eyebrow mb-1">{T.addressLabel}</div>
           <a href={url} target="_blank" rel="noreferrer" className="text-sm font-semibold break-all" style={{ color: 'var(--gold)' }}>{url}</a>
         </div>
-        <button className="btn btn-primary" onClick={onFinish}>Go to my menu</button>
+        <button className="btn btn-primary" onClick={onFinish}>{T.setupGoToMenu}</button>
       </div>
       <div className="card p-4 text-center">
         <QrCode value={url} size={200} label={plan.restaurantSlug} />
-        <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>Print sizes are under QR &amp; share.</p>
+        <p className="text-xs mt-3" style={{ color: 'var(--dim)' }}>{T.setupPrintSizes}</p>
       </div>
     </div>
   )

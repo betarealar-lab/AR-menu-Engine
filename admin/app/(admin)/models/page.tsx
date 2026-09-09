@@ -30,15 +30,20 @@ import SampleDish from '@/components/SampleDish'
 import QrCode from '@/components/QrCode'
 import { ensureViewer } from '@/lib/viewer'
 import { sizeInWords, type Axis } from '@/lib/size'
+import { useLang } from '@/lib/useLang'
+import { text, type Translations } from '@/lib/i18n'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
 type View = 'library' | 'photos' | 'new'
 type Dish = { id: string; name: string; model_id: string | null }
 
-const WAITING: Record<string, string> = {
-  pending: 'waiting for us', approved: 'queued', running: 'building', failed: 'did not work',
-}
+// A function of T, not a module constant: a constant is evaluated once at import and
+// would keep whichever language the tab started in.
+const waiting_ = (T: Translations): Record<string, string> => ({
+  pending: T.waitPending, approved: T.waitApproved,
+  running: T.waitRunning, failed: T.waitFailed,
+})
 
 // How long a generation is allowed to take before the screen stops saying "a few minutes".
 //
@@ -68,6 +73,7 @@ const howLong = (mins: number) =>
       : `${Math.floor(mins / 1440)} d`
 
 export default function StudioPage() {
+  const [T] = useLang()
   const plan = usePlan()
   const [view, setView] = useState<View>('library')
   const [models, setModels] = useState<TenantModel[]>([])
@@ -120,7 +126,7 @@ export default function StudioPage() {
   const building = requests.filter(r => r.state !== 'failed').length
 
   if (!plan.loading && !plan.restaurantId) {
-    return <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>Pick a restaurant first.</div>
+    return <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</div>
   }
 
   return (
@@ -128,16 +134,17 @@ export default function StudioPage() {
       {/* ── header: the number, the views, the action ──────────────────── */}
       <div className="flex items-center gap-3 flex-wrap mb-5">
         <div className="mr-auto">
-          <h1 className="page-title">3D Studio</h1>
+          <h1 className="page-title">{T.studioTitle}</h1>
           <p className="text-xs mt-0.5" style={{ color: 'var(--dim)' }}>
-            {left} of {quota} free models left
-            {waiting > 0 && <> · <span style={{ color: 'var(--gold)' }}>{waiting} waiting for you</span></>}
-            {building > 0 && <> · {building} building</>}
+            {text(T.studioFreeLeft, { left, quota })}
+            {waiting > 0 && <> · <span style={{ color: 'var(--gold)' }}>
+              {text(T.studioWaitingForYou, { n: waiting })}</span></>}
+            {building > 0 && <> · {text(T.studioBuildingCount, { n: building })}</>}
           </p>
         </div>
 
         <div className="flex rounded-lg p-0.5" style={{ background: 'var(--card2)' }}>
-          {([['library', 'Library'], ['photos', 'Photos']] as [View, string][]).map(([id, label]) => (
+          {([['library', T.viewLibrary], ['photos', T.viewPhotos]] as [View, string][]).map(([id, label]) => (
             <button key={id} onClick={() => { setView(id); setPlateFor(null) }}
                     className="px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors"
                     style={{ background: view === id ? 'var(--card)' : 'transparent',
@@ -150,7 +157,7 @@ export default function StudioPage() {
 
         {view !== 'new' && (
           <button className="btn btn-primary" onClick={() => { setPlateFor(null); setView('new') }}>
-            New model
+            {T.studioNewModel}
           </button>
         )}
       </div>
@@ -199,15 +206,16 @@ function PhotoLibrary({ captures, dishes, models, onContinue }: {
   models: TenantModel[]
   onContinue: (dish: string, variant: string, title: string) => void
 }) {
+  const [T] = useLang()
   // Grouped by dish and variant, newest first. A group is one plate's worth of photos.
   const groups = useMemo(() => {
     const map = new Map<string, Capture[]>()
     for (const c of captures) {
-      const k = `${c.dish} ${c.variant}`
+      const k = `${c.dish}\u0000${c.variant}`
       map.set(k, [...(map.get(k) || []), c])
     }
     return [...map.entries()].map(([k, list]) => {
-      const [dish, variant] = k.split(' ')
+      const [dish, variant] = k.split('\u0000')
       const item = dishes.find(d => d.id === dish)
       const model = models.find(m => m.dish === dish && m.variant === variant)
       return { dish, variant, title: item?.name || model?.title || 'Untitled dish',
@@ -219,10 +227,9 @@ function PhotoLibrary({ captures, dishes, models, onContinue }: {
   if (groups.length === 0) {
     return (
       <div className="card p-10 text-center">
-        <p className="font-semibold mb-1">No photos yet.</p>
+        <p className="font-semibold mb-1">{T.studioNoPhotos}</p>
         <p className="text-sm" style={{ color: 'var(--dim)' }}>
-          Every photo you take for a model is kept here, by dish, so you can come back and
-          finish, or build again with better ones.
+          {T.studioNoPhotosHint}
         </p>
       </div>
     )
@@ -275,6 +282,7 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
   onSay: (m: string, bad?: boolean) => void
   onStart: () => void
 }) {
+  const [T] = useLang()
   const [filter, setFilter] = useState<'all' | 'draft' | 'approved' | 'rejected' | 'hidden'>('all')
 
   const shown = models.filter(m => filter === 'hidden' ? m.archived
@@ -291,7 +299,7 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
           {/* A finished dish instead of a spinner. Unlabelled on purpose. */}
           <SampleDish height={160} />
           <div>
-          <div className="eyebrow mb-3">Building</div>
+          <div className="eyebrow mb-3">{T.studioBuildingHeading}</div>
           <div className="grid gap-2">
             {inFlight.map(r => (
               <div key={r.id} className="flex items-center gap-3 text-sm">
@@ -303,7 +311,7 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
                   {r.kind === 'rescale' ? ' · resizing' : ''}
                 </span>
                 <span className={`pill ${r.state === 'running' ? 'pill-wait' : 'pill-mute'}`}>
-                  {WAITING[r.state]}
+                  {waiting_(T)[r.state]}
                 </span>
                 {minutesSince(r.requested_utc) >= STALE_MINUTES && (
                   <span className="text-xs whitespace-nowrap"
@@ -315,7 +323,7 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
                         onClick={async () => {
                           const err = await cancelRequest(r.id)
                           if (err) onSay(err.message, true); else onChanged()
-                        }}>Cancel</button>
+                        }}>{T.cancel}</button>
               </div>
             ))}
           </div>
@@ -325,12 +333,10 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
           {inFlight.some(r => r.state !== 'pending'
                            && minutesSince(r.requested_utc) >= STALE_MINUTES)
             ? <p className="text-[11px] mt-3" style={{ color: 'var(--gold)' }}>
-                This is taking longer than it should — a dish is usually a few minutes.
-                Nothing is lost and nothing has been charged twice. Tell us and we will
-                look at it.
+                {T.studioLate}
               </p>
             : <p className="text-[11px] mt-3" style={{ color: 'var(--dim)' }}>
-                A few minutes. Nothing goes on the menu until you approve it.
+                {T.studioFewMinutes}
               </p>}
           </div>
         </div>
@@ -345,7 +351,7 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
           otherwise would be a quota with a retry loop through it. */}
       {failed.length > 0 && (
         <div className="card p-5">
-          <div className="eyebrow mb-3">Did not work</div>
+          <div className="eyebrow mb-3">{T.studioDidNotWork}</div>
           <div className="grid gap-3">
             {failed.map(r => (
               <div key={r.id} className="grid gap-1">
@@ -353,7 +359,7 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
                   <span className="flex-1 truncate">
                     {r.title || 'Dish'}{r.variant !== 'default' ? ` \u00b7 ${r.variant}` : ''}
                   </span>
-                  <span className="pill pill-off">{WAITING.failed}</span>
+                  <span className="pill pill-off">{waiting_(T).failed}</span>
                 </div>
                 {r.note && (
                   <p className="text-xs" style={{ color: 'var(--dim)' }}>{r.note}</p>
@@ -362,9 +368,7 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
             ))}
           </div>
           <p className="text-[11px] mt-3" style={{ color: 'var(--dim)' }}>
-            Usually the photos: one dish, filling the frame, on a plain surface, four
-            angles. Starting again uses another of your free models — tell us if this
-            looks like our fault and we will put it back.
+            {T.studioFailedHint}
           </p>
         </div>
       )}
@@ -390,15 +394,19 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
       {shown.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="font-semibold mb-1">
-            {filter === 'all' ? 'No models yet.' : `Nothing ${filter === 'draft' ? 'waiting' : filter}.`}
+            {filter === 'all' ? T.studioNoModels
+              : filter === 'draft' ? T.studioNothingWaiting
+              : filter === 'approved' ? T.studioNothingApproved
+              : filter === 'rejected' ? T.studioNothingRejected
+              : T.studioNothingHidden}
           </p>
           {filter === 'all' && (
             <>
               <SampleDish height={240} className="max-w-sm mx-auto my-4" />
               <p className="text-sm mb-4" style={{ color: 'var(--dim)' }}>
-                Four photos of a dish, and a few minutes. The first three are free.
+                {T.studioEmptyHint}
               </p>
-              <button className="btn btn-primary" onClick={onStart}>Build your first model</button>
+              <button className="btn btn-primary" onClick={onStart}>{T.studioBuildFirst}</button>
             </>
           )}
         </div>
@@ -421,6 +429,7 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
   onChanged: () => void
   onSay: (m: string, bad?: boolean) => void
 }) {
+  const [T] = useLang()
   const plan = usePlan()
   const [name, setName] = useState(m.title)
   const [panel, setPanel] = useState<null | 'angle' | 'size' | 'table' | 'files'>(null)
@@ -464,16 +473,16 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
               </span>
             : <span style={{ color: 'var(--gold)' }}>no size set</span>}
           <span>·</span>
-          <span>{m.usedBy ? `on ${m.usedBy.name}` : 'not on a dish'}</span>
+          <span>{m.usedBy ? text(T.studioOnDish, { name: m.usedBy.name }) : T.studioNotOnDish}</span>
         </div>
 
         {m.state === 'draft' && !m.archived && (
           <>
             <p className="text-[11px]" style={{ color: 'var(--dim)' }}>
-              Turn it around, and check the size on a real table before deciding.
+              {T.studioCheckBeforeDeciding}
             </p>
             <button className="btn btn-sm" onClick={() => setPanel(panel === 'table' ? null : 'table')}>
-              {panel === 'table' ? 'Close' : 'Check it on your table'}
+              {panel === 'table' ? T.close : T.studioCheckOnTable}
             </button>
           </>
         )}
@@ -497,8 +506,8 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
         )}
         {m.state === 'draft' && !m.archived && (
           <div className="flex gap-2 mt-1">
-            <button className="btn btn-primary btn-sm flex-1" onClick={() => run(() => setVerdict(m.id, 'approved'), 'Approved')}>Approve</button>
-            <button className="btn btn-sm flex-1" onClick={() => run(() => setVerdict(m.id, 'rejected'))}>Reject</button>
+            <button className="btn btn-primary btn-sm flex-1" onClick={() => run(() => setVerdict(m.id, 'approved'), T.approved)}>{T.approve}</button>
+            <button className="btn btn-sm flex-1" onClick={() => run(() => setVerdict(m.id, 'rejected'))}>{T.reject}</button>
           </div>
         )}
 
@@ -511,7 +520,7 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
                     if (e.target.value) await attachModel(e.target.value, m.id)
                     onChanged()
                   }}>
-            <option value="">Not on a dish</option>
+            <option value="">{T.studioNotOnDishOption}</option>
             {dishes.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         )}
@@ -544,7 +553,7 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
         {panel === 'size' && (
           <div className="rounded-lg p-3 grid gap-3" style={{ background: 'var(--card2)' }}>
             <p className="text-[11px]" style={{ color: 'var(--dim)' }}>
-              Resizing is free and takes a few seconds. It does not use a model.
+              {T.studioResizeFree}
             </p>
             <SizeInput value={dims} onChange={setDims} compact />
             <button className="btn btn-sm btn-primary" disabled={!hasDims(dims)}
@@ -572,6 +581,7 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
 function Preview({ model: m, pill, open, onOpen }: {
   model: TenantModel; pill: string; open: boolean; onOpen: () => void
 }) {
+  const [T] = useLang()
   const host = useRef<HTMLDivElement>(null)
   // The card is a 250px square. Judging a dish - the sauce, the garnish, whether the back
   // of the plate is invented nonsense - needs it bigger than that, and approving something
@@ -627,7 +637,7 @@ function Preview({ model: m, pill, open, onOpen }: {
         <button type="button" onClick={onOpen}
                 className="absolute inset-0 z-20 flex items-end justify-center pb-3 group">
           <span className="btn btn-sm" style={{ background: 'rgba(0,0,0,.6)', borderColor: 'transparent', color: '#fff' }}>
-            Turn it around
+            {T.studioTurnItAround}
           </span>
         </button>
       )}
@@ -653,6 +663,7 @@ function Preview({ model: m, pill, open, onOpen }: {
 function Angle({ model: m, onSay, onChanged }: {
   model: TenantModel; onSay: (m: string, bad?: boolean) => void; onChanged: () => void
 }) {
+  const [T] = useLang()
   const host = useRef<HTMLDivElement>(null)
   const viewer = useRef<HTMLElement | null>(null)
   const framed = useRef(0)
@@ -702,11 +713,11 @@ function Angle({ model: m, onSay, onChanged }: {
     <div className="rounded-lg p-2" style={{ background: 'var(--card2)' }}>
       <div ref={host} />
       <div className="flex gap-2 mt-2">
-        <button className="btn btn-primary btn-sm flex-1" onClick={use}>Use this angle</button>
+        <button className="btn btn-primary btn-sm flex-1" onClick={use}>{T.studioUseThisAngle}</button>
         <button className="btn btn-sm" onClick={async () => {
           const err = await setOrbit(m.id, null)
           if (err) onSay(err.message, true); else { onSay('Back to the default'); onChanged() }
-        }}>Default</button>
+        }}>{T.defaultWord}</button>
       </div>
     </div>
   )
