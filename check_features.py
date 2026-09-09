@@ -106,8 +106,25 @@ MENU = {
         # place in the 3D section, and do nothing at all when a diner tapped it.
         item(id="g", name_en="Pending", category_id="c2", thumbnail_url="https://x/g.webp",
              is_3d=True, thumb_3d=True),
+        # And the other way round it: a USDZ and no GLB. iOS Quick Look takes the USDZ and
+        # nothing else, so this dish CAN do the one thing AR is for, and a predicate that
+        # tested the GLB alone would have switched 3D off for exactly the dish that most
+        # needs it. No model in the library is in this state today, which is why it needs
+        # a fixture rather than a query.
+        item(id="h", name_en="Quicklook", category_id="c2",
+             thumbnail_url="https://x/h.webp", model_usdz="/a/h.usdz", is_3d=True),
     ],
 }
+
+
+def node_eval(src: str) -> dict:
+    """Run a snippet inside app/ and parse the JSON it prints."""
+    out = subprocess.run([node(), "--input-type=module", "-e", src],
+                         cwd=str(ROOT / "app"), capture_output=True, text=True,
+                         encoding="utf-8")
+    if out.returncode != 0:
+        raise SystemExit("node failed:\n" + out.stderr[-1500:])
+    return json.loads(out.stdout.strip().splitlines()[-1])
 
 
 def render() -> dict:
@@ -305,8 +322,14 @@ def main() -> int:
     dish_a = re.findall(r'<div class="menu-item[^"]*" data-idx="0" data-id="a"', html)
     check("a 3D dish appears in the 3D block AND its own category", len(dish_a) == 2,
           f"{len(dish_a)} cards")
-    check("...and only one of them wears the 3D-block badge",
-          html.count("menu-item ar-featured") == 1)
+    # Counted from the fixture, not written in. These three were `== 1` and `== 2`, which
+    # was right while exactly one dish offered 3D and quietly wrong the moment a second
+    # one did - the numbers say something about the RULE, so they are derived from it.
+    live3d = [i for i in MENU["items"]
+              if i["is_3d"] and (i["model"] or i["model_usdz"])]
+    check("...and each of them wears the 3D-block badge exactly once",
+          html.count("menu-item ar-featured") == len(live3d),
+          f'{html.count("menu-item ar-featured")} badged, {len(live3d)} offer 3D')
     check("the 3D pill is a sentinel, not the name '3D'", 'data-cat="__ar3d"' in bar)
     # The Wrap has an approved model AND `is_3d` off - the owner's call. Inferring 3D from
     # the presence of a GLB, which the runtime used to do, overrode that silently: no badge
@@ -314,8 +337,12 @@ def main() -> int:
     wrap = re.search(r'<div class="menu-item[^"]*" data-idx="2"[^>]*>', html).group(0)
     check("a dish with a model but is_3d off is a PHOTO dish",
           "data-is3d" not in wrap and "data-glb" in wrap, wrap[:90])
-    check("...so it gets no 3D badge", html.count('class="badge-3d"') == 2)
-    check("...and no AR button", html.count('class="ar-btn"') == 2)
+    # Twice each: every 3D dish is rendered in the 3D block and again in its own category.
+    check("...so it gets no 3D badge",
+          html.count('class="badge-3d"') == 2 * len(live3d),
+          f'{html.count(chr(34) + "badge-3d" + chr(34))} badges, {len(live3d)} dishes')
+    check("...and no AR button", html.count('class="ar-btn"') == 2 * len(live3d),
+          f'{html.count(chr(34) + "ar-btn" + chr(34))} buttons, {len(live3d)} dishes')
 
     # ── 6. categories ────────────────────────────────────────────────────────────────
     print("\n-- categories --")
@@ -472,6 +499,46 @@ def main() -> int:
           html.count('data-id="g"') == 1)
     check("while the dish that HAS a model still offers all of it",
           'data-is3d="1"' in html and "badge-3d" in html and "ar-btn" in html)
+
+    hcard = html[html.index('data-id="h"'):]
+    hcard = hcard[:1400]
+    check("a dish with only a USDZ still offers 3D", 'data-is3d="1"' in hcard)
+    check("...because iOS Quick Look needs nothing else", "data-usdz=" in hcard)
+
+    # -- 11c. nothing an owner types can become script on a diner's phone -----------
+    #
+    # Every owner-controlled string on the menu goes one of two ways: into MARKUP, where
+    # `e()` escapes it, or into a <style> block, where `e()` is not the right tool and was
+    # never applied. The CSS path is guarded by allow-lists, and one of them was the wrong
+    # shape: the hero image was checked with `/^[^"\'\\\s]+$/`, which forbids closing the
+    # `url("` string - the CSS problem - and permits `<`, `>` and `/`, which is the HTML
+    # one. An HTML parser ends a <style> element at `</style>` whatever the CSS is doing.
+    #
+    # Reachable by any owner: they may PATCH their own tenant's settings directly, and the
+    # victims are their own diners, on a page that asks people to order food.
+    print("")
+    print("-- nothing an owner types becomes script --")
+    theme = node_eval(
+        "import {settingsCss, paletteCss, fontLinks} from './src/lib/theme.js';"
+        "const bad = 'x</style><script>alert(1)</script>';"
+        "console.log(JSON.stringify({"
+        "  hero: settingsCss({hero_image_url: bad}),"
+        "  font: settingsCss({font_body: bad}),"
+        "  height: settingsCss({hero_min_h: bad}),"
+        "  palette: paletteCss({night_bg: bad, day_bg: bad}),"
+        "  links: fontLinks({font_body: bad}),"
+        "  realpath: settingsCss({hero_image_url: '/a/p/mg/c8b8cbba88858a5f.webp'}),"
+        "  realurl: settingsCss({hero_image_url:"
+        "    'https://pub-b253d60df14c4c1f94bada002fa59596.r2.dev/monday-greens/x.webp'}),"
+        "}));")
+    for name in ("hero", "font", "height", "palette", "links"):
+        check(f"a </style> payload in {name} reaches the page as nothing",
+              "<" not in theme[name] and "script" not in theme[name].lower(),
+              theme[name][:80])
+    # ...and the guard is a filter, not a wall: both live restaurants' hero values are of
+    # the two real shapes and must still render.
+    check("a rooted asset path is still a hero", "c8b8cbba88858a5f.webp" in theme["realpath"])
+    check("and an absolute r2 URL is too", "r2.dev" in theme["realurl"])
 
     # -- 12. the page a diner gets when there is no page ----------------------------
     #

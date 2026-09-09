@@ -257,20 +257,83 @@ and four places asked only the first:
 So a dish whose model was missing rendered every one of them and then did nothing when a
 diner tapped it — on the product's headline feature, on the surface a diner sees.
 
-The model goes missing more easily than it looks. `public_menu` strips a model that is not
-approved, so archiving one, or rejecting a draft a dish already points at, empties the
-field under a dish that still says `is_3d`. An owner can also tick 3D in the Menu Editor
-before the model exists; only a *new* dish is forced back to false.
+**Correction to my first reading of this.** I initially wrote that an archived or rejected
+model would leave a live dish advertising 3D. It would not: `loadMenu` in `menu.js` already
+computes `is_3d: !!r.is_3d && !!(glb || usdz)`, so a model that `public_menu` stripped
+arrives with the intent already cleared. The guard in `markup.js` is not a repair of that —
+it is the same rule stated where the markup is built, for the two ways round the loader:
+`render.mjs`, a different renderer with its own loader, and any future caller that hands
+this module an item it assembled itself.
 
-All four now use one predicate, `offers3d(item)`. The reverse case is deliberately
+The first version of the predicate was also wrong in the other direction. It tested
+`item.model` alone, which would have switched 3D **off** for a dish with only a USDZ — and
+iOS Quick Look takes the USDZ and nothing else, so that is exactly the dish that most needs
+it. No model in the library is in that state (all ten have both files), so nothing live was
+affected, and the predicate now matches `loadMenu`'s so it stays true by agreement rather
+than by luck. Both directions have a fixture and both turn the suite red.
+
+All four sites now use one predicate, `offers3d(item)`. The reverse case is deliberately
 untouched: a dish can have a model with `is_3d` off, which is the owner choosing to show it
 as a photo dish, and two of Monday Greens' dishes are set that way.
 
-### it is a guard, not a repair — and the old checks already knew
+### the old checks already knew
 
 No live menu is in that state: all three restaurants' 3D dishes have live models today.
 
-The confirmation came from the checks. Adding a fixture dish in this state and reverting
-the fix turns **seven** checks red — and three of them are checks that already existed.
+Adding a fixture dish in this state and reverting the fix turns **seven** checks red — and
+three of them are checks that already existed.
 *"...and only one of them wears the 3D-block badge"*, *"...and no AR button"*: the suite had
 encoded the right rule all along and simply had no dish in that state to catch it out.
+
+---
+
+## 9. Stored XSS: an owner could put script on their diners' phones
+
+**This is the most serious thing the audit found.** Fixed and deployed.
+
+Every owner-controlled string on the menu goes one of two ways: into markup, where `e()`
+escapes it, or into a `<style>` block, where `e()` is not the right tool and was never
+applied. The CSS path is guarded by allow-lists instead — and one of them was the wrong
+shape.
+
+The hero image URL was checked with:
+
+```js
+/^[^"'\\s]+$/    // no quote, no apostrophe, no backslash, no whitespace
+```
+
+That forbids closing the `url("` string, which is the **CSS** problem. It permits `<`, `>`
+and `/`, which is the **HTML** one. An HTML parser ends a `<style>` element at `</style>`
+whatever the CSS around it is doing, so:
+
+```
+hero_image_url = x</style><script>alert(1)</script>
+```
+
+contains none of the four banned characters and executes on the diner's phone. Stored,
+served from the restaurant's own menu, on a page that asks people to order food — the
+natural payload is a fake card form, not an alert.
+
+**Reachable by any owner.** They can PATCH their own tenant's settings directly with their
+token; RLS lets a member write their own tenant, as it must. The victims are that
+restaurant's diners.
+
+**A blocklist was the wrong shape.** There is no version of it that stays correct, because
+it has to know every character that means something to two parsers at once. The value is
+now matched as a *URL* — an absolute `https://` URL or a rooted path, and in both cases
+only characters that belong in one. Both live restaurants' values pass unchanged.
+
+Six checks cover it, one per owner-controlled value that reaches CSS — the hero, the fonts,
+the hero height, the palette, and the font links — plus two that the real shapes still
+render, because a guard that drops everything is not a fix. Restoring the exact original
+regex turns the hero check red and prints the payload verbatim.
+
+### verified — the other injection surfaces hold
+
+- **The waiter's page** inlines the entire price book as JSON inside a `<script>`. It
+  already escapes every `<` to `\u003c`, which is the correct mitigation for exactly this.
+  The diner page does the same for its runtime config.
+- **Dish names, descriptions, categories, hero and logo images in markup** all go through
+  `e()`.
+- **The palette** uses a tight allow-list that excludes `<`, `;` and braces, so a colour
+  cannot close a declaration, open a rule, or leave the style element.

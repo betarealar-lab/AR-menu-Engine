@@ -34,6 +34,26 @@ export const VAR_MAP = {
 // worse than a missing one falling back to the template's default.
 const SAFE = /^[-#\w\s,.%()/'"+*]+$/;
 
+// The hero image is the one owner-controlled value that reaches a <style> block as a URL
+// rather than as a colour, and it used to be checked with `/^[^"'\\\s]+$/` - no quote, no
+// apostrophe, no backslash, no whitespace. That forbids closing the `url("` string, which
+// is the CSS problem, and permits `<`, `>` and `/`, which is the HTML one:
+//
+//     hero_image_url = x</style><script>alert(1)</script>
+//
+// contains none of the four banned characters, and the HTML parser ends a <style> element
+// at `</style>` whatever the CSS around it is doing. That is script execution on the
+// diner's phone, stored, served from the restaurant's own menu - reachable by any owner,
+// because an owner may PATCH their own tenant's settings directly.
+//
+// So it is matched as a URL now instead of scanned for bad characters: an absolute https
+// URL, or a rooted path, and in both cases only characters that belong in one. Both live
+// restaurants' values pass unchanged - `/a/p/mg/<hash>.webp` and the r2.dev links.
+//
+// A blocklist was the wrong shape for this. There is no version of it that stays right,
+// because it has to know every character that means something to two parsers at once.
+const SAFE_URL = /^(?:https:\/\/[\w.-]+(?::\d+)?)?\/[\w\-./%~+]*$/;
+
 /** BOTH palettes, each scoped to the attribute that selects it.
  *
  *  **Two bugs lived in emitting only one.**
@@ -85,7 +105,7 @@ export function themeCss(cfg = {}, mode = "night") {
 export function settingsCss(cfg = {}) {
   const bits = [];
   const hero = cfg.hero_image_url;
-  if (hero && /^[^"'\\\s]+$/.test(hero)) bits.push(`--hero-image:url("${hero}")`);
+  if (hero && SAFE_URL.test(hero)) bits.push(`--hero-image:url("${hero}")`);
   if (/^[\d.]+(svh|vh|px|rem)$/.test(String(cfg.hero_min_h || ""))) {
     bits.push(`--mg-hero-h:${cfg.hero_min_h}`);
   }

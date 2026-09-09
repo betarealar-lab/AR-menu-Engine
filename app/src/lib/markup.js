@@ -88,13 +88,24 @@ export function header(menu, cfg, lang) {
  *  first version moved 3D items out of their categories and diners stopped finding them. */
 /** Does this dish actually offer 3D to a diner?
  *
- *  `is_3d` alone is the owner's intent; `model` is whether there is anything to show. Four
- *  places used to promise 3D on the intent alone - the category pill, membership of the
- *  3D section, the badge on the card, and the VIEW IN 3D button - so a dish whose model
- *  had been archived, rejected, or never made rendered every one of them and then did
- *  nothing when tapped.
+ *  `is_3d` alone is the owner's intent; a file is whether there is anything to show. Four
+ *  places promised 3D on the intent alone - the category pill, membership of the 3D
+ *  section, the badge on the card, and the VIEW IN 3D button.
+ *
+ *  **`loadMenu` already guards the common case**, and this is not a claim that it does
+ *  not: `menu.js` computes `is_3d: !!r.is_3d && !!(glb || usdz)`, so a model that
+ *  `public_menu` stripped for not being approved already arrives with the intent cleared.
+ *  This is the same rule stated where the markup is built, for the two ways round it -
+ *  `render.mjs`, which is a different renderer with its own loader, and any future caller
+ *  that hands this module an item it assembled itself.
+ *
+ *  **Both files count, not just the GLB.** iOS Quick Look takes the USDZ and nothing else,
+ *  so a dish with only a USDZ can still do the one thing AR is for. Testing `model` alone
+ *  would have switched 3D off for exactly the dish that most needs it. Every model in the
+ *  library has both files today; the predicate matches `loadMenu`'s so that stays true by
+ *  agreement rather than by luck.
  */
-export const offers3d = (item) => !!(item.is_3d && item.model);
+export const offers3d = (item) => !!(item.is_3d && (item.model || item.model_usdz));
 
 export function catBar(menu, lang) {
   const cats = menu.categories.filter((c) =>
