@@ -451,9 +451,25 @@ export default function ThemePage() {
 
   async function save() {
     setSaving(true)
-    await saveThemeConfig(plan.restaurantId!, config)
-    setSavedConfig({ ...config })
+    // The error is not optional here, and throwing it away was worse than a silent
+    // failure. The three lines below it all ASSERT that the write happened: the snapshot
+    // moves, so `dirty` goes false, so both leave guards disarm and the button greys out,
+    // and then the screen says "Saved". An owner whose token had expired would have spent
+    // twenty minutes on a palette, been told it was safe, walked away past two warnings
+    // that no longer fired, and found the old colours on reload with no way back - the
+    // draft only ever lived in this component's state.
+    //
+    // `reset()`, ten lines down, has always got this right. This is the button people
+    // actually press.
+    const error = await saveThemeConfig(plan.restaurantId!, config)
     setSaving(false)
+    if (error) {
+      setMsg(text(T.saveFailed, { message: error.message }))
+      // Deliberately no timeout: the work is still unsaved and still on screen, and a
+      // message that clears itself after four seconds would leave nothing to say so.
+      return
+    }
+    setSavedConfig({ ...config })
     setMsg(T.saved)
     setTimeout(() => setMsg(''), 4000)
   }
@@ -588,6 +604,7 @@ export default function ThemePage() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   {templates.map(tpl => {
                     const on = (config.template_key || '') === tpl.id
+                    const previousTemplate = config.template_key || ''
                     return (
                       <button key={tpl.id} type="button"
                               onClick={async () => {
@@ -595,7 +612,18 @@ export default function ThemePage() {
                                 // Written straight through: the template is a column the
                                 // renderer joins on, not a value in the palette bag, and
                                 // the preview has to reload to pick up a new stylesheet.
-                                if (plan.restaurantId) await setTemplate(plan.restaurantId, tpl.id)
+                                const err = plan.restaurantId
+                                  ? await setTemplate(plan.restaurantId, tpl.id)
+                                  : null
+                                if (err) {
+                                  // Put the button back where it was. The local state was
+                                  // set first so the preview reacts instantly, which is
+                                  // right - but leaving it there after a failed write
+                                  // would show a template the restaurant is not on.
+                                  setConfig(c => ({ ...c, template_key: previousTemplate }))
+                                  setMsg(text(T.saveFailed, { message: err.message }))
+                                  return
+                                }
                                 setMsg(text(T.templateLoaded, { name: tpl.name }))
                               }}
                               className="text-left px-4 py-3 rounded-lg text-sm font-semibold transition-colors"

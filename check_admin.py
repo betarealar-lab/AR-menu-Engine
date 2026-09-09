@@ -219,8 +219,59 @@ def saved_fields_survive() -> bool:
             orphans.append(col)
     check("every model field the editor shows, the editor can change", not orphans,
           "shown and unwritable: " + ", ".join(orphans))
+
+    check("no screen throws away an error a save handed it", not errors_ignored(),
+          "; ".join(errors_ignored()))
     print()
     return True
+
+
+# -- the second half of the same question -------------------------------------------
+#
+# A write can also be persisted correctly and then reported wrongly, which is worse than
+# a silent failure because it destroys the recovery path. The theme editor did exactly
+# this: `save()` discarded the error from `saveThemeConfig` and then did three things that
+# each ASSERT the write happened - moved the saved snapshot, which makes `dirty` false,
+# which disarms both leave guards and greys out the Save button, and then said "Saved".
+# An owner whose token had expired would have spent twenty minutes on a palette, been told
+# it was safe, walked out past two warnings that no longer fired, and found the old
+# colours on reload. The draft only ever lived in React state.
+#
+# So: a data-layer call that RETURNS an error must have that return value bound to
+# something. Anything discarded is listed below with the reason it is safe to discard.
+
+#: `await someCall(...)` whose result is deliberately dropped, and why.
+ERRORS_SAFE_TO_IGNORE = {
+    "setup/page.tsx": "setup_done only decides whether the wizard is shown again; "
+                      "failing there would trap an owner on a wizard they finished",
+}
+
+WRITE_CALL = re.compile(
+    r"^(?P<before>.*?)await\s+(?P<fn>save|set|create|delete|copy|reorder|redeem|approve)"
+    r"[A-Z]\w*\(", re.M)
+
+
+def errors_ignored() -> list[str]:
+    """Screens that call a writer and look away."""
+    bad = []
+    for f in sorted((ADMIN_SRC / "app").rglob("*.tsx")) + \
+             sorted((ADMIN_SRC / "components").rglob("*.tsx")):
+        rel = f.as_posix().split("/app/")[-1].split("/components/")[-1]
+        if any(rel.endswith(k) for k in ERRORS_SAFE_TO_IGNORE):
+            continue
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            m = WRITE_CALL.match(line)
+            # `createClient()` is the Supabase client factory, not a writer - it starts
+            # every one of these calls and returns no error of its own.
+            if not m or line[m.end() - len("createClient("):m.end()] == "createClient(":
+                continue
+            before = m.group("before").strip()
+            # Bound to a name, folded into an expression, or returned - all fine. Bare
+            # `await save…(` at the start of a statement is the shape that loses errors.
+            if before.endswith(("=", "||", "&&", "?", ":", "return", "(", ",")):
+                continue
+            bad.append(f"{rel}:{n}")
+    return bad
 
 
 def main() -> int:

@@ -58,6 +58,10 @@ export default function SetupPage() {
 
   async function finish() {
     if (plan.restaurantId) {
+      // The error is deliberately not raised. This flag only decides whether the owner is
+      // routed back through setup next time; the restaurant, its menu and its model are
+      // all already saved. Failing here and refusing to leave would trap somebody on a
+      // wizard they have finished, which is a worse outcome than seeing it once more.
       await createClient().from('tenants').update({ setup_done: true }).eq('id', plan.restaurantId)
     }
     router.push(`/home?tenant=${plan.restaurantSlug}`)

@@ -347,19 +347,28 @@ export default function MenuPage() {
     // frame a mesh, so attaching that mesh to a second dish carries the framing with it
     // rather than making somebody type it again. A dish with no model has nothing to
     // frame, and the data layer says so rather than writing a stray row.
+    let modelError: { message: string } | null = null
     if (savedId) {
       const isDefaultView = viewForm.h === DEFAULT_ITEM_VIEW.h && viewForm.v === DEFAULT_ITEM_VIEW.v && viewForm.zoom === DEFAULT_ITEM_VIEW.zoom
       const clear = isDefaultView || !nextItemForm.is_3d || nextItemForm.text_only
-      await saveItemView(nextItemForm.model_id,
+      modelError = await saveItemView(nextItemForm.model_id,
                          clear ? '' : `${viewForm.h} ${viewForm.v} ${viewForm.zoom}`)
       // Same place, same reason: the AR multiplier corrects a MESH authored in the wrong
       // unit, so it belongs to the model. It was on this form and written nowhere, which
       // meant a super admin could type 0.01, watch the field accept it, save, and reopen
       // to find 1 - with no way to tell that from the number simply not working in AR.
-      await saveItemScale(nextItemForm.model_id, nextItemForm.ar_scale)
+      modelError = modelError
+        || await saveItemScale(nextItemForm.model_id, nextItemForm.ar_scale)
     }
     setSaving(false); setItemModal(false); setUploadProgress(''); setThumbProgress(''); await load()
-    flash(editItem ? T.itemUpdated : T.itemAdded)
+    // These two are not a reason to keep the modal open - the DISH is saved by now, and
+    // returning early would leave somebody staring at a form whose work is already in the
+    // database. But they are a reason not to say "Dish updated" and nothing else: the
+    // angle and the scale are on the model, and a menu that quietly kept the old framing
+    // is exactly the sort of thing an owner discovers from a diner.
+    flash(modelError
+      ? text(T.saveFailed, { message: modelError.message })
+      : editItem ? T.itemUpdated : T.itemAdded)
   }
   async function confirmDelete() {
     if (!deleteId) return
