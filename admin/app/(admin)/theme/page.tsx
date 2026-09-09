@@ -6,6 +6,7 @@ import { PALETTE_GROUPS } from '@/lib/palette'
 import { uploadAsset } from '@/lib/upload'
 import { useLang } from '@/lib/useLang'
 import { usePlan } from '@/lib/usePlan'
+import { useFileDrop } from '@/lib/useFileDrop'
 import LockedCard from '@/components/LockedCard'
 import { TEMPLATE_PRESETS, type ThemeConfig } from '@/lib/themePresets'
 import { isThemeTemplateActionAllowed, normalizeThemeTabForRole, themeTabsForRole } from '@/lib/adminUx'
@@ -983,8 +984,16 @@ function HeroGalleryRow({ label, hint, images, uploading, addLabel, removeLabel,
     border: '1px solid var(--border)', borderRadius: 6,
     width: 28, height: 28, lineHeight: 1, cursor: 'pointer',
   }
+  // `multiple`, because this row is a gallery: the whole point is dropping the eight
+  // photos of the room in one go rather than eight times.
+  const drop = useFileDrop(
+    files => { if (files.length) onPick(files) },
+    { accept: 'image/*', multiple: true, disabled: uploading },
+  )
   return (
-    <div className="p-3 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+    <div {...drop.dropProps} className="p-3 rounded-xl transition-colors"
+         style={{ background: drop.over ? 'var(--gold-dim)' : 'var(--card)',
+                  border: `1px solid ${drop.over ? 'var(--gold)' : 'var(--border)'}` }}>
       <div className="text-xs mb-2 uppercase tracking-widest" style={{ color: 'var(--dim)' }}>{label}</div>
 
       <label className="px-3 py-1.5 rounded text-xs font-medium cursor-pointer inline-block"
@@ -1035,8 +1044,14 @@ function ImageUploadRow({ label, hint, value, uploading, uploadLabel, clearLabel
   label: string; hint: string; value: string; uploading: boolean; uploadLabel: string; clearLabel: string; previewAlt: string
   onPick: (f: File) => void; onClear: () => void
 }) {
+  const drop = useFileDrop(
+    files => { if (files.length) onPick(files[0]) },
+    { accept: 'image/*', disabled: uploading },
+  )
   return (
-    <div className="p-3 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+    <div {...drop.dropProps} className="p-3 rounded-xl transition-colors"
+         style={{ background: drop.over ? 'var(--gold-dim)' : 'var(--card)',
+                  border: `1px solid ${drop.over ? 'var(--gold)' : 'var(--border)'}` }}>
       <div className="text-xs mb-2 uppercase tracking-widest" style={{ color: 'var(--dim)' }}>{label}</div>
       <div className="flex items-center gap-3 flex-wrap">
         <label className="px-3 py-1.5 rounded text-xs font-medium cursor-pointer"
@@ -1068,8 +1083,15 @@ function VideoUploadRow({ label, hint, value, uploading, uploadLabel, clearLabel
   label: string; hint: string; value: string; uploading: boolean; uploadLabel: string; clearLabel: string
   onPick: (f: File) => void; onClear: () => void
 }) {
+  // Same box, second way in. mp4 only, because that is what the hero player takes.
+  const drop = useFileDrop(
+    files => { if (files.length) onPick(files[0]) },
+    { accept: 'video/mp4,.mp4', disabled: uploading },
+  )
   return (
-    <div className="p-3 rounded-xl" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+    <div {...drop.dropProps} className="p-3 rounded-xl transition-colors"
+         style={{ background: drop.over ? 'var(--gold-dim)' : 'var(--card)',
+                  border: `1px solid ${drop.over ? 'var(--gold)' : 'var(--border)'}` }}>
       <div className="text-xs mb-2 uppercase tracking-widest" style={{ color: 'var(--dim)' }}>{label}</div>
       <div className="flex items-center gap-3 flex-wrap">
         <label className="px-3 py-1.5 rounded text-xs font-medium cursor-pointer"

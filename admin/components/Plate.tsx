@@ -17,6 +17,7 @@ import {
   loadCaptures, saveCapture, removeCapture, requestMultiview, loadCaptureTasks,
   requestBuild, EMPTY_DIMS, hasDims, type Capture, type CaptureTask, type Dims,
 } from '@/lib/data/studio'
+import { useFileDrop } from '@/lib/useFileDrop'
 
 // dataset.SLOTS, in the engine's order. The first frame is what the generator builds
 // from, and four photos of the same side make a confident, wrong model.
@@ -28,6 +29,42 @@ export const SLOTS = [
 ]
 
 type Dish = { id: string; name: string }
+
+
+/** One of the four photo slots, as its own element so it can hold a drop target.
+ *
+ *  Per slot rather than one target over the whole grid: the angles are not
+ *  interchangeable - 01 is the primary and the model is built around it - so a photo
+ *  dragged onto "left" should land on left, not in the next free space. The hook has to
+ *  live in a component for that, because React will not allow one to be called in a loop.
+ */
+function SlotBox({ primary, accept, disabled, onFiles, children }: {
+  primary: boolean
+  accept: string
+  disabled: boolean
+  onFiles: (files: File[]) => void
+  children: React.ReactNode
+}) {
+  const { dropProps, over } = useFileDrop(onFiles, { accept, disabled })
+  return (
+    <div {...dropProps} className="rounded-xl overflow-hidden relative transition-colors"
+         style={{
+           border: `1px solid ${over || primary ? 'var(--gold)' : 'var(--border)'}`,
+           background: over ? 'var(--gold-dim)' : 'var(--bg)',
+         }}>
+      {children}
+      {/* Only while something is over it. A permanent "drop here" is noise on a phone,
+          where there is no dragging at all. */}
+      {over && (
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold pointer-events-none"
+             style={{ background: 'rgba(0,0,0,.45)', color: 'var(--gold)' }}>
+          drop to use this photo
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 export default function Plate(props: {
   tenantId: string
@@ -174,9 +211,12 @@ export default function Plate(props: {
           {SLOTS.map((slot, i) => {
             const f = frames[i]
             return (
-              <div key={slot.key} className="rounded-xl overflow-hidden relative"
-                   style={{ border: `1px solid ${i === 0 ? 'var(--gold)' : 'var(--border)'}`,
-                            background: 'var(--bg)' }}>
+              <SlotBox key={slot.key} primary={i === 0} accept="image/*"
+                       disabled={busySlot === i}
+                       onFiles={files => {
+                         if (!files.length) { props.onError('That is not an image.'); return }
+                         void putFrame(i, files[0])
+                       }}>
                 <div className="flex items-center gap-2 px-3 pt-2.5 pb-1 text-[11px]">
                   <span className="font-mono" style={{ color: i === 0 ? 'var(--gold)' : 'var(--dim)' }}>
                     0{i + 1}
@@ -199,8 +239,15 @@ export default function Plate(props: {
                       </span>}
                 </button>
 
+                {/* No `capture` attribute, deliberately. `capture="environment"` does
+                    not mean "prefer the camera" - it REPLACES the file picker with the
+                    camera, so an owner on a phone could not choose a photo they already
+                    had. That is the normal case, not the edge one: the capture protocol
+                    asks for a proper camera and four planned angles, and those photos
+                    reach the phone afterwards. Without the attribute a phone offers both,
+                    camera included, so nothing is lost and the gallery is back. */}
                 <input ref={el => { fileRefs.current[i] = el }} type="file" accept="image/*"
-                       capture="environment" className="hidden"
+                       className="hidden"
                        onChange={e => { const file = e.target.files?.[0]; if (file) putFrame(i, file) }} />
 
                 {f && (
@@ -215,7 +262,7 @@ export default function Plate(props: {
                     {slot.help}
                   </p>
                 )}
-              </div>
+              </SlotBox>
             )
           })}
         </div>

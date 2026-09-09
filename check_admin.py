@@ -428,6 +428,71 @@ def privileged_routes_are_the_ones_we_meant() -> None:
     print()
 
 
+
+# -- the two ways a file gets in --------------------------------------------------------
+#
+# **From a phone's gallery.** The four-angle capture had `capture="environment"` on its
+# input. That attribute does not mean "prefer the camera" - it REPLACES the file picker
+# with the camera, so an owner on a phone was offered no way to choose a photo they
+# already had. That is the normal case here, not the edge one: the capture protocol asks
+# for a proper camera and four planned angles, and those photos reach the phone
+# afterwards. Removing it costs nothing, because a phone with no `capture` attribute still
+# offers the camera in the same chooser.
+#
+# **By dropping it.** Every upload was a hidden input behind a button. On a desktop the
+# file is already on screen next to the browser, and the motion is to drag it onto the box
+# - not to click, wait for a dialog, and navigate back to the folder it came from.
+#
+# The half that is easy to get wrong is the window-level guard: a file dropped one pixel
+# outside a target makes the BROWSER NAVIGATE to it, replacing the admin and losing
+# whatever was typed into the form. That is why there is one shared hook rather than six
+# hand-rolled handlers, and why the check below insists on it.
+
+UPLOAD_SURFACES = {
+    "components/Plate.tsx": "the four capture angles, one drop target each",
+    "app/(admin)/menu/page.tsx": "the dish photo, and the .glb/.usdz pair",
+    "app/(admin)/theme/page.tsx": "the hero gallery, the background, the hero video",
+}
+
+
+def files_can_get_in() -> None:
+    print("== a file can be chosen from a gallery, or simply dropped ==")
+    hook = (ADMIN_SRC / "lib" / "useFileDrop.ts")
+    if not check("the shared drop hook exists", hook.exists()):
+        return
+    src = hook.read_text(encoding="utf-8")
+
+    # The guard that stops a near-miss from navigating the tab away from a half-typed form.
+    check("a file dropped NEXT to a target cannot navigate the tab away",
+          'window.addEventListener("drop"' in src.replace("'", '"')
+          and 'window.addEventListener("dragover"' in src.replace("'", '"'))
+    check("...and it is removed again when the screen goes",
+          "removeEventListener" in src)
+    # dragenter/dragleave fire per child element; a plain boolean flickers.
+    check("the highlight does not flicker over child elements", "depth" in src)
+    # A drop bypasses the input's own accept attribute entirely.
+    check("a dropped file is type-checked, since a drop ignores `accept`",
+          "matchesAccept" in src)
+
+    for rel, what in UPLOAD_SURFACES.items():
+        body = (ADMIN_SRC / rel).read_text(encoding="utf-8")
+        check(f"{what} takes a drop", "useFileDrop(" in body, rel)
+        # The click path must survive: dropping is a second way in, not a replacement.
+        check(f"...and still opens a file picker on click",
+              'type="file"' in body, rel)
+        # The one that put a phone's gallery out of reach.
+        check(f"...without forcing a phone into the camera",
+              "capture=\"" not in _strip_comments(body), rel)
+    print()
+
+
+def _strip_comments(src: str) -> str:
+    """JSX comments and // lines out, so a note ABOUT `capture=` is not mistaken for one."""
+    out = re.sub(r"\{/\*.*?\*/\}", "", src, flags=re.S)
+    out = re.sub(r"/\*.*?\*/", "", out, flags=re.S)
+    return re.sub(r"^\s*//.*$", "", out, flags=re.M)
+
+
 def main() -> int:
     load_env()
     url = os.environ.get("SUPABASE_URL", "")
@@ -452,6 +517,7 @@ def main() -> int:
         return 1
     failed_requests_read_honestly()
     privileged_routes_are_the_ones_we_meant()
+    files_can_get_in()
     print(f"The product  (menu {MENU}, admin {ADMIN})\n")
 
     owner_id = other_id = None

@@ -554,3 +554,59 @@ Six checks in `check_jobs.py`. They run the real loop with the pass functions re
 nothing touches the database, R2 or a credit — the pass genuinely raises, and the assertion
 is that the loop came back round, said it in the words `-Status` counts, and still stopped
 cleanly on Ctrl-C. Removing the guard turns four of them red.
+
+---
+
+## 14. Getting a file in: from a phone's gallery, and by dropping it
+
+Both asked for directly. The gallery one turned out to be a real bug, not a missing feature.
+
+### fixed — a phone could not offer the gallery at all
+
+The four-angle capture input carried `capture="environment"`. That attribute does not mean
+*prefer* the camera — it **replaces the file picker with the camera**, so an owner on a
+phone was never offered a photo they already had.
+
+That is the normal case here, not the edge one. The capture protocol asks for a proper
+camera and four planned angles; those photos reach the phone afterwards, and there was no
+way to get them in. Removing the attribute costs nothing: a phone with no `capture` still
+offers the camera in the same chooser, alongside the library.
+
+It was on `Plate.tsx` only — the dish photo, the model files and the theme uploads never
+had it.
+
+### fixed — a file can now be dropped on the box it belongs to
+
+Six surfaces, one shared hook (`lib/useFileDrop.ts`):
+
+| surface | behaviour |
+|---|---|
+| the four capture angles | one target each — the angles are not interchangeable, and 01 is the primary the model is built around |
+| the dish photo | single image |
+| the model files | **one** target for both — which is which is the extension, and telling a `.glb` from a `.usdz` is work a computer should do. Both can be dropped together |
+| the hero gallery | multiple, because the point is dropping eight photos of the room in one go |
+| the background, the hero video | single |
+
+Clicking still opens a picker everywhere. Dropping is a second way in, not a replacement.
+
+### the half that is easy to get wrong
+
+**A file dropped one pixel outside a target makes the browser navigate to it** — the photo
+replaces the admin and whatever was typed into the form is gone, with no way back from the
+page. So `dragover` is cancelled at the window as well as on the target. That window-level
+guard is the reason this is one shared hook rather than six hand-rolled handlers, and the
+check insists on it.
+
+Two more that only show up in use: `dragenter`/`dragleave` fire for every child element the
+pointer crosses, so a plain boolean flickers off the moment the cursor passes over the
+image inside the box — the hook counts depth instead. And **a drop bypasses the input's
+`accept` attribute entirely**, so an `<input accept=".glb">` will hand you a `.docx`
+without complaint; the rule is applied by hand.
+
+That last one is pure and now lives in `lib/acceptMatch.js` with seven tests beside it,
+because its interesting cases are all off-centre: a `.glb` has no MIME type in any browser,
+`my.glb.zip` must not match `.glb`, and an image dragged from another tab arrives with a
+type and no filename at all.
+
+Fourteen checks in `check_admin.py`, including that no input forces a phone into the camera
+again — proven by putting `capture` back, which names the exact file.

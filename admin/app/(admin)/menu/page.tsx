@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
 import { usePlan } from '@/lib/usePlan'
+import { useFileDrop } from '@/lib/useFileDrop'
 import { uploadAsset } from '@/lib/upload'
 import { saveUploadedModel } from '@/lib/data/models'
 import {
@@ -475,6 +476,30 @@ export default function MenuPage() {
     })
   }
 
+  // Drag a file onto the box it belongs to. The click path is untouched - this is a
+  // second way in, not a replacement, and it is the one a desktop user reaches for first
+  // because the file is already on screen next to the browser.
+  const photoDrop = useFileDrop(
+    files => {
+      if (!files.length) { setThumbProgress('That is not an image.'); return }
+      void uploadImage(files[0])
+    },
+    { accept: 'image/*', disabled: thumbUploading },
+  )
+
+  // One zone for both model files: which is which is the extension, and asking somebody
+  // to aim at the right half of a row to tell a .glb from a .usdz is work a computer
+  // should do. Both can be dropped together.
+  const modelDrop = useFileDrop(
+    files => {
+      if (!files.length) { setUploadProgress('Drop a .glb or a .usdz.'); return }
+      for (const f of files) {
+        void uploadModel(f, f.name.toLowerCase().endsWith('.usdz') ? 'usdz' : 'glb')
+      }
+    },
+    { accept: '.glb,.usdz', multiple: true, disabled: uploading },
+  )
+
   async function uploadImage(file: File) {
     if (!file.type.startsWith('image/')) {
       setThumbProgress(T.onlyImageFiles)
@@ -930,7 +955,12 @@ export default function MenuPage() {
                   <p className="text-xs leading-5" style={{ color: 'var(--dim)' }}>
                     {T.usdzRequiredHint}
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div {...modelDrop.dropProps}
+                       className="flex flex-wrap gap-2 rounded-lg transition-colors"
+                       style={modelDrop.over
+                         ? { outline: '2px dashed var(--gold)', outlineOffset: 4,
+                             background: 'var(--gold-dim)' }
+                         : undefined}>
                     <button type="button" disabled={uploading}
                             onClick={() => glbInputRef.current?.click()}
                             className="px-3 py-1.5 rounded text-xs font-medium"
@@ -977,7 +1007,11 @@ export default function MenuPage() {
             )}
             {!itemForm.text_only && (
             <Field label={T.thumbnailLabel} className="col-span-2">
-              <div className="space-y-2">
+              <div {...photoDrop.dropProps} className="space-y-2 rounded-lg transition-colors"
+                   style={photoDrop.over
+                     ? { outline: '2px dashed var(--gold)', outlineOffset: 4,
+                         background: 'var(--gold-dim)' }
+                     : undefined}>
                 <div className="flex gap-2 items-center">
                   <button type="button" disabled={thumbUploading}
                           onClick={() => thumbInputRef.current?.click()}
