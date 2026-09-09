@@ -329,6 +329,35 @@ def failed_requests_read_honestly() -> None:
     tail = page.split(">Did not work<", 1)[-1] if ">Did not work<" in page else ""
     check("and there is no dismiss, which would refund the generation",
           "cancelRequest" not in tail)
+
+    # The panel used to say "A few minutes." underneath, permanently, whether the request
+    # was forty seconds or four hours old. Both ways it goes late have a cause worth
+    # knowing: `approved` and unclaimed usually means no engine is running at all - it
+    # launches from the Startup folder, so a machine that rebooted and was never logged
+    # into has no worker - and `running` and silent means a wedged job or a callback that
+    # never arrived. Neither the owner nor we had any sign of it; the first symptom was
+    # somebody asking where their model went.
+    check("a request that is taking too long says so", "STALE_MINUTES" in page)
+    check("...and shows how long it has actually been", "howLong(minutesSince(" in page)
+    check("...with a line that stops claiming it is a few minutes",
+          "taking longer than it should" in page)
+    check("...and tells the owner nothing was lost or double charged",
+          "nothing has been charged twice" in page)
+    # `pending` is waiting for a human to approve it, which is a decision, not a symptom.
+    check("but a request waiting on US is not called late",
+          "r.state !== 'pending'" in page)
+
+    # The same question on the developer side, where the rule was backwards. The queue
+    # warned only on `pending` - the one state legitimately waiting on a human - and said
+    # nothing about `approved` or `running`, which are the two that mean the engine is
+    # broken. A request could sit approved for six hours on the screen whose stated
+    # purpose is making stuck work impossible to miss.
+    dev = (ADMIN_SRC / "app" / "(admin)" / "dev-analytics"
+           / "page.tsx").read_text(encoding="utf-8")
+    check("the developer queue flags a request no engine has claimed",
+          "function lateness(" in dev and "'approved' || q.state === 'running'" in dev)
+    check("...and still flags one that is waiting on us", "'pending' ? 60" in dev)
+    check("...naming which of the two it is", "no engine?" in dev and "waiting on us" in dev)
     print()
 
 
@@ -355,6 +384,50 @@ def browser_for(sb: "Supa", email: str, password: str) -> requests.Session | Non
     return sess
 
 
+
+# -- which routes can bypass RLS, and why each one is allowed to -----------------------
+#
+# `createAdminClient()` is the service key: it ignores every policy in the database. A
+# route holding it has to authorise its own caller, and `/api/members` showed how that
+# goes wrong in a way no policy can catch - it authorised correctly and did so AFTER
+# creating an account with the service key, leaving the account behind on the refusal.
+#
+# So the set is pinned. Adding a route that reaches for the service key turns this red and
+# the author has to come here and say how it decides who is asking. That is the whole
+# point: the failure mode is not a missing check, it is a check in the wrong place, and
+# the only reliable moment to notice is when the route is written.
+#
+# Four more used to be in this list and are gone: /api/branches, /api/tenants,
+# /api/admin-links and /api/account-log, which had zero call sites and belonged to a
+# schema - brands, restaurants, integer ids - whose tables do not exist.
+
+PRIVILEGED_ROUTES = {
+    "members": "authorises first: reads the tenant AS THE CALLER, which `tenants_read` "
+               "limits to is_member_of(id), before the service key touches anything, and "
+               "then writes through add_tenant_member as the caller too",
+    "signup":  "deliberately unauthenticated - it is how somebody gets an account. The "
+               "gate is the invite code, checked before the account is made",
+}
+
+
+def privileged_routes_are_the_ones_we_meant() -> None:
+    print("== only these routes may bypass RLS ==")
+    api = ADMIN_SRC / "app" / "api"
+    holding = set()
+    for f in sorted(api.rglob("route.ts")):
+        if "createAdminClient" in f.read_text(encoding="utf-8"):
+            holding.add(f.parent.relative_to(api).as_posix())
+
+    unexpected = sorted(holding - set(PRIVILEGED_ROUTES))
+    check("no route has quietly taken the service key", not unexpected,
+          "new and unexplained: " + ", ".join(unexpected))
+
+    gone = sorted(set(PRIVILEGED_ROUTES) - holding)
+    check("and every route named here still exists", not gone,
+          "named but not found: " + ", ".join(gone))
+    print()
+
+
 def main() -> int:
     load_env()
     url = os.environ.get("SUPABASE_URL", "")
@@ -378,6 +451,7 @@ def main() -> int:
     if not saved_fields_survive():
         return 1
     failed_requests_read_honestly()
+    privileged_routes_are_the_ones_we_meant()
     print(f"The product  (menu {MENU}, admin {ADMIN})\n")
 
     owner_id = other_id = None

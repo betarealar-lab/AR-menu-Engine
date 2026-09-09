@@ -34,6 +34,34 @@ type QueueRow = {
 
 const RANGES: [string, number][] = [['24h', 1440], ['7d', 10080], ['30d', 43200], ['90d', 129600]]
 
+/** Is this request late, and how late - or null when it is fine.
+ *
+ *  **The old rule was backwards.** It warned only on `pending`, which is the one state
+ *  that is legitimately waiting on a HUMAN: over quota, sitting there until one of us
+ *  approves it. Nothing was ever said about `approved` or `running`, and those are the
+ *  two states that mean the ENGINE is broken - approved and unclaimed means no worker is
+ *  running at all (it launches from the Startup folder, so a machine that rebooted and
+ *  was never logged into has none), and running and silent means a wedged job or a
+ *  callback that never came. A request could sit in `approved` for six hours and this
+ *  screen, whose whole purpose is making stuck work impossible to miss, showed nothing.
+ *
+ *  Two thresholds because the two clocks mean different things: an hour is a fair nudge
+ *  for a decision a person owes, twenty minutes is already wrong for a machine.
+ */
+function lateness(q: { state: string; minutes_waiting: number }): string | null {
+  const limit = q.state === 'pending' ? 60
+    : q.state === 'approved' || q.state === 'running' ? 20
+      : null
+  if (limit === null || q.minutes_waiting <= limit) return null
+  const m = q.minutes_waiting
+  const how = m < 120 ? `${Math.round(m)}m`
+    : m < 2880 ? `${Math.round(m / 60)}h`
+      : `${Math.round(m / 1440)}d`
+  // Named, because "3h waiting" on an approved request and on a pending one are two
+  // different problems and only one of them is ours to click.
+  return q.state === 'pending' ? `${how} waiting on us` : `${how} — no engine?`
+}
+
 export default function DevAnalyticsPage() {
   const plan = usePlan()
   const [minutes, setMinutes] = useState(43200)
@@ -130,9 +158,10 @@ export default function DevAnalyticsPage() {
                 <span className="flex-1 truncate" style={{ color: 'var(--dim)' }}>
                   {q.title || 'untitled'}{q.kind === 'rescale' ? ' · resize' : ''}
                 </span>
-                {q.state === 'pending' && q.minutes_waiting > 60 && (
-                  <span className="text-xs" style={{ color: 'var(--danger)' }}>
-                    {Math.round(q.minutes_waiting / 60)}h waiting
+                {lateness(q) && (
+                  <span className="text-xs whitespace-nowrap"
+                        style={{ color: 'var(--danger)' }}>
+                    {lateness(q)}
                   </span>
                 )}
                 <span className={`pill ${q.state === 'failed' ? 'pill-off'

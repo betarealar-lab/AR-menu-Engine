@@ -40,6 +40,33 @@ const WAITING: Record<string, string> = {
   pending: 'waiting for us', approved: 'queued', running: 'building', failed: 'did not work',
 }
 
+// How long a generation is allowed to take before the screen stops saying "a few minutes".
+//
+// A Meshy generation is three to eight minutes end to end. Past twenty, something is
+// wrong, and the two ways it goes wrong have different answers:
+//
+//   'approved'  the queue has it and no engine has claimed it. Almost always the engine
+//               is not running - it launches from the Startup folder, so a machine that
+//               rebooted and was never logged into has no worker at all.
+//   'running'   an engine claimed it and has not come back. A wedged job, or a callback
+//               that never arrived.
+//
+// The old panel said "A few minutes." underneath, permanently, whether the request was
+// forty seconds or four hours old. An owner had no way to tell a working system from a
+// dead one, and neither did we - the first sign was somebody asking why their model never
+// turned up.
+const STALE_MINUTES = 20
+
+const minutesSince = (iso: string) => {
+  const t = Date.parse(iso)
+  return Number.isFinite(t) ? Math.floor((Date.now() - t) / 60000) : 0
+}
+
+const howLong = (mins: number) =>
+  mins < 60 ? `${mins} min`
+    : mins < 1440 ? `${Math.floor(mins / 60)} h`
+      : `${Math.floor(mins / 1440)} d`
+
 export default function StudioPage() {
   const plan = usePlan()
   const [view, setView] = useState<View>('library')
@@ -278,6 +305,12 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
                 <span className={`pill ${r.state === 'running' ? 'pill-wait' : 'pill-mute'}`}>
                   {WAITING[r.state]}
                 </span>
+                {minutesSince(r.requested_utc) >= STALE_MINUTES && (
+                  <span className="text-xs whitespace-nowrap"
+                        style={{ color: r.state === 'pending' ? 'var(--dim)' : 'var(--gold)' }}>
+                    {howLong(minutesSince(r.requested_utc))}
+                  </span>
+                )}
                 <button className="btn btn-sm btn-ghost"
                         onClick={async () => {
                           const err = await cancelRequest(r.id)
@@ -286,9 +319,19 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
               </div>
             ))}
           </div>
-          <p className="text-[11px] mt-3" style={{ color: 'var(--dim)' }}>
-            A few minutes. Nothing goes on the menu until you approve it.
-          </p>
+          {/* `pending` is excluded on purpose: that one is waiting for US to approve it,
+              which is a decision by a person and not a symptom of anything. Only the two
+              states an engine owns can be late. */}
+          {inFlight.some(r => r.state !== 'pending'
+                           && minutesSince(r.requested_utc) >= STALE_MINUTES)
+            ? <p className="text-[11px] mt-3" style={{ color: 'var(--gold)' }}>
+                This is taking longer than it should — a dish is usually a few minutes.
+                Nothing is lost and nothing has been charged twice. Tell us and we will
+                look at it.
+              </p>
+            : <p className="text-[11px] mt-3" style={{ color: 'var(--dim)' }}>
+                A few minutes. Nothing goes on the menu until you approve it.
+              </p>}
           </div>
         </div>
       )}

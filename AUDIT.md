@@ -137,26 +137,37 @@ super-admin tenants screen, and no screen in the admin can edit it afterwards.
 
 ---
 
-## 4. Open
+## 4. What is kept, and why
 
-### open — nothing ever deletes from R2
+### decided — nothing in R2 is ever deleted, on purpose
 
-The web apps have no delete path at all. Replacing a dish photo, removing one, or deleting
-the dish leaves the object in the bucket forever, still readable at its URL.
+I first wrote this up as an open problem: the web apps have no delete path, so replacing a
+dish photo, removing one, or deleting the dish leaves the object in the bucket forever.
 
-**Cost is not the problem.** Photos are WebP at a few hundred KB; ten thousand orphans is
-about $0.05 a month.
+**That is the intended behaviour, and the reason is training data.** Temo, 2026-09-09:
+*"even failed data is good, we store it for training."* Orphaned objects are not litter —
+a replaced photo, the assets of a deleted dish, the inputs to a generation that failed are
+all examples the engine can learn from, and a dish cannot be reshot six months later.
 
-**The problem is that "remove" does not remove.** An owner who takes down a photo — wrong
-dish, bad shot, a customer's face in the background — has no way to actually unpublish it.
-The URL is a UUID path plus a content hash, so it is not enumerable, but that is obscurity,
-not deletion.
+So there is nothing to fix here, and a future cleanup job would be **destroying an asset**.
+This section stays in the audit as a *decision*, not a defect, so the next person to notice
+the missing delete path finds the reason instead of writing one.
 
-**And it must not be fixed naively.** `copy_tenant` copies the *key*, not the bytes, so two
-tenants share one object. Deleting the file when a dish is deleted would blank the same
-photo on every copy made from that restaurant. Any real fix needs reference counting or
-copy-on-write first. Left alone, on purpose, and written down here so nobody "tidies" it.
+Two things follow from it that are worth stating:
 
+- **The safety argument agrees.** `copy_tenant` copies the R2 *key*, not the bytes, so two
+  tenants share one object. A delete-on-remove would blank the same photo on every copy
+  made from that restaurant. Anyone who ever does want deletion needs reference counting
+  first.
+- **"Remove" in the admin means unpublish, not erase.** A diner cannot reach a photo that
+  no row points at, and the URL is a UUID path plus a content hash, so it is not
+  enumerable. If a restaurant ever asks for a photo to be genuinely destroyed — a
+  customer's face in the background, say — that is a manual job against the bucket, and
+  there is no button for it by design.
+
+The one thing to keep an eye on is the **free tier: 10 GB**. Photos are WebP at a few
+hundred KB, so this is years away at the current rate, but it is the number that decides
+when "keep everything" starts costing money rather than nothing.
 
 ---
 
@@ -375,15 +386,69 @@ Seven routes hold the service key. `account-log` and `admin-links` gate on
 at the top of each handler and reach the service key only from helpers called afterwards;
 `signup` is deliberately unauthenticated and gated by an invite code instead.
 
-### open — four privileged routes nothing calls
+### fixed in §11 — four privileged routes nothing calls
 
-`/api/branches`, `/api/tenants`, `/api/admin-links` and `/api/account-log` have **zero call
-sites**, and `/api/categories/reorder` is referenced only by a comment explaining why it is
-bypassed. They belong to an older schema — `brands`, `restaurants`, integer ids — and none
-of those tables exist.
+`/api/branches`, `/api/tenants`, `/api/admin-links` and `/api/account-log` had zero call
+sites, and `/api/categories/reorder` was referenced only by a comment explaining why it is
+bypassed. They belonged to an older schema whose tables do not exist, and carried the RLS
+bypass into the deployed Worker while being unable to function.
 
-They are inert today: unauthenticated they answer `401`, and to an ordinary signed-in user
-`branches` fails on the missing table while `tenants` and `account-log` answer `403`. But
-they are dead code carrying the RLS bypass into the deployed Worker, and one of them is
-built around a `storeInitialPassword` helper — a pattern nobody should inherit from a file
-they assumed was live.
+Written up as open when found; removed later the same session — see §11.
+
+---
+
+## 11. Dead privileged code, and two clocks nobody was watching
+
+### fixed — five routes removed, four of them holding the service key
+
+`/api/branches`, `/api/tenants`, `/api/admin-links` and `/api/account-log` had **zero call
+sites**; `/api/categories/reorder` was referenced only by a comment explaining why it is
+bypassed. All five belonged to an older schema — `brands`, `restaurants`, integer ids —
+whose tables do not exist, so four of them could only ever fail, holding an RLS bypass
+while they did it. One was built around a `storeInitialPassword` helper, which is a pattern
+nobody should inherit from a file they assume is live.
+
+Removed, with `lib/adminAccounts.ts`, `lib/branchPermissions.js` and `lib/categoryOrdering.js`,
+which nothing else imported.
+
+**And the set is pinned now.** `check_admin.py` lists which routes may call
+`createAdminClient()` and why each is allowed to — `members`, which authorises the caller
+before the service key touches anything, and `signup`, which is unauthenticated by design
+and gated on an invite code. A new route reaching for the service key turns the check red
+and the author has to come and say how it decides who is asking. Proven by adding one.
+
+### fixed — four test files existed and nothing ran them
+
+`admin/package.json` had no `test` script. Two of the four tested modules only the deleted
+routes used and went with them; the other two — `adminUx` and `menuFilters` — test live
+code, pass, and had never once been executed by anything. There is a `test` script now.
+
+### fixed — "A few minutes", forever
+
+The owner's Building panel said *"A few minutes."* underneath, permanently, whether the
+request was forty seconds or four hours old. Past twenty minutes it now shows the age and
+says so plainly, including that nothing was lost and nothing was charged twice. A request
+in `pending` is excluded: that one is waiting for **us** to approve it, which is a decision
+by a person, not a symptom.
+
+### fixed — the developer queue's staleness rule was backwards
+
+The screen whose stated purpose is *"making a request waiting on us for two days impossible
+to miss"* warned on `q.state === 'pending'` **only** — the one state legitimately waiting on
+a human. It said nothing about `approved` or `running`, and those are the two that mean the
+engine is broken: approved and unclaimed means no worker is running at all (it launches
+from the Startup folder, so a machine that rebooted and was never logged into has none),
+and running and silent means a wedged job or a callback that never arrived.
+
+A request could sit in `approved` for six hours and this screen showed nothing. Now both
+clocks are watched, at thresholds that match what each one means — an hour for a decision
+a person owes, twenty minutes for a machine — and the label says which of the two it is,
+because only one of them is ours to click.
+
+### fixed — the dev server handed out invite links to a port it was not on
+
+Found by the suite failing on a check that was right. `next dev` takes whatever port is
+free, while `NEXT_PUBLIC_ADMIN_ORIGIN` is pinned to `:3001` and the members route builds
+set-password links from it. A dev server that landed on `:3000` therefore produced invite
+links pointing at a server that is not running — and the link looks perfectly ordinary
+until somebody clicks it. The dev script pins the port now.
