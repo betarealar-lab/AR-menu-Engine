@@ -212,3 +212,65 @@ somebody types. This is the first screen a new restaurant ever fills in.
 They also had no label of any kind, so a screen reader announced "edit text" three times.
 Now labelled, visible below the `sm` breakpoint and carrying the accessible name at every
 width.
+
+---
+
+## 7. The screen whose whole purpose is paper
+
+### fixed — the QR screen could not be printed
+
+Its own header calls it *the physical delivery vehicle*. It offered one **Download SVG**
+button per code, so an owner wanting thirty table cards clicked Download thirty times and
+then had to lay them out themselves.
+
+And Ctrl+P did not rescue them. The admin had **no print styles at all**, and its shell
+actively defeats printing: `md:h-screen md:overflow-hidden` on the root with the scroll on
+`<main>`. A fixed-height clipped container meeting a paged medium prints exactly one
+screenful — so a request for thirty table codes produced the first six and a cut-off
+seventh, with the sidebar and bottom nav printed around them.
+
+Now there is a **Print codes** button and a print stylesheet: the shell is unclipped, the
+navigation dropped, the theme forced to black on white because a QR needs contrast and ink
+costs money, and every code marked `break-inside: avoid` so a card survives being cut out.
+Each table card prints the restaurant's name under it — on paper the card *is* the whole
+context, and a code alone on a table tells staff nothing. The restaurant's own code prints
+too, so Print gives a usable sheet even when nobody asked for table codes.
+
+**Verified in the built CSS, not assumed.** Tailwind's `print:` variant and the hand-written
+`@media print` block were both checked in the compiled output — the two `print:block`
+elements would have silently stayed hidden if the variant had not been generated.
+
+---
+
+## 8. A dish that promised 3D it could not deliver
+
+### fixed — four places claimed 3D from intent alone
+
+`is_3d` is the owner's *intent*. Whether there is a model to show is a different question,
+and four places asked only the first:
+
+- the **3D category pill** in the category bar
+- membership of the **3D section** at the top of the menu
+- the **3D badge** on the card
+- the **VIEW IN 3D button**
+
+So a dish whose model was missing rendered every one of them and then did nothing when a
+diner tapped it — on the product's headline feature, on the surface a diner sees.
+
+The model goes missing more easily than it looks. `public_menu` strips a model that is not
+approved, so archiving one, or rejecting a draft a dish already points at, empties the
+field under a dish that still says `is_3d`. An owner can also tick 3D in the Menu Editor
+before the model exists; only a *new* dish is forced back to false.
+
+All four now use one predicate, `offers3d(item)`. The reverse case is deliberately
+untouched: a dish can have a model with `is_3d` off, which is the owner choosing to show it
+as a photo dish, and two of Monday Greens' dishes are set that way.
+
+### it is a guard, not a repair — and the old checks already knew
+
+No live menu is in that state: all three restaurants' 3D dishes have live models today.
+
+The confirmation came from the checks. Adding a fixture dish in this state and reverting
+the fix turns **seven** checks red — and three of them are checks that already existed.
+*"...and only one of them wears the 3D-block badge"*, *"...and no AR button"*: the suite had
+encoded the right rule all along and simply had no dish in that state to catch it out.

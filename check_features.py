@@ -98,6 +98,14 @@ MENU = {
         item(id="e", name_en="Burger", category_id="c2", thumbnail_url="https://x/e.webp",
              addons=[{"en": "Bacon", "price": "3 ₾"}]),
         item(id="f", name_en="Water", category_id="c2", text_only=True, price="2 ₾"),
+        # The other direction, and the one nothing checked: 3D is ON and there is no model.
+        # An owner reaches this by ticking 3D on a dish before its model exists, or by
+        # archiving the model a live dish still points at - `public_menu` strips a model
+        # that is not approved, which empties the field under a dish that still says
+        # `is_3d`. It used to render the badge, the VIEW IN 3D button, `data-is3d`, and a
+        # place in the 3D section, and do nothing at all when a diner tapped it.
+        item(id="g", name_en="Pending", category_id="c2", thumbnail_url="https://x/g.webp",
+             is_3d=True, thumb_3d=True),
     ],
 }
 
@@ -448,6 +456,22 @@ def main() -> int:
           "fetch(" not in html and "XMLHttpRequest" not in html)
     check("the camera angle rides on the card", 'data-orbit="10 20 100"' in html)
     check("the dish's real id does too, for the sink and the QR", 'data-id="a"' in html)
+
+    # -- 11b. a dish never promises 3D it cannot deliver ----------------------------
+    print("")
+    print("-- 3D is claimed only when there is a model --")
+    g = [i for i in MENU["items"] if i["id"] == "g"][0]
+    card = html[html.index('data-id="g"'):]
+    card = card[:card.index("</article>") if "</article>" in card else 1200]
+    check("the dish is still on the menu", g["name_en"] in html)
+    check("it carries no 3D flag", 'data-is3d="1"' not in card)
+    check("no 3D badge", "badge-3d" not in card)
+    check("and no VIEW IN 3D button that would open an empty viewer",
+          "ar-btn" not in card)
+    check("it is not in the 3D section either",
+          html.count('data-id="g"') == 1)
+    check("while the dish that HAS a model still offers all of it",
+          'data-is3d="1"' in html and "badge-3d" in html and "ar-btn" in html)
 
     # -- 12. the page a diner gets when there is no page ----------------------------
     #

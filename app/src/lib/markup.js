@@ -86,10 +86,20 @@ export function header(menu, cfg, lang) {
  *  have a category called "3D" cannot collide with it. A 3D dish appears in BOTH that
  *  pill and its own category - full duplication, chosen deliberately after the platform's
  *  first version moved 3D items out of their categories and diners stopped finding them. */
+/** Does this dish actually offer 3D to a diner?
+ *
+ *  `is_3d` alone is the owner's intent; `model` is whether there is anything to show. Four
+ *  places used to promise 3D on the intent alone - the category pill, membership of the
+ *  3D section, the badge on the card, and the VIEW IN 3D button - so a dish whose model
+ *  had been archived, rejected, or never made rendered every one of them and then did
+ *  nothing when tapped.
+ */
+export const offers3d = (item) => !!(item.is_3d && item.model);
+
 export function catBar(menu, lang) {
   const cats = menu.categories.filter((c) =>
     menu.items.some((i) => i.category_id === c.id));
-  const has3d = menu.items.some((i) => i.is_3d);
+  const has3d = menu.items.some(offers3d);
   if (!cats.length && !has3d) return "";
   const pill = (cat, en, ka, ru, active) =>
     `<button type="button" class="cat-pill${active ? " active" : ""}" ` +
@@ -173,6 +183,26 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
   // platform's `thumb_3d`. Off keeps the photo, which saves a download and a WebGL
   // context; on is the thing nobody else in this category has.
   const live = item.is_3d && item.thumb_3d && item.model;
+  // **A dish claims 3D only when there is a model to show.**
+  //
+  // `is_3d` is the owner's INTENT and nothing more. Three of the places below promised 3D
+  // on that flag alone - the badge, `data-is3d`, and membership of the virtual 3D category
+  // - so a dish whose model was not there rendered a 3D badge, sat in the 3D section, and
+  // did nothing at all when a diner tapped it. On the product's headline feature.
+  //
+  // The model goes missing more easily than it looks. `public_menu` strips a model that is
+  // not approved, so archiving one, or rejecting a draft a dish already points at, empties
+  // the field under a dish that still says `is_3d`. And an owner can tick 3D on a dish in
+  // the Menu Editor before its model exists - the form allows it, and only a NEW dish is
+  // forced back to false.
+  //
+  // No live menu is in that state today; all three restaurants' 3D dishes have live
+  // models. This is the guard, not a repair.
+  //
+  // The reverse case is deliberately untouched: a dish CAN have a model and `is_3d` off,
+  // which is the owner choosing to show it as a photo dish, and two of Monday Greens' are
+  // set that way. That is why one flag could not express this and both are consulted.
+  const shows3d = offers3d(item);
 
   const data =
     // `data-idx` is the viewer's own array position and `data-id` is the dish's real id.
@@ -195,7 +225,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
     // GLB, which the runtime used to do, silently overrode that choice: the dish got no
     // badge and no button (correct) but still opened the 3D viewer on a tap and still got
     // preloaded into the AR carousel. One flag could not express it, so it is stated.
-    (item.is_3d ? ` data-is3d="1"` : "") +
+    (shows3d ? ` data-is3d="1"` : "") +
     (item.model ? ` data-glb="${e(item.model)}"` : "") +
     (item.model_usdz ? ` data-usdz="${e(item.model_usdz)}"` : "") +
     // The poster. `viewer.js` reads `thumbnail_url` for the modal's first frame, and it
@@ -219,7 +249,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
     `alt="${e(name)}" width="430" height="220" decoding="async" ` +
     `${eager ? 'fetchpriority="high"' : 'loading="lazy"'}>` +
     `<div class="thumb-vignette"></div>` +
-    (item.is_3d ? `<span class="badge-3d">3D</span>` : "") +
+    (shows3d ? `<span class="badge-3d">3D</span>` : "") +
     `</div></div>`;
 
   const actions = `<div class="item-actions"><p class="price">` +
@@ -248,7 +278,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
     // The label is the platform's own string for this language. It is corrected on the
     // client the moment AR capability is known - a phone that can do real AR is offered
     // "VIEW ON TABLE" instead - but it must not be blank or English in the first frame.
-    (item.is_3d
+    (shows3d
       ? `<button class="ar-btn" data-idx="${i}">${e(ui(lang).view3D)}</button>` : "") +
     `</div></div>`;
 }
@@ -271,7 +301,7 @@ const EAGER = 4;
 
 export function menuList(menu, lang) {
   const items = menu.items;
-  const threeD = items.map((it, i) => [it, i]).filter(([it]) => it.is_3d);
+  const threeD = items.map((it, i) => [it, i]).filter(([it]) => offers3d(it));
   const byCat = new Map(menu.categories.map((c) => [c.id, []]));
   const loose = [];
   items.forEach((it, i) => {
