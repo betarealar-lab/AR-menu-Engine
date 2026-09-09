@@ -274,6 +274,53 @@ def errors_ignored() -> list[str]:
     return bad
 
 
+
+# -- what an owner is told when a generation fails ------------------------------------
+#
+# It had never happened in production - one request has ever been made and it worked - so
+# this whole path was written and never seen. What it did:
+#
+#   the panel headed "Building" listed the failure alongside things that really were
+#   building, and rendered at all whenever any request existed, so a restaurant whose one
+#   generation had failed saw an animated dish under the word Building, forever
+#
+#   the reason was `hidden md:inline`, so on a PHONE - which is what an owner has in their
+#   hand - it said "did not work" and nothing else
+#
+#   the only control on the row, Cancel, was hidden precisely for failed rows
+#
+# The trap is in that last one. The obvious fix is a Dismiss button, and Dismiss would
+# have to set the state to 'cancelled' because that is the only state an owner may write.
+# `model_requests_used` counts everything EXCEPT 'cancelled'. So Dismiss would refund the
+# generation - the retry loop the schema comment in 0007 says must not exist. There is no
+# dismiss. The row stays, the cost is stated, and putting a slot back is a super admin
+# raising the quota, which is a decision by a person who knows whose fault it was.
+
+def failed_requests_read_honestly() -> None:
+    print("== a generation that failed says so, and says what it cost ==")
+    raw = (ADMIN_SRC / "app" / "(admin)" / "models" / "page.tsx").read_text(encoding="utf-8")
+    # Comments out first. The check below asks whether the SCREEN hides the reason on a
+    # phone, and the comment explaining that it used to would otherwise answer for it.
+    page = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+    page = re.sub(r"^\s*//.*$", "", page, flags=re.M)
+
+    check("a failure is not listed under 'Building'",
+          "const inFlight = requests.filter(r => r.state !== 'failed')" in page
+          and "{inFlight.map(r => (" in page)
+    check("it gets a heading that is true", '"eyebrow mb-3">Did not work<' in page.replace("'", '"')
+          or ">Did not work<" in page)
+    check("the reason is on screen on a phone too",
+          'hidden md:inline' not in page)
+    check("the owner is told the attempt spent a model",
+          "uses another of your free models" in page)
+
+    # The one that must never be added back.
+    tail = page.split(">Did not work<", 1)[-1] if ">Did not work<" in page else ""
+    check("and there is no dismiss, which would refund the generation",
+          "cancelRequest" not in tail)
+    print()
+
+
 def main() -> int:
     load_env()
     url = os.environ.get("SUPABASE_URL", "")
@@ -296,6 +343,7 @@ def main() -> int:
 
     if not saved_fields_survive():
         return 1
+    failed_requests_read_honestly()
     print(f"The product  (menu {MENU}, admin {ADMIN})\n")
 
     owner_id = other_id = None
@@ -529,6 +577,33 @@ def main() -> int:
             check("an owner CAN withdraw their own request", err is None, str(err))
             rows, _ = as_user(other_id, "select id from model_requests where id = %s", (rid,))
             check("a stranger cannot see someone else's request", not rows)
+
+            # Why the Studio has no "dismiss" on a failed generation.
+            #
+            # An owner may write exactly one column, `state`, and exactly two values,
+            # 'pending' and 'cancelled'. So any dismiss button has to cancel - and
+            # `model_requests_used` counts every state EXCEPT 'cancelled'. A dismiss would
+            # therefore hand back the generation it just spent, which is the retry loop
+            # 0007 was written to prevent. Proven here rather than argued, because the
+            # next person to look at that screen will see a dead-end row and reach for
+            # the obvious fix.
+            cur.execute("update model_requests set state = 'failed', "
+                        "note = 'check_admin' where id = %s", (rid,))
+            cur.execute("select model_requests_used(%s)", (tenant_id,))
+            before = cur.fetchone()[0]
+            _, err = as_user(owner_id, "update model_requests set state = 'cancelled' "
+                                       "where id = %s returning id", (rid,))
+            check("an owner may cancel a request that has already failed", err is None,
+                  str(err))
+            cur.execute("update model_requests set state = 'cancelled' where id = %s",
+                        (rid,))
+            cur.execute("select model_requests_used(%s)", (tenant_id,))
+            after = cur.fetchone()[0]
+            check("and doing so refunds the generation, which is why no button does it",
+                  after == before - 1, f"used went {before} -> {after}")
+            cur.execute("update model_requests set state = 'approved', note = '' "
+                        "where id = %s", (rid,))
+            conn.commit()
 
             cur.execute("update tenants set model_quota = 0 where id = %s", (tenant_id,))
             conn.commit()

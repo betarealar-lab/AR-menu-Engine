@@ -32,9 +32,12 @@ export default function SharePage() {
 
   return (
     <div className="page-content max-w-3xl">
-      <h1 className="page-title mb-6">QR &amp; share</h1>
+      <div className="flex items-center gap-3 flex-wrap mb-6 no-print">
+        <h1 className="page-title mr-auto">QR &amp; share</h1>
+        <button className="btn btn-sm" onClick={() => window.print()}>Print codes</button>
+      </div>
 
-      <div className="grid gap-5 md:grid-cols-[1fr_260px]">
+      <div className="grid gap-5 md:grid-cols-[1fr_260px] no-print">
         <div className="card p-5">
           <div className="eyebrow mb-1">Your menu&apos;s address</div>
           <a href={url} target="_blank" rel="noreferrer" className="font-semibold break-all"
@@ -55,7 +58,7 @@ export default function SharePage() {
       </div>
 
       <div className="card p-5 mt-5">
-        <div className="flex items-baseline gap-3 flex-wrap mb-3">
+        <div className="flex items-baseline gap-3 flex-wrap mb-3 no-print">
           <div>
             <div className="font-semibold">One code per table</div>
             <p className="text-xs" style={{ color: 'var(--dim)' }}>
@@ -72,13 +75,25 @@ export default function SharePage() {
         {tables > 0 && (
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))' }}>
             {Array.from({ length: tables }, (_, i) => i + 1).map(n => (
-              <div key={n} className="text-center">
+              <div key={n} className="text-center print-block">
                 <QrCode value={`${url}?t=${n}`} size={120} label={`${plan.restaurantSlug}-table-${n}`} />
+                {/* On screen the page says whose menu this is. On paper the card gets cut
+                    out and carried to a table, where it is the only thing anybody sees -
+                    so it has to name the restaurant itself. */}
+                <div className="hidden print:block text-[10px] mt-1">{plan.restaurantName || plan.restaurantSlug}</div>
                 <div className="text-xs mt-1 font-semibold">Table {n}</div>
               </div>
             ))}
           </div>
         )}
+      </div>
+
+      {/* The restaurant's own code, for the door and the bill. Hidden on screen because
+          the card at the top already shows it; present here so that Print gives a sheet
+          with something on it even when nobody has asked for table codes. */}
+      <div className="hidden print:block text-center print-block" style={{ marginTop: 24 }}>
+        <QrCode value={url} size={200} label={plan.restaurantSlug} />
+        <div className="text-sm mt-2 font-semibold">{plan.restaurantName || plan.restaurantSlug}</div>
       </div>
     </div>
   )

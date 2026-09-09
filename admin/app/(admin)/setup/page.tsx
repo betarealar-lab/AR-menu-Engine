@@ -278,10 +278,28 @@ function Dishes({ tenantId, onNext, onSay }: {
         </div>
         <div className="grid gap-2">
           {rows.map((r, i) => (
+            // On a wide screen the column headings above say what each box is. On a
+            // phone the row stacks and those headings are hidden, which left three
+            // identical boxes distinguished only by placeholders - and a placeholder is
+            // gone the moment somebody types into the row above and looks back. This is
+            // the first screen a new restaurant ever fills in, usually on a phone.
+            //
+            // The labels carry the accessible name in both layouts, so they are not a
+            // mobile patch: these inputs had no label of any kind, and a screen reader
+            // got "edit text, edit text, edit text".
             <div key={i} className="grid sm:grid-cols-[1fr_120px_160px] gap-2">
-              <input value={r.name} placeholder="Khachapuri" autoFocus={i === 0} onChange={e => set(i, { name: e.target.value })} />
-              <input value={r.price} placeholder="18" inputMode="decimal" onChange={e => set(i, { price: e.target.value })} />
-              <input value={r.category} placeholder="Starters" list="cats" onChange={e => set(i, { category: e.target.value })} />
+              <label className="grid gap-1">
+                <span className="eyebrow sm:sr-only">Dish</span>
+                <input value={r.name} placeholder="Khachapuri" autoFocus={i === 0} onChange={e => set(i, { name: e.target.value })} />
+              </label>
+              <label className="grid gap-1">
+                <span className="eyebrow sm:sr-only">Price</span>
+                <input value={r.price} placeholder="18" inputMode="decimal" onChange={e => set(i, { price: e.target.value })} />
+              </label>
+              <label className="grid gap-1">
+                <span className="eyebrow sm:sr-only">Category</span>
+                <input value={r.category} placeholder="Starters" list="cats" onChange={e => set(i, { category: e.target.value })} />
+              </label>
             </div>
           ))}
         </div>

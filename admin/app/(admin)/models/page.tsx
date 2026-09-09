@@ -253,17 +253,20 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
   const shown = models.filter(m => filter === 'hidden' ? m.archived
     : !m.archived && (filter === 'all' || m.state === filter))
   const hiddenCount = models.filter(m => m.archived).length
+  // Two lists, because one called "Building" with a failure in it was a lie about both.
+  const inFlight = requests.filter(r => r.state !== 'failed')
+  const failed = requests.filter(r => r.state === 'failed')
 
   return (
     <div className="grid gap-4">
-      {requests.length > 0 && (
+      {inFlight.length > 0 && (
         <div className="card p-5 grid gap-4 md:grid-cols-[180px_1fr] items-center">
           {/* A finished dish instead of a spinner. Unlabelled on purpose. */}
           <SampleDish height={160} />
           <div>
           <div className="eyebrow mb-3">Building</div>
           <div className="grid gap-2">
-            {requests.map(r => (
+            {inFlight.map(r => (
               <div key={r.id} className="flex items-center gap-3 text-sm">
                 {r.state === 'running' && (
                   <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--gold)' }} />
@@ -272,19 +275,14 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
                   {r.title || 'Dish'}{r.variant !== 'default' ? ` · ${r.variant}` : ''}
                   {r.kind === 'rescale' ? ' · resizing' : ''}
                 </span>
-                <span className={`pill ${r.state === 'failed' ? 'pill-off' : r.state === 'running' ? 'pill-wait' : 'pill-mute'}`}>
+                <span className={`pill ${r.state === 'running' ? 'pill-wait' : 'pill-mute'}`}>
                   {WAITING[r.state]}
                 </span>
-                {r.state === 'failed' && r.note && (
-                  <span className="text-xs hidden md:inline" style={{ color: 'var(--dim)' }}>{r.note}</span>
-                )}
-                {r.state !== 'failed' && (
-                  <button className="btn btn-sm btn-ghost"
-                          onClick={async () => {
-                            const err = await cancelRequest(r.id)
-                            if (err) onSay(err.message, true); else onChanged()
-                          }}>Cancel</button>
-                )}
+                <button className="btn btn-sm btn-ghost"
+                        onClick={async () => {
+                          const err = await cancelRequest(r.id)
+                          if (err) onSay(err.message, true); else onChanged()
+                        }}>Cancel</button>
               </div>
             ))}
           </div>
@@ -292,6 +290,39 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
             A few minutes. Nothing goes on the menu until you approve it.
           </p>
           </div>
+        </div>
+      )}
+
+      {/* Failures used to sit in the list above, under a heading that said "Building",
+          with the reason marked `hidden md:inline` - so on a phone, which is what an
+          owner has in their hand, it said "did not work" and nothing else. The only
+          control on the row was a Cancel button that was hidden precisely for these.
+          They get their own block, the reason gets shown, and the cost is stated
+          plainly: an attempt that failed still spent the generation, and pretending
+          otherwise would be a quota with a retry loop through it. */}
+      {failed.length > 0 && (
+        <div className="card p-5">
+          <div className="eyebrow mb-3">Did not work</div>
+          <div className="grid gap-3">
+            {failed.map(r => (
+              <div key={r.id} className="grid gap-1">
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="flex-1 truncate">
+                    {r.title || 'Dish'}{r.variant !== 'default' ? ` \u00b7 ${r.variant}` : ''}
+                  </span>
+                  <span className="pill pill-off">{WAITING.failed}</span>
+                </div>
+                {r.note && (
+                  <p className="text-xs" style={{ color: 'var(--dim)' }}>{r.note}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] mt-3" style={{ color: 'var(--dim)' }}>
+            Usually the photos: one dish, filling the frame, on a plain surface, four
+            angles. Starting again uses another of your free models — tell us if this
+            looks like our fault and we will put it back.
+          </p>
         </div>
       )}
 

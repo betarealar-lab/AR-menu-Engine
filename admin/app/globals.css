@@ -223,3 +223,41 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
 @media (max-width: 767px) {
   h1.page-title { font-size: 1.3rem; }
 }
+
+/* ── Print ───────────────────────────────────────────────────
+   There were no print styles at all, and the admin actively defeated printing: the shell
+   is `md:h-screen md:overflow-hidden` with the scroll on <main>, so a fixed-height clipped
+   container met a paged medium and Ctrl+P produced exactly one screenful. On the QR screen
+   - whose entire purpose is a physical artefact, and whose own header calls it "the
+   physical delivery vehicle" - an owner asking for thirty table cards got the first six
+   and a cut-off seventh.
+
+   So: unclip the shell, drop the chrome, and let the page flow. `.no-print` is for the
+   controls that make no sense on paper; `.print-block` must not be split across a page. */
+@media print {
+  /* The clip, in both places it is applied. */
+  html, body,
+  body > div, body > div > div, body > div > div > div {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  main { overflow: visible !important; padding: 0 !important; }
+
+  /* Navigation is not information. */
+  aside, nav, header, .no-print { display: none !important; }
+
+  /* Ink is expensive and a QR needs contrast, not a dark theme. */
+  body { background: #fff !important; color: #000 !important; }
+  .card {
+    background: #fff !important;
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+  }
+  a { color: #000 !important; text-decoration: none !important; }
+
+  /* A card cut out of the sheet has to survive being cut out. */
+  .print-block { break-inside: avoid; page-break-inside: avoid; }
+
+  @page { margin: 12mm; }
+}

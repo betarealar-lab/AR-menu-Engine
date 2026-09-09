@@ -157,3 +157,58 @@ tenants share one object. Deleting the file when a dish is deleted would blank t
 photo on every copy made from that restaurant. Any real fix needs reference counting or
 copy-on-write first. Left alone, on purpose, and written down here so nobody "tidies" it.
 
+
+---
+
+## 5. What an owner is told when a generation fails
+
+This path had never run. One model request has ever been made in production and it worked,
+so everything below was written, deployed, and never seen by anybody.
+
+### fixed — a failure was filed under "Building", forever
+
+The panel rendered whenever any request existed and was headed **Building**. A restaurant
+whose only generation had failed saw an animated finished dish under that word, with a
+grey pill reading "did not work", permanently.
+
+The reason was marked `hidden md:inline` — invisible on a phone, which is what an owner
+has in their hand. And the single control on the row, Cancel, was hidden precisely for
+failed rows, so there was nothing to do with it.
+
+Failures now get their own block, headed *Did not work*, with the reason on screen at
+every width, and a line saying what usually causes it and what it cost.
+
+### the trap in the obvious fix
+
+The obvious fix is a Dismiss button. It would be wrong.
+
+An owner may write exactly one column on `model_requests` — `state` — and exactly two
+values, `pending` and `cancelled`. So Dismiss has to cancel. And `model_requests_used`
+counts every state **except** `cancelled`. A dismiss button would therefore refund the
+generation it just spent: the retry loop that the comment in `0007_model_requests.sql`
+says must not exist.
+
+So there is no dismiss. The row stays, the cost is stated plainly, and putting a slot back
+is a super admin raising the quota — a decision by a person who knows whose fault the
+failure was. `check_admin.py` now proves the refund empirically, with a real token, so the
+next person to look at that dead-end row and reach for the obvious fix finds the reason
+first.
+
+### verified — the admin is genuinely built for a phone
+
+Sweeping for more of the `hidden md:` pattern found no other information withheld on
+small screens: `AdminShell` has a real mobile header and bottom nav, `Sidebar` has its
+toggle, and the one remaining case is a table's column headings, hidden because the row
+beneath them stacks.
+
+## 6. Small things, first-run
+
+### fixed — the setup wizard's dish rows had no labels
+
+Three inputs — dish, price, category — stacked on a phone with the column headings hidden,
+leaving them distinguishable only by placeholders, and a placeholder is gone the moment
+somebody types. This is the first screen a new restaurant ever fills in.
+
+They also had no label of any kind, so a screen reader announced "edit text" three times.
+Now labelled, visible below the `sm` breakpoint and carrying the accessible name at every
+width.

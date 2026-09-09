@@ -43,7 +43,7 @@ export default function QrCode({ value, size = 200, label }: {
     <div className="inline-block">
       <div className="rounded-lg overflow-hidden bg-white p-2 mx-auto" style={{ width: size + 16 }}
            dangerouslySetInnerHTML={{ __html: svg }} />
-      <button onClick={download} className="btn btn-sm mt-3">Download SVG</button>
+      <button onClick={download} className="btn btn-sm mt-3 no-print">Download SVG</button>
     </div>
   )
 }
