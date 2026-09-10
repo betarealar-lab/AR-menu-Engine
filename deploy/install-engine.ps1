@@ -37,25 +37,34 @@ $ErrorActionPreference = 'Stop'
 $Repo    = Split-Path -Parent $PSScriptRoot
 $Startup = [Environment]::GetFolderPath('Startup')
 
-# Two processes, because they fail differently and restart independently. The worker does
-# the heavy, memory-hungry work; the bridge does small database passes. One dying should
-# not take the other with it.
+# ONE launcher, for a supervisor that owns both children.
+#
+# It used to be two `sh.Run(..., 0, False)` launchers - fire and forget. If a child
+# exited, nothing restarted it and nothing said so: on 2026-09-10 the bridge died during
+# a network blip and a model request sat at `approved` until somebody thought to look.
+# Starting the installer twice also started a SECOND worker, because nothing stopped what
+# was already running - which is how two workers from two different Python installs ended
+# up claiming the same queue.
+#
+# `deploy/keepalive.py` fixes both: it restarts a child that exits, refuses to run twice
+# (a lock file with a live PID), and writes a heartbeat the developer screen can read.
 $Parts = @(
-  @{ Name = 'worker'
-     Launcher = Join-Path $Startup 'BetaReal-worker.vbs'
-     Script = 'worker.py'
-     Args = @('--generate')
-     Log = Join-Path $Repo 'out\worker.log'
-     Match = '*worker.py*'
-     Does = 'claims generate + optimise jobs off the queue' }
-  @{ Name = 'bridge'
-     Launcher = Join-Path $Startup 'BetaReal-bridge.vbs'
-     Script = 'menu\model_requests.py'
-     Args = @('--watch')
-     Log = Join-Path $Repo 'out\bridge.log'
-     Match = '*model_requests.py*'
-     Does = 'approved request -> queue job -> model on the menu' }
+  @{ Name = 'engine'
+     Launcher = Join-Path $Startup 'BetaReal-engine.vbs'
+     Script = 'deploy\keepalive.py'
+     Args = @()
+     Log = Join-Path $Repo 'out\engine.log'
+     Match = '*keepalive.py*'
+     Does = 'supervises the worker and the bridge, and restarts either if it stops' }
 )
+
+# Launchers from before the supervisor. Removed on upgrade, and their processes stopped,
+# or they would keep claiming the same queue alongside the supervised ones.
+$OldLaunchers = @(
+  (Join-Path $Startup 'BetaReal-worker.vbs'),
+  (Join-Path $Startup 'BetaReal-bridge.vbs')
+)
+$OldMatches = @('*worker.py*', '*model_requests.py*')
 
 # The old single-worker launcher, so an upgrade removes it rather than leaving a second
 # worker running WITHOUT --generate alongside the new one.
@@ -122,6 +131,17 @@ $pythonw = $python -replace 'python\.exe$', 'pythonw.exe'
 if (-not (Test-Path $pythonw)) { $pythonw = $python }
 
 New-Item -ItemType Directory -Force (Join-Path $Repo 'out') | Out-Null
+
+# Before anything starts: clear the pre-supervisor launchers and stop what they left
+# running. Skipping this is how two workers from two different Python installs ended up
+# claiming the same queue - the supervisor would then be a third.
+foreach ($old in $OldLaunchers) { Remove-Item $old -ErrorAction SilentlyContinue }
+foreach ($m in $OldMatches) {
+    Get-Proc $m | ForEach-Object {
+        "  stopping an unsupervised $($m.Trim('*')) (pid $($_.ProcessId))"
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+}
 
 foreach ($p in $Parts) {
     $argLine = ($p.Args | ForEach-Object { $_ }) -join ' '

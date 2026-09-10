@@ -32,6 +32,16 @@ type QueueRow = {
   state: string; note: string; requested_utc: string; minutes_waiting: number
 }
 
+/** The engine saying it is alive. One row, rewritten every 20s by keepalive.py. */
+type Beat = { seen_utc: string; host: string; detail: string }
+
+/** How stale a heartbeat may be before the engine counts as down.
+ *
+ *  Three missed beats rather than one: a 20-second write that happens to land while the
+ *  database is briefly busy is not an outage, and an alert that cries wolf gets ignored,
+ *  which is worse than no alert. */
+const BEAT_STALE_SECONDS = 70
+
 const RANGES: [string, number][] = [['24h', 1440], ['7d', 10080], ['30d', 43200], ['90d', 129600]]
 
 /** Is this request late, and how late - or null when it is fine.
@@ -62,11 +72,45 @@ function lateness(q: { state: string; minutes_waiting: number }): string | null 
   return q.state === 'pending' ? `${how} waiting on us` : `${how} — no engine?`
 }
 
+
+function EngineHealth({ beat }: { beat: Beat | null }) {
+  const age = beat ? Math.max(0, (Date.now() - Date.parse(beat.seen_utc)) / 1000) : null
+  const up = age !== null && age < BEAT_STALE_SECONDS
+
+  const howLong = (s: number) =>
+    s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m`
+      : s < 172800 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86400)}d`
+
+  return (
+    <div className="card p-4 mb-4 flex items-center gap-3 flex-wrap"
+         style={{ borderColor: up ? undefined : 'var(--danger)' }}>
+      <span className={`pill ${up ? 'pill-on' : 'pill-off'}`}>
+        {up ? 'engine up' : 'ENGINE DOWN'}
+      </span>
+      <span className="text-sm" style={{ color: 'var(--dim)' }}>
+        {beat
+          ? <>{beat.detail || '—'} · {howLong(age!)} ago · {beat.host}</>
+          : <>never reported</>}
+      </span>
+      {!up && (
+        // The fix, on the screen, because the person reading this is the person who runs
+        // that command - and at 3am nobody remembers the path.
+        <span className="text-xs ml-auto" style={{ color: 'var(--danger)' }}>
+          Nothing will build until it is back.{' '}
+          <code>powershell -File deploy\install-engine.ps1</code>
+        </span>
+      )}
+    </div>
+  )
+}
+
+
 export default function DevAnalyticsPage() {
   const plan = usePlan()
   const [minutes, setMinutes] = useState(43200)
   const [rows, setRows] = useState<Row[]>([])
   const [queue, setQueue] = useState<QueueRow[]>([])
+  const [beat, setBeat] = useState<Beat | null>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
   const say = useCallback((m: string) => {
@@ -78,12 +122,17 @@ export default function DevAnalyticsPage() {
     if (plan.loading) return
     setLoading(true)
     const supabase = createClient()
-    const [o, q] = await Promise.all([
+    const [o, q, h] = await Promise.all([
       supabase.rpc('admin_overview', { p_minutes: minutes }),
       supabase.rpc('admin_queue'),
+      // Straight off the table: `engine_heartbeat_read` is is_super_admin(), which is
+      // already what this whole screen is.
+      supabase.from('engine_heartbeat').select('seen_utc, host, detail')
+        .eq('id', 'engine').maybeSingle(),
     ])
     setRows((o.data as Row[]) || [])
     setQueue((q.data as QueueRow[]) || [])
+    setBeat((h.data as Beat | null) ?? null)
     setLoading(false)
   }, [plan.loading, minutes])
 
@@ -91,7 +140,6 @@ export default function DevAnalyticsPage() {
 
   // Anything in flight changes without anyone touching it.
   useEffect(() => {
-    if (!queue.some(q => ['pending', 'approved', 'running'].includes(q.state))) return
     const id = setInterval(() => { void load() }, 30_000)
     return () => clearInterval(id)
   }, [queue, load])
@@ -145,6 +193,13 @@ export default function DevAnalyticsPage() {
           </div>
         ))}
       </div>
+
+      {/* Is the engine even running?
+          Above the queue, because it is the first question a stuck request raises and the
+          one nobody could answer without opening a terminal on the machine the engine
+          runs on. On 2026-09-10 a request sat at `approved` while the bridge was dead;
+          the screen said "queued" and nothing anywhere said why. */}
+      <EngineHealth beat={beat} />
 
       {/* The queue. What is stuck, oldest first - a request waiting on us for two days is
           the thing this screen exists to make impossible to miss. */}

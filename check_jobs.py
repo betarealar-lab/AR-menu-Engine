@@ -394,6 +394,98 @@ def main() -> int:
     check("the worker still has the guard the bridge copied",
           "pass failed, continuing" in worker_src)
 
+    # -- the engine comes back on its own ----------------------------------------
+    #
+    # "Press generate and it generates" is the whole product, and it failed on
+    # 2026-09-10 because the engine was two bare processes started once at logon by a VBS
+    # `sh.Run(..., 0, False)`. The machine lost R2 for a while, the bridge exited, and a
+    # request sat at `approved` with idle workers beside it until somebody thought to
+    # look. Nothing restarted it and nothing said so.
+    #
+    # This runs the real supervisor, kills a real child, and asserts it comes back -
+    # which is the only way to know a restart works. Nothing here touches the queue: the
+    # children are the real worker and bridge, but the assertion is only about process
+    # lifetime.
+    print("\n-- a dead child comes back without anybody asking --")
+    import json as _json
+    import subprocess as _sp
+    import time as _time
+
+    import tempfile as _tf
+    root = Path(__file__).resolve().parent
+    keep = root / "deploy" / "keepalive.py"
+    # Its own state directory and its own children. The real worker claims real jobs off
+    # the real queue, so a test that spawned one and then tidied up after itself would be
+    # killing a generation somebody is waiting for. What is under test is the SUPERVISOR.
+    sandbox = Path(_tf.mkdtemp(prefix="keepalive-check-"))
+    state = sandbox / "engine.json"
+    sleeper = "import time; time.sleep(600)"
+    env = {**os.environ,
+           "BETAREAL_KEEPALIVE_OUT": str(sandbox),
+           "BETAREAL_KEEPALIVE_CHILDREN": _json.dumps([
+               {"name": "worker", "argv": ["-c", sleeper], "log": "w.log", "does": "stub"},
+               {"name": "bridge", "argv": ["-c", sleeper], "log": "b.log", "does": "stub"},
+           ])}
+    check("the supervisor exists", keep.exists())
+    src = keep.read_text(encoding="utf-8") if keep.exists() else ""
+
+    # The flag that once killed the bridge at every logon: the installer appends --log to
+    # every launcher it writes, and an unknown flag is an instant, silent exit.
+    check("it tolerates the --log the launcher appends", '"--log"' in src)
+    check("it refuses to run twice", "claim_lock" in src)
+    check("it backs off rather than spinning", "BACKOFF" in src)
+    check("and it says it is alive somewhere a screen can read",
+          "engine_heartbeat" in src)
+
+    sup = _sp.Popen([sys.executable, str(keep)], cwd=str(root), env=env,
+                    stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+    try:
+        kids = {}
+        for _ in range(30):
+            _time.sleep(1)
+            if state.exists():
+                got = _json.loads(state.read_text(encoding="utf-8"))
+                if got.get("pid") == sup.pid or got.get("children"):
+                    kids = got.get("children", {})
+                    if all(c.get("up") for c in kids.values()) and len(kids) >= 2:
+                        break
+        if not check("it starts both children", len(kids) >= 2, str(list(kids))):
+            raise SystemExit  # nothing below can mean anything
+
+        victim = kids["bridge"]["pid"]
+        _sp.run(["taskkill", "/PID", str(victim), "/F"], capture_output=True)
+
+        back = {}
+        for _ in range(40):
+            _time.sleep(1)
+            got = _json.loads(state.read_text(encoding="utf-8"))
+            b = got.get("children", {}).get("bridge", {})
+            if b.get("up") and b.get("pid") != victim:
+                back = b
+                break
+        check("a killed bridge is restarted", bool(back),
+              "it stayed dead - which is the bug this exists to prevent")
+        check("...as a NEW process", back.get("pid") not in (None, victim),
+              f"{victim} -> {back.get('pid')}")
+        check("...and the restart is counted", back.get("restarts", 0) >= 1,
+              str(back.get("restarts")))
+    finally:
+        sup.terminate()
+        try:
+            sup.wait(timeout=10)
+        except Exception:                                     # noqa: BLE001
+            sup.kill()
+        # Children outlive a terminated supervisor on Windows, so clear them by hand
+        # rather than leaving a second engine racing the installed one.
+        try:
+            got = _json.loads(state.read_text(encoding="utf-8"))
+            for c in got.get("children", {}).values():
+                _sp.run(["taskkill", "/PID", str(c["pid"]), "/F"], capture_output=True)
+        except Exception:                                     # noqa: BLE001
+            pass
+        import shutil as _sh
+        _sh.rmtree(sandbox, ignore_errors=True)
+
     print("\n" + "=" * 58)
     bad_names = [n for n, ok, _ in RESULTS if not ok]
     print(f"{len(RESULTS) - len(bad_names)}/{len(RESULTS)} passed")
