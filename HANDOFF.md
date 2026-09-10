@@ -1,13 +1,116 @@
 # Handoff — read this first
 
-Written 2026-08-29, last revised 2026-09-05 (the job queue went in). Everything a fresh session needs that is
+Written 2026-08-29, last revised 2026-09-11 (see STATE below). Everything a fresh session needs that is
 **not** already in the other docs. The other docs carry the reasoning; this one carries the
 state, the environment, and the mistakes already made so they are not made again.
 
-**Read in this order:** this file → `DECISIONS.md` §9 (what the product is, settled by
+**Read in this order:** the STATE block below → `AUDIT.md` and `CUSTOMER.md` (both written 2026-09-09, and the most current picture of the product) → the rest of this file → `DECISIONS.md` §9 (what the product is, settled by
 Temo) → `MENU-PLATFORM.md` (the self-serve half - read before building any of it) →
 `ROADMAP.md` (older, AI-written, partly wrong - see §9.8) → `COMPETITORS.md` (only when
 positioning or pricing comes up).
+
+
+---
+
+# STATE — 2026-09-11
+
+**Read this block, then §1 below.** Everything under it is still true; this is what changed
+in the 2026-09-09/11 session and what to do next. Two companion docs were written then and
+carry the reasoning: **[AUDIT.md](AUDIT.md)** (defects found and fixed, with the checks that
+catch each class again) and **[CUSTOMER.md](CUSTOMER.md)** (what the product is like to
+*use*, and the one thing that still blocks self-serve).
+
+## Where it stands
+
+Both apps deployed and healthy. Working tree clean, `origin/main` = `0fb1a39`.
+
+| | |
+|---|---|
+| menu | `https://betareal-menu.betareal-ar.workers.dev` |
+| admin | `https://betareal-admin.betareal-ar.workers.dev` |
+| engine | supervised by `deploy/keepalive.py`, self-restarting, heartbeat every 20s |
+| super admins | `temotkesho82004@`, `ritardoretard@`, `betareal.ar@` (the last is unused - Temo dropped it) |
+
+**Checks:** `check_admin` 212 · `check_features` 181 · `check_render` 116 · `check_jobs` 70
+· `check_schema` 52 · `check_publish` 25 · admin unit tests 26. `check_admin` needs both dev
+servers running; `check_webhook` needs a master GLB that is not in the repo and cannot run
+here.
+
+## Verified end to end, not assumed
+
+**The whole 3D chain works.** Traced on Corner's live menu: photo → generate → Meshy →
+optimise → R2 → model row → approve → attached to a dish → `public_menu` → the diner's page
+renders `data-is3d`, the badge, the VIEW IN 3D button, and the GLB itself serves
+(**HTTP 200, 3.83 MB, `model/gltf-binary`**).
+
+**The one gap:** nobody has confirmed it *visually renders* in the 3D viewer or AR. Every
+check is static, unit, or HTTP-level. A browser pass is the highest-value unglamorous thing
+left.
+
+## Blocked on Temo
+
+1. **`ANTHROPIC_API_KEY`** in `.env` - the menu importer is scaffolded and switched off
+   without it. See [[betareal-menu-import]] and `CUSTOMER.md` §1.
+2. **Photos of Corner at Tabidze's paper menu** - the agreed test case. Paper means the
+   IMAGE path, which is the one that matters; MG's PDFs have a text layer and would only
+   have tested the easy case.
+
+## Next, in the order Temo set
+
+1. **Corner menu import** - when the key and photos arrive.
+2. **Mobile UI pass** - needs nothing from anybody, can start any time.
+3. **183 dead i18n keys** - sized, safe, explicitly last.
+
+Then, from `CUSTOMER.md` §4: bulk price edit, duplicate a dish, mobile drag-reorder, and a
+"see it as a diner" preview from the menu editor.
+
+## Decisions made, so they are not re-litigated
+
+- **Nothing in R2 is ever deleted.** Orphaned photos and failed generations are kept as
+  training data. A cleanup job would be destroying an asset. `copy_tenant` also shares keys
+  between tenants, so deletion would blank a copy.
+- **No configuration in the product.** No column mapping, no settings screens. *"if a
+  feature needs config to work, that is a signal to use a model instead."* See
+  [[betareal-zero-config-ux]].
+- **No draft/publish for the menu.** Every edit is live instantly, on purpose - fixing a
+  wrong price should be one action, not two. `publications`/`live_publication` are vestigial.
+- **Import model: start on Sonnet 5, measure on Corner, drop to Haiku if quality holds.**
+  Measured on MG's real 170 dishes: ~13-17k output tokens (Georgian tokenises at ~1
+  char/token vs ~4 for latin), ~35k input for 8 photographed pages → **~$0.22 on Sonnet 5,
+  once**. The first real import prints exact usage; decide from that, not from an estimate.
+
+## Traps discovered the hard way
+
+- **Every Python process appears TWICE in the process list.** `WindowsApps\pythonw.exe` is
+  the Microsoft Store alias shim and the real interpreter is its child. Two "workers" is
+  one worker. Check `ParentProcessId` before concluding anything is duplicated.
+- **A check must never spawn the real worker.** It claims real jobs off the real queue, and
+  a test that tidies up after itself is killing a generation somebody is waiting for.
+  `keepalive.py` takes `BETAREAL_KEEPALIVE_CHILDREN` / `_OUT` so the check supervises stubs
+  in its own directory.
+- **Never pipe a deploy through `head`.** It closes the pipe and can SIGPIPE wrangler
+  mid-upload: the assets go up, the Worker script does not, and the site keeps serving the
+  old version while the output looks like success. Check for `Current Version ID`.
+- **`git push` may open a browser account picker.** The remote is HTTPS with Git Credential
+  Manager. A push that hangs for minutes is waiting on that dialog, not on the network.
+- **The installer appends `--log` to every launcher it writes.** Any script it starts must
+  accept that flag or argparse kills it instantly and silently at every logon - which is
+  exactly how the bridge once died.
+- **Supabase only honours a `redirectTo` that matches its Redirect URL list**, else it
+  falls back to Site URL. Both are now set to the deployed admin (fixed 2026-09-11); before
+  that every password reset in the product pointed at `http://localhost:3000`.
+
+## Known and unfixed
+
+- **The engine only starts at logon.** Reboot without signing in and nothing builds.
+  Task Scheduler needs elevation, which is why it lives in the Startup folder. The honest
+  fix is running the engine somewhere that is not Temo's laptop.
+- **`Mgaloblishvili tvishi(Glass)`** carries `price: "28 ₾"` over a Glass of 16 and a Bottle
+  of 48, on the live platform too. The renderer no longer *shows* an impossible price
+  (`cardPrice()` in `markup.js`), but the row still disagrees with itself. Ask the
+  restaurant which number is right.
+- **183 of 417 i18n keys are unreferenced** - copy for the old brands/restaurants admin
+  whose routes were deleted. Safe to remove, deliberately last.
 
 ---
 
