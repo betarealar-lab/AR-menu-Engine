@@ -188,8 +188,46 @@ def saved_fields_survive() -> bool:
     m = re.search(r"export async function saveItem\b.*?const row = \{(.*?)\n  \}", src, re.S)
     if not check("saveItem still builds one row object", m):
         return False
-    written = set(re.findall(r"^\s{4}([a-z_0-9]+):", m.group(1), re.M))
-    written |= {"price_minor", "price_text"}          # spread in as ...price
+    body = m.group(1)
+    written = set(re.findall(r"^\s{4}([a-z_0-9]+):", body, re.M))
+    # Keys written through a SPREAD, resolved rather than listed.
+    #
+    # This line used to be `written |= {"price_minor", "price_text"}  # spread in as
+    # ...price`: a hand-kept set beside a comment naming one helper. When `choices()`
+    # arrived on 2026-09-09 - the sizes-and-extras work - it started spreading `variants`
+    # and `addons` in through the same hole, and this check went red claiming the editor
+    # reads two columns and saves neither. It saves both. So the check was accusing
+    # working code, which is the failure mode that gets a whole suite ignored, and it
+    # stayed red until 2026-09-12 because a false alarm here is indistinguishable from
+    # the real thing it is looking for.
+    #
+    # Resolving the spread covers the next helper without anybody remembering to come
+    # here: a return-type annotation if the function has one, else the keys of the object
+    # literals it returns, and its own spreads followed the same way.
+    def spread_keys(fn: str, depth: int = 0) -> set:
+        if depth > 3:
+            return set()
+        d = re.search(r"function\s+" + re.escape(fn) + r"\b(.*?)\{", src, re.S)
+        if not d:
+            return set()
+        keys = set()
+        ann = re.search(r"\)\s*:\s*\{(.*?)\}", d.group(1), re.S)
+        if ann:
+            keys |= set(re.findall(r"([a-z_0-9]+)\s*:", ann.group(1)))
+        for ret in re.findall(r"\breturn\s*\{(.*?)^\s*\}", src[d.start():], re.S | re.M)[:4]:
+            keys |= set(re.findall(r"^\s*([a-z_0-9]+)\s*[:,]", ret, re.M))
+            for nested in re.findall(r"\.\.\.([a-zA-Z_0-9]+)\(", ret):
+                keys |= spread_keys(nested, depth + 1)
+        return keys
+
+    spreads = re.findall(r"\.\.\.([a-zA-Z_0-9]+)\(", body)
+    check("the row object's spreads can still be followed", bool(spreads),
+          "saveItem spreads nothing - if that is deliberate, drop this check")
+    for fn in spreads:
+        got = spread_keys(fn)
+        check("...%s() names the columns it writes" % fn, bool(got),
+              "could not read any key out of %s()" % fn)
+        written |= got
 
     dropped = [c for c in selected if c not in written and c not in READ_ONLY_ITEM_COLUMNS]
     check("every column the editor reads, saveItem writes back", not dropped,
@@ -317,14 +355,28 @@ def failed_requests_read_honestly() -> None:
     page = re.sub(r"^\s*//.*$", "", page, flags=re.M)
 
     check("a failure is not listed under 'Building'",
-          "const inFlight = requests.filter(r => r.state !== 'failed')" in page
-          and "{inFlight.map(r => (" in page)
-    check("it gets a heading that is true", '"eyebrow mb-3">Did not work<' in page.replace("'", '"')
-          or ">Did not work<" in page)
+          "const inFlight = requests.filter(r => r.state === 'approved' || r.state === 'running')"
+          in page and "{inFlight.map(r => (" in page)
+    # The copy moved. Four of the checks in this function greped `page.tsx` for English
+    # sentences that the i18n pass (AUDIT.md 15) lifted into `i18n.ts` on 2026-09-09, and
+    # they have been red ever since without anybody noticing - HANDOFF.md still recorded
+    # this suite as 212 passing. So each of these now asks the two halves separately: the
+    # SCREEN must reference the key, and the KEY must exist in both languages. That is
+    # also the stronger question, because a sentence hardcoded in the page would satisfy
+    # the old form of the check and be invisible to a Georgian diner's boss.
+    copy = (ADMIN_SRC / "lib" / "i18n.ts").read_text(encoding="utf-8")
+
+    def says(what: str, key: str, sentence: str) -> None:
+        check(what, f"T.{key}" in page and sentence in copy and copy.count(f"{key}:") == 2,
+              f"page refers to it: {f'T.{key}' in page}; "
+              f"definitions: {copy.count(f'{key}:')}; the sentence is still there: "
+              f"{sentence in copy}")
+
+    says("it gets a heading that is true", "studioDidNotWork", "Did not work")
     check("the reason is on screen on a phone too",
           'hidden md:inline' not in page)
-    check("the owner is told the attempt spent a model",
-          "uses another of your free models" in page)
+    says("the owner is told the attempt spent a model", "studioFailedHint",
+         "uses another of your free models")
 
     # The one that must never be added back.
     tail = page.split(">Did not work<", 1)[-1] if ">Did not work<" in page else ""
@@ -340,13 +392,17 @@ def failed_requests_read_honestly() -> None:
     # somebody asking where their model went.
     check("a request that is taking too long says so", "STALE_MINUTES" in page)
     check("...and shows how long it has actually been", "howLong(minutesSince(" in page)
-    check("...with a line that stops claiming it is a few minutes",
-          "taking longer than it should" in page)
-    check("...and tells the owner nothing was lost or double charged",
-          "nothing has been charged twice" in page)
+    says("...with a line that stops claiming it is a few minutes", "studioLate",
+         "taking longer than it should")
+    says("...and tells the owner nothing was lost or double charged", "studioLate",
+         "nothing has been charged twice")
     # `pending` is waiting for a human to approve it, which is a decision, not a symptom.
+    # It used to be filtered out of the late test by name; it is now not in that list at
+    # all, which is the stronger form of the same rule - see pending_is_not_building().
     check("but a request waiting on US is not called late",
-          "r.state !== 'pending'" in page)
+          "const onUs = requests.filter(r => r.state === 'pending')" in page
+          and "r.state === 'pending'" not in page.split("{inFlight.map(r => (", 1)[-1]
+                                                 .split("{onUs.map(r => (", 1)[0])
 
     # The same question on the developer side, where the rule was backwards. The queue
     # warned only on `pending` - the one state legitimately waiting on a human - and said
@@ -359,6 +415,91 @@ def failed_requests_read_honestly() -> None:
           "function lateness(" in dev and "'approved' || q.state === 'running'" in dev)
     check("...and still flags one that is waiting on us", "'pending' ? 60" in dev)
     check("...naming which of the two it is", "no engine?" in dev and "waiting on us" in dev)
+    print()
+
+
+# -- a request that is waiting on US does not claim to be building ---------------------
+#
+# 2026-09-12. A model looked stuck and was not. `sacdeli modelebi` was at 4 of 3 used, so
+# `model_request_gate()` filed the fourth request as `pending` - correctly - and then
+# every screen described it as something else:
+#
+#   the Studio's panel was headed "Building", with an animated finished dish beside it
+#   standing in for progress, and "A few minutes." underneath
+#
+#   the header counted it in "1 building"
+#
+#   the twenty-minute clock deliberately skipped it, so the one honest signal on the row
+#   was a grey pill reading "waiting for us" - four words against a paragraph
+#
+#   and there was no control anywhere in the product that could approve it, so the state
+#   was a dead end. `model_request_gate()` is BEFORE INSERT, so `set_model_quota()` does
+#   not move a row that already exists, and the developer queue - the screen whose stated
+#   purpose is making stuck work impossible to miss - listed it and marked it "3h waiting
+#   on us" above a button that had never been built.
+#
+# So the fix is in two halves and this checks both: the screens stop calling it building,
+# and there is something to click. The database half is in the 3D section.
+
+def pending_is_not_building() -> None:
+    print("== a request over quota says what it is waiting for ==")
+    raw = (ADMIN_SRC / "app" / "(admin)" / "models" / "page.tsx").read_text(encoding="utf-8")
+    page = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+    page = re.sub(r"^\s*//.*$", "", page, flags=re.M)
+
+    check("the header does not count a pending request as building",
+          "const building = requests.filter(r => r.state === 'approved' || r.state === 'running')"
+          in page)
+    check("...and counts it as waiting for us instead",
+          "const onUs = requests.filter(r => r.state === 'pending')" in page
+          and "studioWaitingUsCount" in page)
+    check("it has its own block, with its own heading",
+          "{onUs.length > 0 && (" in page and "studioWaitingUsHeading" in page)
+
+    # The two sentences that must not be the ones under it.
+    onus = (page.split("{onUs.length > 0 && (", 1)[-1].split("{failed.length > 0 && (", 1)[0]
+            if "{onUs.length > 0 && (" in page else "")
+    check("...which does not tell them it is a few minutes",
+          "studioFewMinutes" not in onus)
+    check("...and does not put a progress animation on a thing with no progress",
+          "SampleDish" not in onus)
+    check("the owner is told why it is waiting, naming their own limit",
+          "studioWaitingUsHint" in onus)
+    # Cancel, and nothing else: an owner may write `state`, and only 'pending' and
+    # 'cancelled' (0007). Approving is ours.
+    check("...and can still withdraw it", "cancelRequest" in onus)
+
+    # Same claim, smaller place: the home card's heading, and the first-run wizard.
+    home = (ADMIN_SRC / "app" / "(admin)" / "home" / "page.tsx").read_text(encoding="utf-8")
+    check("the home card's heading follows what is in its list",
+          "r.state === 'pending')" in home and "studioWaitingUsHeading" in home)
+    setup = (ADMIN_SRC / "app" / "(admin)" / "setup" / "page.tsx").read_text(encoding="utf-8")
+    check("and the wizard does not promise a pending first model in a few minutes",
+          "setupStillPendingHint" in setup and "building.state === 'pending'" in setup)
+
+    # Every owner-facing string in both languages. The Georgian half is the half nobody
+    # reads, and it is the half every one of these restaurants actually uses.
+    i18n = (ADMIN_SRC / "lib" / "i18n.ts").read_text(encoding="utf-8")
+    for key in ("studioWaitingUsHeading", "studioWaitingUsCount", "studioWaitingUsHint",
+                "setupStillPendingTitle", "setupStillPendingHint"):
+        check(f"{key} exists in both languages", i18n.count(f"{key}:") == 2,
+              f"{i18n.count(f'{key}:')} definitions")
+
+    # Our side: the control that was missing.
+    dev = (ADMIN_SRC / "app" / "(admin)" / "dev-analytics"
+           / "page.tsx").read_text(encoding="utf-8")
+    check("the developer queue can approve a pending request",
+          "function Approve(" in dev
+          and "{q.state === 'pending' && <Approve" in dev
+          and "'approve_model_request'" in dev)
+    # It is the only button in the product that spends money on a click, in a dense table
+    # next to a "copy" link.
+    approve = dev.split("function Approve(", 1)[-1] if "function Approve(" in dev else ""
+    check("...behind a confirmation that names the cost",
+          "confirm(" in approve and "30 credits" in approve)
+    check("...and only on rows that are pending",
+          "{q.state === 'approved' && <Approve" not in dev
+          and "{q.state === 'failed' && <Approve" not in dev)
     print()
 
 
@@ -723,6 +864,7 @@ def main() -> int:
     if not saved_fields_survive():
         return 1
     failed_requests_read_honestly()
+    pending_is_not_building()
     privileged_routes_are_the_ones_we_meant()
     files_can_get_in()
     nothing_is_only_in_english()
@@ -997,6 +1139,95 @@ def main() -> int:
             "photo_keys": ["t/x/capture/cccc-front.jpg"]})
         check("over quota, a request waits for us instead of running",
               r.ok and r.json()[0]["state"] == "pending", r.text[:120])
+        over_id = r.json()[0]["id"] if r.ok else None
+
+        # ── and then somebody has to be able to say yes ──────────────────────
+        #
+        # Until 0023 `pending` was a dead end. `model_request_gate()` is BEFORE INSERT, so
+        # `set_model_quota()` does not re-evaluate a row that already exists; an owner's
+        # grant reaches only 'pending' and 'cancelled'; and no screen had a control. A
+        # request over quota therefore waited forever on a button nobody had made, while
+        # the owner's Studio said "a few minutes" - which is how it was found.
+        r = sb.rpc(tok, "approve_model_request", {"p_request": over_id})
+        check("an owner cannot approve their own request over quota", not r.ok,
+              f"HTTP {r.status_code} {r.text[:80]}")
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("insert into super_admins (user_id) values (%s) "
+                        "on conflict do nothing", (owner_id,))
+            conn.commit()
+        r = sb.rpc(tok, "approve_model_request", {"p_request": over_id})
+        check("a super admin can", r.ok, r.text[:100])
+        r = sb.get(tok, "model_requests", id=f"eq.{over_id}",
+                   select="state,note,decided_utc")
+        row = r.json()[0] if r.ok and r.json() else {}
+        check("...and the engine may now claim it", row.get("state") == "approved", str(row)[:100])
+        # The note is owner-facing and read "Waiting for us to approve this one." Left
+        # behind it would sit under a row that really is building.
+        check("...with the waiting note cleared and the decision timed",
+              row.get("note") == "" and row.get("decided_utc"), str(row)[:120])
+
+        # Two of us on the developer screen, both clicking Approve on the same row, must
+        # not be two generations and sixty credits.
+        r = sb.rpc(tok, "approve_model_request", {"p_request": over_id})
+        check("clicking approve twice does not order it twice", not r.ok,
+              f"HTTP {r.status_code} {r.text[:80]}")
+
+        # The retry loop 0007 and AUDIT.md 5 both refuse. A failed request already spent
+        # its credits and its photos are the photos that failed; asking again is a new
+        # row, counted again.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("update model_requests set state = 'failed' where id = %s",
+                        (over_id,))
+            conn.commit()
+        r = sb.rpc(tok, "approve_model_request", {"p_request": over_id})
+        check("a failed request is never re-approved", not r.ok, f"HTTP {r.status_code}")
+        r = sb.rpc(tok, "approve_model_request", {"p_request": str(uuid.uuid4())})
+        check("...nor one that does not exist", not r.ok, f"HTTP {r.status_code}")
+
+        # Approving one dish is not granting an allowance. Two functions, two decisions -
+        # a button wired to the wrong one would hand out three more free generations every
+        # time somebody said yes to one.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select model_quota from tenants where id = %s", (tenant_id,))
+            check("and approving a request did not raise the free-model limit",
+                  cur.fetchone()[0] == 0)
+
+        # Temo, 2026-09-12: "for supaadmin there should be no dish limits ofc." The cap in
+        # 0007 protects our credits from a CLIENT; a super admin is the person whose
+        # credits those are, and capping them means queueing for permission from
+        # themselves. The tenant is still at quota 0 here, so a plain owner's request
+        # would be `pending` - the check above proves that on this very tenant.
+        r = sb.post(tok, "model_requests", {
+            "tenant_id": str(tenant_id), "dish": str(uuid.uuid4()), "title": "Ours",
+            "photo_keys": ["t/x/capture/dddd-front.jpg"]})
+        check("a super admin's own request is not held by the quota",
+              r.ok and r.json()[0]["state"] == "approved", r.text[:120])
+        ours_id = r.json()[0]["id"] if r.ok else None
+
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            # Back to a plain owner. Everything after this section - set_model_quota being
+            # refused, the cross-tenant reads - assumes they are not one of us, and
+            # `model_requests_used` on this tenant is asserted as 2 further down, so the
+            # two rows this section added are put back exactly.
+            cur.execute("delete from super_admins where user_id = %s", (owner_id,))
+            cur.execute("update model_requests set state = 'cancelled' where id = %s",
+                        (ours_id,))
+            cur.execute("update model_requests set state = 'pending', "
+                        "note = 'Waiting for us to approve this one.' where id = %s",
+                        (over_id,))
+            conn.commit()
+        r = sb.post(tok, "model_requests", {
+            "tenant_id": str(tenant_id), "dish": str(uuid.uuid4()), "title": "Theirs",
+            "photo_keys": ["t/x/capture/eeee-front.jpg"]})
+        check("...and a plain owner on the same restaurant still is",
+              r.ok and r.json()[0]["state"] == "pending", r.text[:120])
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("update model_requests set state = 'cancelled' where id = %s",
+                        (r.json()[0]["id"] if r.ok else None,))
+            conn.commit()
+            cur.execute("select model_requests_used(%s)", (tenant_id,))
+            check("...and this section left the counter where it found it",
+                  cur.fetchone()[0] == 2)
 
         with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
             cur.execute("""insert into models (tenant_id, title, dish, variant, draco_key)

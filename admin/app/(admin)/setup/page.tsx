@@ -99,9 +99,13 @@ export default function SetupPage() {
           )
         })}
         {building && step !== 'model' && (
-          <span className="pill pill-wait ml-auto">
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--gold)' }} />
-            {T.setupModelBuilding}
+          <span className={`pill ml-auto ${building.state === 'pending' ? 'pill-mute' : 'pill-wait'}`}>
+            {/* No pulse on a pending request: that dot is the only thing on this pill
+                that claims something is happening right now, and nothing is. */}
+            {building.state !== 'pending' && (
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--gold)' }} />
+            )}
+            {building.state === 'pending' ? T.waitPending : T.setupModelBuilding}
           </span>
         )}
         {landed && step !== 'done' && (
@@ -362,12 +366,19 @@ function Done({ plan, landed, building, onFinish }: {
             <a href={`/models${q}`} className="btn btn-primary btn-sm">{T.setupSeeIt}</a>
           </div>
         ) : building ? (
+          /* A first model can only be `pending` on a restaurant whose free-model limit we
+             have set to zero - rare, and it was still told "a few more minutes", with an
+             animated finished dish beside it standing in for progress that does not
+             exist. Same defect as the Studio's Building panel, in the one screen a
+             restaurant sees exactly once. */
           <div className="card p-5 mb-4 grid gap-4 md:grid-cols-[140px_1fr] items-center">
-            <SampleDish height={120} />
+            {building.state === 'pending' ? <span /> : <SampleDish height={120} />}
             <div>
-              <div className="font-semibold">{T.setupStillBuildingTitle}</div>
+              <div className="font-semibold">
+                {building.state === 'pending' ? T.setupStillPendingTitle : T.setupStillBuildingTitle}
+              </div>
               <p className="text-xs" style={{ color: 'var(--dim)' }}>
-                {T.setupStillBuildingHint}
+                {building.state === 'pending' ? T.setupStillPendingHint : T.setupStillBuildingHint}
               </p>
             </div>
           </div>

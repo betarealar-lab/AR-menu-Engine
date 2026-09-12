@@ -123,7 +123,12 @@ export default function StudioPage() {
 
   const left = Math.max(0, quota - used)
   const waiting = models.filter(m => m.state === 'draft' && !m.archived).length
-  const building = requests.filter(r => r.state !== 'failed').length
+  // `pending` is counted separately and not as "building". It is over quota and waiting
+  // on one of us to say yes; no engine has it, and until somebody clicks nothing is
+  // happening at all. Saying "1 building" about it is the header agreeing with a panel
+  // that was already wrong.
+  const building = requests.filter(r => r.state === 'approved' || r.state === 'running').length
+  const onUs = requests.filter(r => r.state === 'pending').length
 
   if (!plan.loading && !plan.restaurantId) {
     return <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</div>
@@ -140,6 +145,7 @@ export default function StudioPage() {
             {waiting > 0 && <> · <span style={{ color: 'var(--gold)' }}>
               {text(T.studioWaitingForYou, { n: waiting })}</span></>}
             {building > 0 && <> · {text(T.studioBuildingCount, { n: building })}</>}
+            {onUs > 0 && <> · {text(T.studioWaitingUsCount, { n: onUs })}</>}
           </p>
         </div>
 
@@ -191,7 +197,7 @@ export default function StudioPage() {
         <PhotoLibrary captures={captures} dishes={dishes} models={models}
                       onContinue={(dish, variant, title) => { setPlateFor({ dish, variant, title }); setView('new') }} />
       ) : (
-        <Library models={models} requests={requests} dishes={dishes}
+        <Library models={models} requests={requests} dishes={dishes} quota={quota}
                  onChanged={load} onSay={say} onStart={() => setView('new')} />
       )}
     </div>
@@ -274,10 +280,11 @@ function PhotoLibrary({ captures, dishes, models, onContinue }: {
 
 // ── the library ──────────────────────────────────────────────────────────────
 
-function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
+function Library({ models, requests, dishes, quota, onChanged, onSay, onStart }: {
   models: TenantModel[]
   requests: ModelRequest[]
   dishes: Dish[]
+  quota: number
   onChanged: () => void
   onSay: (m: string, bad?: boolean) => void
   onStart: () => void
@@ -288,8 +295,17 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
   const shown = models.filter(m => filter === 'hidden' ? m.archived
     : !m.archived && (filter === 'all' || m.state === filter))
   const hiddenCount = models.filter(m => m.archived).length
-  // Two lists, because one called "Building" with a failure in it was a lie about both.
-  const inFlight = requests.filter(r => r.state !== 'failed')
+  // Three lists. It was one, then two, and each split happened because a heading was
+  // describing a row it was not true of.
+  //
+  //   inFlight  an engine has it, or is about to. "Building" is true of these.
+  //   onUs      over quota, waiting for one of us to approve it. Nothing is happening,
+  //             nothing WILL happen until somebody clicks, and no clock on our side is
+  //             running out. Under "Building · A few minutes" this was simply false, and
+  //             it is the row an owner is most likely to read as broken.
+  //   failed    already spent its credits (AUDIT.md 5).
+  const inFlight = requests.filter(r => r.state === 'approved' || r.state === 'running')
+  const onUs = requests.filter(r => r.state === 'pending')
   const failed = requests.filter(r => r.state === 'failed')
 
   return (
@@ -307,15 +323,14 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
                   <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--gold)' }} />
                 )}
                 <span className="flex-1 truncate">
-                  {r.title || 'Dish'}{r.variant !== 'default' ? ` · ${r.variant}` : ''}
+                  {r.title || T.dishWord}{r.variant !== 'default' ? ` · ${r.variant}` : ''}
                   {r.kind === 'rescale' ? ' · resizing' : ''}
                 </span>
                 <span className={`pill ${r.state === 'running' ? 'pill-wait' : 'pill-mute'}`}>
                   {waiting_(T)[r.state]}
                 </span>
                 {minutesSince(r.requested_utc) >= STALE_MINUTES && (
-                  <span className="text-xs whitespace-nowrap"
-                        style={{ color: r.state === 'pending' ? 'var(--dim)' : 'var(--gold)' }}>
+                  <span className="text-xs whitespace-nowrap" style={{ color: 'var(--gold)' }}>
                     {howLong(minutesSince(r.requested_utc))}
                   </span>
                 )}
@@ -327,11 +342,9 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
               </div>
             ))}
           </div>
-          {/* `pending` is excluded on purpose: that one is waiting for US to approve it,
-              which is a decision by a person and not a symptom of anything. Only the two
-              states an engine owns can be late. */}
-          {inFlight.some(r => r.state !== 'pending'
-                           && minutesSince(r.requested_utc) >= STALE_MINUTES)
+          {/* Only the two states an engine owns can be late. `pending` is not in this
+              list at all any more - it has its own block below. */}
+          {inFlight.some(r => minutesSince(r.requested_utc) >= STALE_MINUTES)
             ? <p className="text-[11px] mt-3" style={{ color: 'var(--gold)' }}>
                 {T.studioLate}
               </p>
@@ -339,6 +352,48 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
                 {T.studioFewMinutes}
               </p>}
           </div>
+        </div>
+      )}
+
+      {/* Over quota, waiting on one of us.
+          It used to be in the list above, under "Building", with "A few minutes." beneath
+          it and a grey "waiting for us" pill as the only true thing on the row - and it
+          was counted in the header's "1 building". None of that is a description of this
+          state: no engine has the request, the twenty-minute clock deliberately does not
+          apply to it (it is not late, it is not started), and it will never move on its
+          own. On 2026-09-12 it read as a stuck build, correctly, because the screen said
+          it was a build.
+
+          No SampleDish here, on purpose. That animated finished dish is a progress
+          indicator standing in for a spinner, and there is no progress to indicate. */}
+      {onUs.length > 0 && (
+        <div className="card p-5">
+          <div className="eyebrow mb-3">{T.studioWaitingUsHeading}</div>
+          <div className="grid gap-2">
+            {onUs.map(r => (
+              <div key={r.id} className="flex items-center gap-3 text-sm">
+                <span className="flex-1 truncate">
+                  {r.title || T.dishWord}{r.variant !== 'default' ? ` · ${r.variant}` : ''}
+                </span>
+                {/* How long it has been sitting there, at every age rather than past
+                    twenty minutes. On a build the age is only worth showing once it is
+                    abnormal; here it is the whole state of things, and "3 h" is what an
+                    owner needs in order to decide to chase us. */}
+                <span className="text-xs whitespace-nowrap" style={{ color: 'var(--dim)' }}>
+                  {howLong(minutesSince(r.requested_utc))}
+                </span>
+                <span className="pill pill-mute">{waiting_(T).pending}</span>
+                <button className="btn btn-sm btn-ghost"
+                        onClick={async () => {
+                          const err = await cancelRequest(r.id)
+                          if (err) onSay(err.message, true); else onChanged()
+                        }}>{T.cancel}</button>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] mt-3" style={{ color: 'var(--dim)' }}>
+            {text(T.studioWaitingUsHint, { quota })}
+          </p>
         </div>
       )}
 
@@ -357,7 +412,7 @@ function Library({ models, requests, dishes, onChanged, onSay, onStart }: {
               <div key={r.id} className="grid gap-1">
                 <div className="flex items-center gap-3 text-sm">
                   <span className="flex-1 truncate">
-                    {r.title || 'Dish'}{r.variant !== 'default' ? ` \u00b7 ${r.variant}` : ''}
+                    {r.title || T.dishWord}{r.variant !== 'default' ? ` \u00b7 ${r.variant}` : ''}
                   </span>
                   <span className="pill pill-off">{waiting_(T).failed}</span>
                 </div>

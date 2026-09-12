@@ -223,6 +223,7 @@ export default function DevAnalyticsPage() {
                   : q.state === 'pending' ? 'pill-wait' : 'pill-mute'}`}>
                   {q.state}
                 </span>
+                {q.state === 'pending' && <Approve row={q} onDone={load} onSay={say} />}
               </div>
             ))}
           </div>
@@ -286,6 +287,59 @@ export default function DevAnalyticsPage() {
   )
 }
 
+
+/** Say yes to one request. The control this screen was missing.
+ *
+ *  Until 2026-09-12 `pending` was a dead end with a warning light over it. This screen
+ *  listed the row, marked it "3h waiting on us" after an hour, and offered nothing to
+ *  click; `model_request_gate()` is BEFORE INSERT so raising the quota did not move an
+ *  existing row either, and the owner's own Studio told them "a few minutes". The only
+ *  way to approve anything was a service-key write by hand, which means in practice it
+ *  never happened.
+ *
+ *  **Confirmed, with the number in the sentence.** This is the one button in the product
+ *  that spends money on a click - 30 credits, about 33 a month on the Pro plan - and it
+ *  is a row in a dense table next to a Copy link. A dialog naming the restaurant, the
+ *  dish and the cost is the difference between a decision and a mis-click.
+ *
+ *  **The button is not the rule.** `approve_model_request` is SECURITY DEFINER with
+ *  `is_super_admin()` inside it, and an owner's own grant on `model_requests` reaches
+ *  only 'pending' and 'cancelled' (0007). An owner who reconstructed this call by hand
+ *  gets 42501 from the database.
+ *
+ *  **It does not raise the quota**, deliberately - see 0023. Approving this dish is a
+ *  judgement about one plate of food; raising the limit grants a standing allowance, and
+ *  that is the Quota cell at the end of the row.
+ */
+function Approve({ row, onDone, onSay }: {
+  row: QueueRow; onDone: () => void; onSay: (m: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+
+  async function go() {
+    if (!confirm(`Build ${row.title || 'this dish'} for ${row.tenant_name}?
+
+`
+      + `It spends 30 credits and starts as soon as the engine picks it up. `
+      + `It does not change their free-model limit.`)) return
+    setBusy(true)
+    const { error } = await createClient().rpc('approve_model_request', { p_request: row.id })
+    setBusy(false)
+    if (error) { onSay(`Could not approve it: ${error.message}`); return }
+    // Said as what happens next, not as "done": the row moves to `approved` and then
+    // waits for the bridge, which polls every 30 seconds.
+    onSay(`Approved. ${row.tenant_name} - the engine picks it up within a minute.`)
+    onDone()
+  }
+
+  return (
+    <button type="button" onClick={() => void go()} disabled={busy}
+            className="btn btn-sm btn-primary"
+            title="Approve this request - 30 credits">
+      {busy ? 'approving...' : 'Approve'}
+    </button>
+  )
+}
 
 /** The free-model limit, editable in place.
  *

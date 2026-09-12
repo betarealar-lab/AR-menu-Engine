@@ -460,6 +460,10 @@ const en = {
   setupSeeIt: 'See it',
   setupStillBuildingTitle: 'Your first model is still building.',
   setupStillBuildingHint: 'A few more minutes. It will be in the 3D Studio, waiting for you.',
+  // Only reachable on a restaurant whose free-model limit is zero, which is us setting
+  // it that way - but the wizard said "a few more minutes" to that owner too.
+  setupStillPendingTitle: 'Your first model is waiting for us.',
+  setupStillPendingHint: 'We look at this one before it is built. Carry on - it will be in the 3D Studio when it is done, and nothing has been charged.',
   addressLabel: 'Address',
   setupGoToMenu: 'Go to my menu',
   setupPrintSizes: 'Print sizes are under QR & share.',
@@ -497,6 +501,13 @@ const en = {
   waitRunning: 'building',
   waitFailed: 'did not work',
   studioBuildingHeading: 'Building',
+  // A request over quota is NOT building and never will be until one of us says yes, so
+  // it gets its own heading, its own count and its own explanation. It used to sit under
+  // "Building" with "A few minutes." beneath it, which is a sentence about a machine
+  // printed over a decision a person owes.
+  studioWaitingUsHeading: 'Waiting for us',
+  studioWaitingUsCount: '{n} waiting for us',
+  studioWaitingUsHint: 'You have used all {quota} of your free models, so we look at this one before it is built. Nothing has been charged and nothing is lost while it waits. Tell us if you need it sooner.',
   studioLate: 'This is taking longer than it should — a dish is usually a few minutes. Nothing is lost and nothing has been charged twice. Tell us and we will look at it.',
   studioFewMinutes: 'A few minutes. Nothing goes on the menu until you approve it.',
   studioDidNotWork: 'Did not work',
@@ -1134,6 +1145,8 @@ const ka: typeof en = {
   setupSeeIt: 'ნახვა',
   setupStillBuildingTitle: 'თქვენი პირველი მოდელი ჯერ კიდევ მზადდება.',
   setupStillBuildingHint: 'კიდევ რამდენიმე წუთი. ის 3D სტუდიაში დაგელოდებათ.',
+  setupStillPendingTitle: 'თქვენი პირველი მოდელი ჩვენ გველოდება.',
+  setupStillPendingHint: 'ამ მოდელს აგებამდე ჩვენ ვამოწმებთ. გააგრძელეთ — მზადყოფნისას ის 3D სტუდიაში იქნება და არაფერი ჩამოგეჭრათ.',
   addressLabel: 'მისამართი',
   setupGoToMenu: 'ჩემს მენიუზე გადასვლა',
   setupPrintSizes: 'ბეჭდვის ზომები QR და გაზიარების გვერდზეა.',
@@ -1171,6 +1184,9 @@ const ka: typeof en = {
   waitRunning: 'მზადდება',
   waitFailed: 'ვერ მოხერხდა',
   studioBuildingHeading: 'მზადდება',
+  studioWaitingUsHeading: 'ჩვენ გველოდება',
+  studioWaitingUsCount: '{n} ჩვენ გველოდება',
+  studioWaitingUsHint: 'თქვენ გამოიყენეთ ყველა {quota} უფასო მოდელი, ამიტომ ამ მოდელს აგებამდე ჩვენ ვამოწმებთ. არაფერი ჩამოგეჭრათ და ლოდინის დროს არაფერი იკარგება. თუ უფრო სწრაფად გჭირდებათ, გვაცნობეთ.',
   studioLate: 'ეს ჩვეულებრივზე მეტ დროს იღებს — კერძს ჩვეულებრივ რამდენიმე წუთი სჭირდება. არაფერი დაკარგულა და ორჯერ არაფერი ჩამოგეჭრათ. გვაცნობეთ და გადავამოწმებთ.',
   studioFewMinutes: 'რამდენიმე წუთი. მენიუში არაფერი გამოჩნდება, სანამ არ დაადასტურებთ.',
   studioDidNotWork: 'ვერ მოხერხდა',

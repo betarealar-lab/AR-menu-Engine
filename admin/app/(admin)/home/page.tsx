@@ -97,7 +97,15 @@ export default function HomePage() {
         </div>
 
         <div className="card p-5">
-          <div className="eyebrow mb-2">{T.studioBuildingHeading}</div>
+          {/* The heading follows what is actually in the list. With a `pending` request
+              and nothing else, "Building" is false - that request is over quota and
+              waiting on one of us, and no engine has it. Same fix as the Studio's own
+              panel; this card lists the states per row, so it was the heading alone that
+              was wrong here. */}
+          <div className="eyebrow mb-2">
+            {requests.length > 0 && requests.every(r => r.state === 'pending')
+              ? T.studioWaitingUsHeading : T.studioBuildingHeading}
+          </div>
           {requests.length === 0 && waiting.length === 0 ? (
             <p className="text-sm" style={{ color: 'var(--dim)' }}>{T.homeNothingInProgress}</p>
           ) : (
