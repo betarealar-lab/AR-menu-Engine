@@ -68,8 +68,8 @@ a sold-out tap.
 
 ### The admin was half in English
 
-Covered in [AUDIT.md §15](AUDIT.md) — 127 owner-facing strings had never been through i18n,
-including the whole setup wizard and the whole 3D Studio. Now zero.
+127 owner-facing strings had never been through i18n, including the whole setup wizard and
+the whole 3D Studio. Now zero.
 
 ### A phone could not offer the photo gallery
 
@@ -101,6 +101,14 @@ Over quota, a request goes to `pending` and waits for one of us. That is a delib
 gate — a human decides before thirty credits are spent — but it means the growth path
 from a restaurant's fourth model onward runs through us answering. Fine at two customers.
 It is the second thing to break at twenty.
+
+**Update 2026-09-12: there was nothing to answer *with*.** Approving a pending request was
+not possible anywhere in the product — the gate that decides the state is a BEFORE INSERT
+trigger, so raising the quota does not move a row that already exists, and no screen had a
+button. The developer queue had been marking these rows "waiting on us" above a control
+that did not exist. There is an Approve button now (AUDIT.md §15), and a super admin is no
+longer subject to the quota at all. The *shape* of the problem above is unchanged: at
+twenty restaurants, a person pressing a button per request is still the bottleneck.
 
 ---
 

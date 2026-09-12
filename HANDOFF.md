@@ -12,7 +12,7 @@ positioning or pricing comes up).
 
 ---
 
-# STATE — 2026-09-11
+# STATE — 2026-09-12
 
 **Read this block, then §1 below.** Everything under it is still true; this is what changed
 in the 2026-09-09/11 session and what to do next. Two companion docs were written then and
@@ -22,7 +22,8 @@ catch each class again) and **[CUSTOMER.md](CUSTOMER.md)** (what the product is 
 
 ## Where it stands
 
-Both apps deployed and healthy. Working tree clean, `origin/main` = `0fb1a39`.
+Both apps deployed and healthy. Working tree clean, `origin/main` = `5df7263`
+(admin redeployed 2026-09-12, version `50104eb0`).
 
 | | |
 |---|---|
@@ -31,10 +32,20 @@ Both apps deployed and healthy. Working tree clean, `origin/main` = `0fb1a39`.
 | engine | supervised by `deploy/keepalive.py`, self-restarting, heartbeat every 20s |
 | super admins | `temotkesho82004@`, `ritardoretard@`, `betareal.ar@` (the last is unused - Temo dropped it) |
 
-**Checks:** `check_admin` 212 · `check_features` 181 · `check_render` 116 · `check_jobs` 70
-· `check_schema` 52 · `check_publish` 25 · admin unit tests 26. `check_admin` needs both dev
-servers running; `check_webhook` needs a master GLB that is not in the repo and cannot run
-here.
+**Checks:** `check_admin` **292** · `check_features` 181 · `check_render` 116 ·
+`check_jobs` 70 · `check_schema` 52 · `check_publish` 25 · admin unit tests 26.
+`check_admin` needs both dev servers running; `check_webhook` needs a master GLB that is
+not in the repo and cannot run here.
+
+**This file used to say 212, and that was wrong in the direction that matters.** Measured on
+2026-09-12 by stashing everything and running the suite at `0fb1a39`: **257 passed, 5
+failed.** The number in this file had been stale for days *and* the suite was not green.
+Four of the five greped `models/page.tsx` for English sentences that the i18n pass moved
+into `i18n.ts` on 2026-09-09; the fifth claimed the menu editor reads `variants`/`addons`
+and saves neither, which it does, through a spread the check could not see through. All
+five are fixed and the suite is 292/292. **Read the last line of a suite rather than the
+count in this file**, and if a check has been red for days, that is a check nobody is
+reading.
 
 ## Verified end to end, not assumed
 
@@ -46,6 +57,36 @@ renders `data-is3d`, the badge, the VIEW IN 3D button, and the GLB itself serves
 **The one gap:** nobody has confirmed it *visually renders* in the 3D viewer or AR. Every
 check is static, unit, or HTTP-level. A browser pass is the highest-value unglamorous thing
 left.
+
+## Changed 2026-09-12
+
+**A pending model request can be approved, and no longer claims to be building.** 0023.
+Found by a request that looked stuck and was not: `sacdeli modelebi` at 4 of 3 used, so
+the gate filed it `pending` correctly and then nothing could move it.
+
+- `model_request_gate()` is **BEFORE INSERT**, so raising the quota with
+  `set_model_quota()` does **not** re-evaluate a row that already exists. The obvious
+  remedy does nothing and gives no hint that it did nothing. This is the trap; it is why
+  `approve_model_request()` exists as its own function.
+- `approve_model_request(uuid)` — super admin only, **pending only**. A failed request is
+  never re-approved: it spent its credits and its photos are the photos that failed. It
+  does **not** raise the quota; approving a dish and granting an allowance are two
+  decisions and two functions.
+- **A super admin is no longer held by the quota.** Temo: *"for supaadmin there should be
+  no dish limits ofc."* The cap protects our credits from a client, and a super admin is
+  the person whose credits those are. `auth.uid()` is the whole condition, so the engine —
+  service key, no uid — is unaffected.
+- **The Approve button is on the developer queue**, confirmed, naming the restaurant, the
+  dish and the 30 credits. It is the only button in the product that spends money on a
+  click. The screen had been marking these rows "3h waiting on us" for weeks above a
+  control that had never been built.
+- Owner-facing, both languages: `pending` has its own block, heading, count and
+  explanation, with no progress animation and no "a few minutes". Same on the home card's
+  heading and in the setup wizard.
+
+`app/package.json` pins the dev host: astro bound `::1` only here while
+`NEXT_PUBLIC_MENU_ORIGIN` and `check_admin` both use `127.0.0.1`, so the asset round-trip
+in the suite could not connect. Same shape as the pinned admin port.
 
 ## Blocked on Temo
 
@@ -64,8 +105,17 @@ left.
 Then, from `CUSTOMER.md` §4: bulk price edit, duplicate a dish, mobile drag-reorder, and a
 "see it as a diner" preview from the menu editor.
 
+**One still open from 2026-09-12:** `sacdeli modelebi` has one request sitting in
+`pending`. The Approve button is now there and it costs 30 credits, so it is Temo's click,
+not ours.
+
 ## Decisions made, so they are not re-litigated
 
+- **Over quota is a decision, not a queue.** A request past the free limit goes to
+  `pending` and waits for a super admin to press Approve — a person deciding before 30
+  credits are spent. What was missing until 2026-09-12 was the button; the state itself is
+  deliberate. Raising the quota is the *other* decision and does not retro-approve
+  anything.
 - **Nothing in R2 is ever deleted.** Orphaned photos and failed generations are kept as
   training data. A cleanup job would be destroying an asset. `copy_tenant` also shares keys
   between tenants, so deletion would blank a copy.

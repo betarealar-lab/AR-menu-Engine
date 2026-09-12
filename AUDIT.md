@@ -610,3 +610,90 @@ type and no filename at all.
 
 Fourteen checks in `check_admin.py`, including that no input forces a phone into the camera
 again — proven by putting `capture` back, which names the exact file.
+
+---
+
+## 15. A state with a warning light on it and no button — 2026-09-12
+
+### fixed — `pending` was a dead end, described as a build
+
+A model looked stuck. It was not: `sacdeli modelebi` was at 4 of 3 used, so
+`model_request_gate()` filed the fourth request as `pending`, exactly as designed. Then
+every part of the system described it as something else.
+
+**Nothing could move it.**
+
+- `model_request_gate()` is **BEFORE INSERT**. Raising `model_quota` with
+  `set_model_quota()` does not re-evaluate a row that already exists — so the obvious
+  remedy does nothing, and gives no sign that it did nothing. This is the part worth
+  remembering; it is why the fix is a function per decision rather than one clever one.
+- An owner may write `state`, and only `pending` and `cancelled` (0007). Correct, and it
+  means the restaurant cannot help itself here.
+- And there was no super-admin path at all. `admin_queue()` listed the row; the developer
+  screen — the one whose stated purpose in §11 is *"making a request waiting on us for two
+  days impossible to miss"* — marked it **"3h waiting on us"** after an hour. A clock, over
+  a control nobody had built. The only way to approve anything was a service-key write by
+  hand, which in practice means it never happened.
+
+**And the owner was told it was building.** The panel was headed *Building*, counted in the
+header's "1 building", with `SampleDish` — an animated finished dish standing in for a
+spinner — beside it and *"A few minutes."* underneath. §11 fixed the twenty-minute clock
+for `approved` and `running` and deliberately excluded `pending`, which is right: a pending
+request is not *late*. But the heading and the reassurance were never revisited, so the one
+true thing on the row was a grey pill reading "waiting for us" — four words against a
+paragraph saying the opposite.
+
+This is the same shape as §2. Not a silent failure: **the screen asserts the happy path
+while the thing it describes cannot happen.**
+
+### the fix, in two halves that must stay separate
+
+`approve_model_request(uuid)` — super admin only, **pending only**, one statement so two
+people clicking Approve on the same row is not sixty credits. Not `failed`: that request
+spent its credits and its photos are the photos that failed, which is the retry loop 0007
+and §5 both refuse.
+
+**It does not raise the quota.** Approving this dish is a judgement about one plate of
+food; raising the limit grants a standing allowance over every future request. One button
+wired to both would hand out three more free generations every time somebody said yes to
+one — quietly undoing the cap that 0007 exists to hold.
+
+**A super admin is no longer subject to the quota** (Temo: *"for supaadmin there should be
+no dish limits ofc."*). The cap protects our credits from a client; a super admin is the
+person whose credits those are, and capping them means queueing for permission from
+themselves. `auth.uid()` is the whole condition, so the engine — service key, no uid — is
+unaffected.
+
+Owner-facing, in both languages: `pending` gets its own block, heading, count and
+explanation, with no progress animation and no "a few minutes". Same on the home card's
+heading and in the setup wizard.
+
+### the check that catches the next one
+
+Twenty-one checks in `pending_is_not_building()` plus thirteen on the database half, and
+the useful ones are negative: the pending block must NOT contain `studioFewMinutes` and
+must NOT contain `SampleDish`, and the Approve button must exist only on pending rows.
+Proven red by putting the exact bug back — `state !== 'failed'` for the building filter and
+the pending list emptied.
+
+### and five checks had been red the whole time
+
+Found by running the suite properly rather than trusting the count in `HANDOFF.md`, which
+said 212 and all passing. At `0fb1a39` it was **257 passed, 5 failed.**
+
+- **Four greped a page for copy that had moved.** The i18n pass — *"127 owner-facing
+  strings... Now zero"*, written up in `CUSTOMER.md` §2 — lifted those sentences into `i18n.ts`, and four checks in
+  `failed_requests_read_honestly()` kept looking for them in `models/page.tsx`. They now
+  ask the two halves separately: the screen refers to the key, the key exists in **both**
+  languages. That is the stronger question anyway — a sentence hardcoded in the page would
+  have satisfied the old form and been invisible to a Georgian owner.
+- **One accused working code.** *"read and never saved: variants, addons"* — the editor
+  saves both, through `...choices(form)`. The check kept a hand-written set of spread keys
+  (`written |= {"price_minor", "price_text"}`) beside a comment naming one helper, and the
+  sizes-and-extras work in CUSTOMER §6 added a second. Spreads are resolved now, so the
+  next helper is covered without anybody remembering to come here.
+
+**A check that accuses working code is worse than a missing one.** It is indistinguishable
+from the real thing it is looking for, so the honest response — look into it — costs time
+and finds nothing, and the cheap response is to stop reading the suite. Both of these were
+proven to still go red on the actual defect, not merely made to pass.
