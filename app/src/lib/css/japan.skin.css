@@ -6,25 +6,33 @@
  * the part that makes it look like something. Keeping them apart means re-running the
  * trimmer never overwrites the design.
  *
- * The brief: a clean white page with very small black and red Japanese characters in the
- * background. So the characters are decoration and nothing else - no markup, no images, no
- * font to download, and nothing a screen reader or a diner's finger can reach.
+ * The brief: a clean white page with small black and red Japanese characters in the
+ * background, alternating one and one. So the characters are decoration and nothing else -
+ * no markup, no images, no font to download, and nothing a screen reader or a diner's
+ * finger can reach.
  *
- * **Why the characters are CSS `content` and not an SVG data-URI.** A data-URI SVG is the
- * obvious way to tile a pattern, and it cannot use a webfont - it renders with whatever
- * the SVG engine picks, which for CJK is a coin toss ending in a box per glyph. Text in a
+ * **Why they are CSS `content` and not an SVG data-URI.** A data-URI SVG is the obvious
+ * way to tile a pattern, and it cannot use a webfont - it renders with whatever the SVG
+ * engine picks, which for CJK is a coin toss ending in a box per glyph. Text in a
  * pseudo-element uses the page's own font stack, so the device's CJK font does the work,
  * at zero bytes over the wire.
  *
+ * **Why there are two layers.** A pseudo-element has one colour, so a single string cannot
+ * alternate. Two layers on ONE grid can: the black one carries a character where the red
+ * one carries a space, and the other way round, so what you read is a single run of
+ * characters that alternates black, red, black, red. That only works while their metrics
+ * are identical - same size, same tracking, same line height, same rotation, same string
+ * length - which is why all of it lives in the shared rule below and neither layer
+ * overrides any of it. Change the size on one and the alternation shears apart.
+ *
  * **Why the vocabulary is repeated.** `content` draws one string, once; there is no
- * `repeat()` for it. A single pass of the words below is about one line of 9px text, and
- * the first version of this file shipped exactly that - one line, laid out at the top of a
- * box that starts above the viewport, so the page looked perfectly white and the rule
- * looked broken. It was not: `getComputedStyle` reported the right content, colour and
- * size the whole time, and only a screenshot with the layer temporarily tinted red showed
- * that the text was real and simply ran out. Hence the doubling below - `--jp-ink-x48` is
- * forty-eight passes, enough to fill a wide desktop, and repetitive CJK compresses to
- * almost nothing over the wire.
+ * `repeat()` for it. A single pass is about one line, and the first version of this file
+ * shipped exactly that - one line, laid out at the top of a box that starts above the
+ * viewport, so the page looked perfectly white and the rule looked broken. It was not:
+ * `getComputedStyle` reported the right content, colour and size the whole time, and only
+ * a screenshot with the layer temporarily tinted red showed that the text was real and had
+ * simply run out. Hence the doubling below. It costs almost nothing in the file - each
+ * string appears once and the repeats are `var()` tokens.
  *
  * **The generic `body::before` is left alone**, except to drop its image and sit lower in
  * the stack. It is the fixed background layer the base sheet paints, and it has been lost
@@ -40,30 +48,38 @@
 
 :root[data-template="japan"] {
     /* The two inks. `--jp-red` is the red of a hanko seal rather than a fire-engine red:
-       at 9px and 12% opacity a saturated red reads as pink. */
+       small and pale, a saturated red reads as pink. */
     --jp-ink: #14110f;
     --jp-red: #c0392f;
-    /* How much of the character layers is visible. Low enough that the menu is never
-       competing with the wallpaper - these are the two numbers to change if it reads as
-       busy on a real phone, and deliberately two numbers rather than six. */
-    /* Black leads, red punctuates. The red layer is set at a larger size and a wider
-       line than the black one, so matching their alphas does NOT match their weight -
-       the first pass used 0.11/0.14 and came out pink. */
-    --jp-ink-alpha: 0.16;
-    --jp-red-alpha: 0.09;
+    /* How much of the wallpaper is visible - the two numbers to change if it reads as
+       busy on a real phone. Red sits slightly higher because a mid red on white reads
+       lighter than a near-black does at the same opacity. */
+    --jp-ink-alpha: 0.13;
+    --jp-red-alpha: 0.15;
 
-    /* The vocabulary, written once. Food and the words around it for the black layer;
-       shorter, statelier characters for the red one, so the two layers do not read as the
-       same text twice. */
-    --jp-words-ink: "寿司 刺身 天ぷら 味噌 醤油 山葵 海苔 出汁 米 茶 酒 焼 鮭 鮪 海老 蟹 鰻 蕎麦 饂飩 丼 椀 箸 皿 膳 旬 旨 和 食 料理 板前 職人 包丁 炭火 七輪 湯気 香 味 塩 酢 甘 辛 苦 春 夏 秋 冬 花 風 月 雪 山 川 海 空 光 影 静 動 間 道 心 気 禅 侘 寂 雅 粋 幸 福 祭 祝 縁 結 夢 希 望 志 誠 信 真 美 麗 優 柔 剛 健 泰 安 寧 悠 久 永 遠 ";
-    --jp-words-red: "円 和 心 華 雅 粋 匠 極 鮮 活 旬 膳 宴 祝 縁 寿 福 禄 樂 舞 桜 椿 菊 藤 松 竹 梅 鶴 亀 龍 虎 鯉 燕 蝶 蛍 星 月 陽 雲 雨 霧 波 潮 岩 苔 庭 灯 提 暖 簾 障 子 畳 湯 釜 鉄 瓶 盃 徳 利 器 陶 磁 漆 金 銀 朱 墨 筆 紙 印 判 章 ";
+    /* The vocabulary, split across the two layers rather than written twice.
 
-    /* Doubling rather than forty-eight `var()`s on one line. A custom property
-       substitutes a token stream, so each of these is genuinely the one above it, four
-       times over, and the vocabulary itself still appears exactly once in this file. */
+       Cell 0 is black, cell 1 is red, cell 2 is black, and so on: each string carries its
+       own half of the run and an ideographic space where the other layer's character
+       goes. No character appears in both, so what you read is one sequence of different
+       characters that happens to alternate colour - not one sequence printed twice.
+
+       U+3000 and not a normal space, deliberately: CSS collapses runs of U+0020 and trims
+       them at the end of a line, which would shift one layer against the other by a cell
+       and break the alternation exactly where the lines wrap. U+3000 is a character, and
+       is neither collapsed nor trimmed.
+
+       Generated from ONE list of 166 kanji, so the two halves cannot drift apart, and the
+       list is kept to an even length - an odd one would swap the colours on every pass. */
+    --jp-words-ink: "寿　刺　天　羅　噌　油　葵　苔　汁　茶　焼　鮪　老　鰻　麦　椀　皿　旬　和　料　板　職　包　炭　七　湯　香　塩　甘　苦　夏　冬　風　雪　川　空　影　動　道　気　侘　雅　幸　祭　縁　夢　望　誠　真　麗　柔　健　安　悠　永　円　匠　鮮　宴　樂　桜　菊　松　梅　亀　虎　燕　蛍　陽　雨　波　岩　庭　簾　畳　鉄　盃　利　陶　漆　銀　墨　紙　";
+    --jp-words-red: "　司　身　婦　味　醤　山　海　出　米　酒　鮭　海　蟹　蕎　丼　箸　膳　旨　食　理　前　人　丁　火　輪　気　味　酢　辛　春　秋　花　月　山　海　光　静　間　心　禅　寂　粋　福　祝　結　希　志　信　美　優　剛　泰　寧　久　遠　華　極　活　禄　舞　椿　藤　竹　鶴　龍　鯉　蝶　星　雲　霧　潮　苔　灯　障　釜　瓶　徳　器　磁　金　朱　筆　印";
+
+    /* Doubling rather than thirty-two `var()`s on one line. A custom property substitutes
+       a token stream, so each of these really is the one above it four times over, and
+       the vocabulary still appears exactly once in this file. */
     --jp-ink-x4:  var(--jp-words-ink) var(--jp-words-ink) var(--jp-words-ink) var(--jp-words-ink);
     --jp-ink-x16: var(--jp-ink-x4) var(--jp-ink-x4) var(--jp-ink-x4) var(--jp-ink-x4);
-    --jp-ink-x48: var(--jp-ink-x16) var(--jp-ink-x16) var(--jp-ink-x16);
+    --jp-ink-x32: var(--jp-ink-x16) var(--jp-ink-x16);
 
     --jp-red-x4:  var(--jp-words-red) var(--jp-words-red) var(--jp-words-red) var(--jp-words-red);
     --jp-red-x16: var(--jp-red-x4) var(--jp-red-x4) var(--jp-red-x4) var(--jp-red-x4);
@@ -72,10 +88,15 @@
 
 /* ── the characters ────────────────────────────────────────────────────────────── */
 
-/* Both layers share this. `inset: -10%` oversizes the box so the small rotation cannot
-   pull an empty corner into view, and `position: fixed` keeps the pattern still while the
-   menu scrolls over it - one paint, no repaint on scroll, which is the reason this is not
-   a repeating background image. */
+/* EVERYTHING that decides the grid lives here, in the rule the two layers share. They
+   differ in exactly three things - their string, their colour and their stacking order -
+   and that is what keeps them interleaved instead of sheared.
+
+   `inset: -10%` oversizes the box so the small rotation cannot pull an empty corner into
+   view. `position: fixed` keeps the pattern still while the menu scrolls over it: one
+   paint, no repaint on scroll, which is the reason this is not a repeating background
+   image. `text-align: left`, not justify - justification distributes slack per line, and
+   two layers given different amounts of slack stop lining up. */
 :root[data-template="japan"]::after,
 :root[data-template="japan"] body::after {
     content: "";
@@ -87,6 +108,7 @@
     overflow: hidden;
     white-space: normal;
     word-break: break-all;
+    text-align: left;
     /* The device's own CJK font. Named explicitly rather than left to `sans-serif`,
        because a generic sans may have no kanji at all and would draw a column of tofu
        boxes. If none of these exist the layer is empty, which is a white page - the
@@ -95,53 +117,45 @@
                  "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo",
                  "Microsoft YaHei", sans-serif;
     font-weight: 400;
-    text-align: justify;
+    /* Twice the 9px the first version used. Still small enough to read as texture rather
+       than as words - a diner should notice the page has a texture, not start reading the
+       wall. */
+    font-size: 18px;
+    line-height: 2.1;
+    letter-spacing: 0.22em;
+    transform: rotate(-1.2deg);
 }
 
-/* The black layer. 9px with wide tracking: small enough to read as texture rather than as
-   words, wide enough that characters stay distinct instead of smearing into a grey band. */
 :root[data-template="japan"] body::after {
-    content: var(--jp-ink-x48);
-    font-size: 9px;
-    line-height: 2.2;
-    letter-spacing: 0.42em;
+    content: var(--jp-ink-x32);
     color: var(--jp-ink);
     opacity: var(--jp-ink-alpha);
-    transform: rotate(-1.5deg);
     z-index: -1;
 }
 
-/* The red layer. Wider tracking and a taller line, turned the other way, so the two grids
-   never agree - which is what stops it looking printed and makes the red read as
-   scattered through the black rather than sitting under it. */
 :root[data-template="japan"]::after {
     content: var(--jp-red-x32);
-    font-size: 11px;
-    line-height: 3.4;
-    letter-spacing: 0.9em;
     color: var(--jp-red);
     opacity: var(--jp-red-alpha);
-    transform: rotate(1.2deg);
     z-index: -2;
 }
 
-/* A phone is a third of the width, so the same tracking gives a third of the characters
-   per line and the pattern turns into stripes. Tighter here, and one step smaller. */
+/* A phone is a third of the width, so the same size gives a third of the characters per
+   line and the texture coarsens. One step down, on BOTH layers together - the grid is
+   shared, so anything that changes size has to change it for both or the alternation
+   breaks. */
 @media (max-width: 520px) {
+    :root[data-template="japan"]::after,
     :root[data-template="japan"] body::after {
-        font-size: 8px;
-        letter-spacing: 0.3em;
+        font-size: 14px;
+        letter-spacing: 0.16em;
         line-height: 2;
-    }
-    :root[data-template="japan"]::after {
-        font-size: 9px;
-        letter-spacing: 0.6em;
-        line-height: 2.8;
     }
 }
 
 /* Somebody who has asked their phone to stop moving things has not asked for a tilted
-   wallpaper either. The characters stay; the rotation goes. */
+   wallpaper either. The characters stay; the rotation goes - and it goes on both, or they
+   shear apart. */
 @media (prefers-reduced-motion: reduce) {
     :root[data-template="japan"]::after,
     :root[data-template="japan"] body::after {
