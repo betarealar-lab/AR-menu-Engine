@@ -243,7 +243,8 @@ class MeshyEngine(Engine):
             res.retryable = True
             return res
 
-    def collect(self, task_id: str, dish: str, out_dir: Path) -> Result:
+    def collect(self, task_id: str, dish: str, out_dir: Path,
+                on_stage=None) -> Result:
         """Ask Meshy about a ticket and download the files if they are ready.
 
         **The webhook is never trusted for content.** Meshy documents no signature, no
@@ -300,6 +301,12 @@ class MeshyEngine(Engine):
             # master whatever container it is written in, and every format a diner
             # loads is derived from that one GLB by our own pipeline - which is the only
             # way the decimation, the textures and the real-world scale reach it.
+            # Generation is over; everything from here is transfer. Say so: this is
+            # the point the caller's record still reads "generating 94%" while a
+            # 120-140 MB file comes down a home connection, which is the difference
+            # between "nearly done" and "stuck" to whoever is watching.
+            if on_stage:
+                on_stage("downloading the model")
             for fmt in ("glb",):
                 url = (task.get("model_urls") or {}).get(fmt)
                 if url:

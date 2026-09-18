@@ -206,7 +206,16 @@ def resume(task_id: str, out_dir: Path, default_engine: str) -> str:
             return DONE                  # already collected; a duplicate delivery
         engine = engines.build(rec.get("engine") or default_engine)
         tmp.mkdir(parents=True, exist_ok=True)
-        res = engine.collect(task_id, key[0], tmp)
+        # Advisory only, and deliberately cheap: one small write when the phase
+        # changes, not a progress bar. `resume` is where a dish spends the minutes
+        # nobody can see, so it is where the label has to be honest.
+        def say_stage(name: str) -> None:
+            r = dataset.record(dish, variant)
+            if r.get("status") == "running":
+                r["stage"] = name
+                dataset.write(r)
+
+        res = engine.collect(task_id, key[0], tmp, on_stage=say_stage)
         if res.pending:
             rec = dataset.record(dish, variant)
             if res.expires_utc:

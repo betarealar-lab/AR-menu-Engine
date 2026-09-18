@@ -84,7 +84,16 @@ class Engine:
         """Submit and return immediately. `task_id` is set; `files` is empty."""
         raise NotImplementedError
 
-    def collect(self, task_id: str, dish: str, out_dir: Path) -> Result:
+    def collect(self, task_id: str, dish: str, out_dir: Path,
+                on_stage=None) -> Result:
+        """Ask about a ticket and bring back the files if they are ready.
+
+        `on_stage(str)` is optional and advisory: call it when the phase changes, so a
+        caller can tell somebody what is happening. The one that matters is the switch
+        from waiting to DOWNLOADING - a finished master is 120-140 MB, which is minutes
+        on a home connection, and a screen that still says "generating 94%" through all
+        of it looks stuck on work that is already done.
+        """
         """Ask the engine about a ticket and download whatever is ready.
 
         `ok` means finished and downloaded. `error` set means finished badly. Neither
