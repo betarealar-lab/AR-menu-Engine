@@ -124,17 +124,31 @@ def reconcile(dry: bool = False) -> int:
     return queued
 
 
-def capability(generate: bool):
+def capability(generate: bool, optimise: bool = True):
     """What this host will claim.
 
     Optimise is gated on the real memory ceiling, exactly as it is on the Studio - on a
     desktop `limits.budget_mb()` is None and everything passes, but the same worker in a
     small container would correctly skip what it cannot finish.
+
+    **`optimise=False` is what makes two workers on one machine worth running.** A worker
+    is one thread doing one job at a time, and the two kinds of job are nothing alike:
+    collecting a finished generation is a 120-140 MB download that holds the thread for
+    minutes doing nothing but wait on a socket, while optimising is CPU and ~650 MB of
+    memory. With one worker claiming both, every optimise queues behind a download - four
+    dishes take four times as long as they need to, and the step that actually produces
+    the file a diner loads is the one that waits.
+
+    Two processes, one claiming only generation and one only optimise, run those phases
+    in parallel without touching the queue's design: claims are already atomic, so this
+    is a deployment choice rather than a new mechanism.
     """
     def can_run(job: jobs.Job) -> str:
         if job.kind == "generate" and not generate:
             return ("generation belongs on the host the webhook can reach; "
                     "pass --generate to override")
+        if job.kind == "optimise" and not optimise:
+            return "this worker is generation-only (--no-optimise)"
         return pipeline.can_run(job)
     return can_run
 
@@ -167,6 +181,10 @@ def main() -> int:
     ap.add_argument("--generate", action="store_true",
                     help="also claim generation. Off by default: without a reachable "
                          "webhook this host waits out the whole ~175 s call")
+    ap.add_argument("--no-optimise", dest="optimise", action="store_false",
+                    help="claim NOTHING but generation. Pair with a second worker that "
+                         "has neither flag, and the download of one dish stops blocking "
+                         "the optimise of another")
     ap.add_argument("--log", type=Path, default=None,
                     help="append output here as well - used when started at logon, "
                          "where there is no console to print to")
@@ -194,13 +212,14 @@ def main() -> int:
     print(f"  storage : {storage.describe()}")
     print(f"  optimizer: {optimize.describe()}")
     print(f"  memory  : {limits.describe()}")
-    print(f"  claims  : optimise" + (" + generate" if a.generate else ""))
+    claims = [k for k, on in (("optimise", a.optimise), ("generate", a.generate)) if on]
+    print(f"  claims  : {' + '.join(claims) if claims else 'NOTHING - check the flags'}")
     if storage.backend().kind != "r2":
         print("\n  !! Storage is local disk, so this cannot see what the hosted Studio")
         print("     produced. Check .env has the R2 keys.")
     print()
 
-    can_run = capability(a.generate)
+    can_run = capability(a.generate, a.optimise)
     a.out.mkdir(parents=True, exist_ok=True)
 
     if a.once or a.dry_run:

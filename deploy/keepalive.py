@@ -78,11 +78,34 @@ def children_spec() -> list[dict]:
     return CHILDREN
 
 
+# TWO workers, and the split is the point.
+#
+# A worker is one thread running one job to completion. The two kinds of job are nothing
+# alike: collecting a finished generation is a 120-140 MB download that holds the thread
+# for minutes waiting on a socket, and optimising is CPU plus ~650 MB of memory. One
+# worker claiming both means every optimise queues behind a download - so four dishes
+# submitted together finish one after another, and the step that actually produces the
+# file a diner loads is the one left waiting.
+#
+# Measured on 2026-09-18, four dishes: two masters sat in `optimising / queued` for nine
+# and three minutes while the single worker was inside `_download` on a third.
+#
+# Splitting them needs nothing from the queue - claims have been atomic since ROADMAP 1.1
+# - so this is a deployment choice, not a new mechanism.
+#
+# **Why not three or four.** Optimise is the memory-hungry half and a raw master peaks
+# around 650 MB, so a second optimise worker is a real risk on a laptop that is also
+# running a browser. One of each is the honest ceiling here; the queue would happily feed
+# more on a machine that has the RAM.
 CHILDREN = [
-    {"name": "worker",
-     "argv": ["worker.py", "--generate"],
-     "log": "worker.log",
-     "does": "claims generate + optimise jobs off the queue"},
+    {"name": "worker-gen",
+     "argv": ["worker.py", "--generate", "--no-optimise"],
+     "log": "worker-gen.log",
+     "does": "submits generations and collects finished masters"},
+    {"name": "worker-opt",
+     "argv": ["worker.py"],
+     "log": "worker-opt.log",
+     "does": "optimises masters into the files a diner loads"},
     {"name": "bridge",
      "argv": ["menu/model_requests.py", "--watch"],
      "log": "bridge.log",

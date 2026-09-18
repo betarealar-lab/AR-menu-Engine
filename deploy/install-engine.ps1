@@ -55,7 +55,7 @@ $Parts = @(
      Args = @()
      Log = Join-Path $Repo 'out\engine.log'
      Match = '*keepalive.py*'
-     Does = 'supervises the worker and the bridge, and restarts either if it stops' }
+     Does = 'supervises the two workers and the bridge, restarting any that stops' }
 )
 
 # Launchers from before the supervisor. Removed on upgrade, and their processes stopped,
