@@ -12,6 +12,82 @@ positioning or pricing comes up).
 
 ---
 
+# STATE — 2026-09-18
+
+**Read this block first.** What changed on 2026-09-18, then the 09-12 block below it,
+which is still true except where this says otherwise.
+
+## The BetaReal library (0024)
+
+`models.shared` — a model may be pointed at from ANY tenant. A flag, not a place: the
+model stays with the restaurant that made it, and the item still holds a pointer, so one
+fix fixes every menu using it.
+
+- **Only a super admin may set it.** `models_shared_guard` refuses everyone else on
+  INSERT as well as UPDATE. A trigger rather than column grants, because `models_rw` hands
+  an owner every future column for free and a re-granted column list breaks silently the
+  first time somebody adds one.
+- **Shared rows are readable by anyone signed in** (`models_shared_read`). Not a
+  convenience: a restaurant borrowing a model must be able to resolve the one on its own
+  dish, or its admin shows a 3D dish as having no 3D while diners see the 3D fine.
+- **Both publish paths learned the same rule** — `public_menu()` in SQL (the live page)
+  and `compile_snapshot()` in Python (the snapshot). A model from another restaurant that
+  is NOT shared still never publishes; that pair of checks in `check_publish.py` is the
+  tenancy rule.
+- **3D Studio → BetaReal library tab**, super admins only: every shared model, the
+  restaurant it came from, and a dish to attach it to. Attaching acts on the restaurant
+  selected at the top of the page — there is deliberately no second picker.
+- **Nothing is in the library yet.** Every model today belongs to a real restaurant, and
+  putting a paying client's dish into stock is a person's decision, not a script's.
+
+## JAPAN — the first template that is ours (0025)
+
+`full.css` has no rules for it, so `trim_css.py` emits the generic structural base and the
+look lives in **`app/src/lib/css/japan.skin.css` — the only hand-written sheet in that
+directory.** White paper, one seal red, and a background of very small black and red
+Japanese characters drawn as CSS `content` (the device's own CJK font, nothing downloaded).
+
+`menu/seed_japan.py` builds the demo menu: 18 dishes, 5 categories, English and Georgian,
+idempotent, and it never writes `model_id` so a re-run cannot detach an attached model.
+
+**A trap, if you write another template.** `content` draws one string once and there is no
+`repeat()`. One pass of the vocabulary is about one line of 9px text, laid out at the top
+of a box that starts above the viewport — so the first version rendered a perfectly white
+page while `getComputedStyle` reported the right content, colour and size the whole time.
+Only a screenshot with the layer tinted red showed the text was real and had run out.
+Hence the `--jp-ink-x48` doubling. **The 2026-07-03 lesson again: look at a screenshot.**
+
+## 0026 — the two renderers disagreed about a template's palette
+
+Found by putting the first restaurant on a template whose `defaults` are not empty.
+`compile_snapshot` merged `templates.defaults` under `tenants.theme`; `public_menu` returned
+the tenant's theme alone — and `public_menu` is what the live page calls. Both existing
+templates ship `defaults = '{}'`, so the two paths had agreed by coincidence on a value of
+zero. Fixed; nothing changes for any tenant that existed before.
+
+## Logs are line-buffered now
+
+`menu/model_requests.py` and `worker.py` reconfigure stdout/stderr at startup. Under
+`keepalive.py` stdout is an inherited file handle, which Python block-buffers at 8 KB: the
+bridge writes ~40 bytes a pass, so **`out/bridge.log` ran about two hundred passes — over
+an hour — behind the process, and the file's mtime lagged with it.** During an incident on
+09-18 that read exactly like a hung process, and force-killing it discarded the buffer that
+held the reason. `install-engine.ps1 -Status` greps that file's last sixty lines.
+
+**Still true and still unsolved:** keepalive judges a child by `p.poll() is None` — has it
+exited — and the `engine_heartbeat` row repeats that same liveness opinion, so a bridge
+that is alive and doing nothing useful reads as healthy everywhere. The three fixes that
+would close it: the bridge writes its own heartbeat (last *successful* pass), the "no
+engine?" warning keys off that, and an `approved` request with no job after N minutes is
+an alert.
+
+**Checks:** `check_admin` **292** · `check_features` 181 · `check_render` 116 ·
+`check_jobs` 70 · `check_schema` **58** · `check_publish` **29** · admin unit tests 26.
+All green on 2026-09-18, both apps build, menu Worker deployed
+(`3ff74024-5208-4dc3-bfa9-f5ac8761d74a`).
+
+---
+
 # STATE — 2026-09-12
 
 **Read this block, then §1 below.** Everything under it is still true; this is what changed
