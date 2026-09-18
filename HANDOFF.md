@@ -12,6 +12,48 @@ positioning or pricing comes up).
 
 ---
 
+# STATE — 2026-09-18 (later)
+
+## A 3D model has now been seen rendering, in a card, by a person
+
+The gap the 09-12 block calls "the one gap" is closed. Three of Food & Market's Japanese
+models are on `/japan`, with no photograph anywhere, and all three draw live in their
+thumbnails - screenshotted, not inferred. Every check before this was static, unit or
+HTTP-level.
+
+## The card renderer: when the model IS the picture
+
+`markup.js` decided a card had media with `!item.model && !item.thumbnail_url`, and made a
+thumbnail live with `is_3d && thumb_3d && model`. A dish with a model and no photo
+therefore fell between the two: it got a picture slot, and the slot was
+`<img class="thumb-img">` **with no `src`** - a broken-image icon, on the feature the
+product is sold on. `thumb_3d` is off by default, so this was the default state of any
+scanned dish nobody photographed.
+
+Now: a model counts as something to draw only when `is_3d` is on (a model with `is_3d`
+off is the owner choosing a photo dish), a card is a text row when it has neither, and a
+thumbnail goes live when the owner asked **or when there is no photo to prefer** - the
+same rule the platform settled on. The `<img>` keeps a 43-byte inline transparent pixel,
+because `_upgradeThumb` finds its targets with `.thumb-img[data-model]` and the ported
+viewer is not ours to edit. Nine checks in `check_features` (190), including the pair that
+differ by one flag: model + no photo draws 3D, model + 3D off + no photo is text.
+
+## JAPAN is three dishes with models, and nothing else
+
+`menu/seed_japan.py` imports Food & Market's three Japanese models by URL - `external_glb`
+/ `external_usdz`, the files are not copied - and **deletes every dish that has no model**
+on each run. `source_ref` is `food-market-main:<their item id>`, which is what that column
+is for: it identifies the source row so an import can run twice.
+
+Read through `menu/import_live.py`, the same public endpoint a diner's phone uses. Nothing
+of Niko's was written to (DECISIONS §9.7). `ar_scale` is carried per model - Crab Uramaki
+is 0.6, and dropping it would put the dish on a table at the wrong size.
+
+**Checks:** `check_admin` 292 · `check_features` **190** · `check_render` 116 ·
+`check_jobs` 70 · `check_schema` **60** · `check_publish` 29 · admin unit 26.
+
+---
+
 # STATE — 2026-09-18
 
 **Read this block first.** What changed on 2026-09-18, then the 09-12 block below it,

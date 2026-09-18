@@ -113,6 +113,18 @@ MENU = {
         # a fixture rather than a query.
         item(id="h", name_en="Quicklook", category_id="c2",
              thumbnail_url="https://x/h.webp", model_usdz="/a/h.usdz", is_3d=True),
+        # **A model and no photo at all.** The case this whole rule exists for: an owner
+        # who scanned a dish and never uploaded a picture of it. It used to emit
+        # `<img class="thumb-img">` with no `src`, which every browser draws as a broken
+        # image, on the product's headline feature - and `thumb_3d` is off here, which is
+        # the default, so the old `is_3d && thumb_3d && model` never made it live either.
+        item(id="scan", name_en="Scanned", category_id="c2", model="/a/scan.glb",
+             model_usdz="/a/scan.usdz", is_3d=True, thumb_3d=False),
+        # ...and the same dish with 3D switched off. Now there is nothing to draw at all -
+        # no photo, and a model the owner has said not to show - so it is a text row. This
+        # is the pair: one flag apart, two different shapes.
+        item(id="scanoff", name_en="Scanned but off", category_id="c2",
+             model="/a/scanoff.glb", is_3d=False, thumb_3d=False),
         # A price no size offers. Monday Greens has exactly this - Mgaloblishvili Tvishi
         # advertises 28 over a Glass of 16 and a Bottle of 48, and the basket charges 16.
         # The same rows are on the live platform, so it is not an import error.
@@ -306,6 +318,39 @@ def main() -> int:
     for part in ['class="qty-ctrl"', 'class="qty-stepper"', 'class="qty-dec"',
                  'class="qty-inc"', 'class="qty-num"']:
         check(f"the stepper has its {part.split('=')[1]}", part in html)
+
+    # ── 3b. what a card draws when there is no photo ─────────────────────────────────
+    print()
+    print("-- the thumbnail slot, when the model IS the picture --")
+    card = lambda did: (re.search(r'<div class="menu-item[^"]*"[^>]*data-id="%s".*?(?=<div class="menu-item|$)' % did,
+                                  html, re.S) or [""])[0]
+    scanned, off = card("scan"), card("scanoff")
+
+    check("a dish with a model and no photo still gets a picture slot",
+          'class="menu-item no-image"' not in scanned.split(">")[0] + ">",
+          scanned[:70])
+    check("...and it is the MODEL that fills it",
+          'data-model="/a/scan.glb"' in scanned, "no data-model on the thumb")
+    check("...even though thumb_3d is off, because there is no photo to prefer",
+          'data-model' in scanned)
+    # The actual defect, stated as the thing a diner sees.
+    check("...and it never emits an <img> with no src",
+          '<img class="thumb-img" src="' in scanned and 'src=""' not in scanned)
+    check("...the placeholder is inline, not a request",
+          'src="data:image/gif;base64,' in scanned)
+
+    check("a dish with a model, 3D off and no photo is a TEXT row",
+          'class="menu-item no-image"' in off, off[:80])
+    check("...and claims no 3D", 'data-is3d' not in off)
+
+    # The two that were already right, restated here so a future edit to the rule has to
+    # keep them right: a photo with thumb_3d off stays a photo, and on becomes live.
+    photo_off = card("c")
+    check("a photo dish with a model and 3D off keeps its photo",
+          'src="https://x/c.webp"' in photo_off and 'data-model' not in photo_off)
+    live_on = card("a")
+    check("a photo dish with thumb_3d ON is still upgraded",
+          'data-model="/a/a.glb"' in live_on and 'src="https://x/a.webp"' in live_on)
 
     # ── 4. sizes and add-ons ─────────────────────────────────────────────────────────
     print("\n-- sizes and add-ons --")

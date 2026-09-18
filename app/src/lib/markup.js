@@ -201,6 +201,16 @@ function addons(item, lang) {
  *  file. Starts as the cart icon; `_syncQtyCtrl` swaps in the stepper the moment the dish
  *  is in the basket, and does it to every copy of this control on the page at once (the
  *  card, the 3D modal and the lightbox share a `data-idx`, so they cannot disagree). */
+/** A 1x1 transparent GIF, for a thumbnail slot whose picture is the 3D model itself.
+ *
+ *  An `<img>` with no `src` is a broken-image icon in every browser - which is what a dish
+ *  with a model and no photo drew, until `_upgradeThumb` replaced it, and forever if the
+ *  deferred bundle never arrived. The alternative was to emit something other than an
+ *  `<img>`, but the ported viewer finds its targets with `.thumb-img[data-model]` and the
+ *  ported viewer is not ours to edit. */
+const BLANK_PIXEL =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
 const CART_SVG =
   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
   ' stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -226,13 +236,25 @@ function qtyCtrl(i) {
 export function menuItem(item, i, lang, promoted = false, eager = false) {
   const name = pick(item, "name", lang);
   const desc = pick(item, "description", lang);
+  // **What a card can actually draw**, which is not the same question as what it has.
+  //
+  // A model only counts as something to show when `is_3d` is on: a dish CAN carry a model
+  // with `is_3d` off, and that is the owner choosing to present it as a photo dish. With
+  // no photo either, such a dish has nothing at all, and the honest shape for it is the
+  // text row.
+  const canDraw3d = !!item.model && !!item.is_3d;
   // Three flags, three meanings. `text_only` is a compact row with no media at all; a
-  // dish with neither photo nor model is that shape by circumstance.
-  const noImage = item.text_only || (!item.model && !item.thumbnail_url);
-  // The card thumbnail becomes a live model only when the owner asked for it - the
-  // platform's `thumb_3d`. Off keeps the photo, which saves a download and a WebGL
-  // context; on is the thing nobody else in this category has.
-  const live = item.is_3d && item.thumb_3d && item.model;
+  // dish with neither photo nor showable model is that shape by circumstance.
+  const noImage = item.text_only || (!item.thumbnail_url && !canDraw3d);
+  // The thumbnail becomes a live model when the owner asked for it - the platform's
+  // `thumb_3d`, off by default because it costs a download and a WebGL context - **or
+  // when there is no photo to show instead.**
+  //
+  // That second half was missing, and it is the whole bug. `thumb_3d` off with no
+  // `thumbnail_url` emitted `<img class="thumb-img">` with no `src` at all, which every
+  // browser draws as a broken-image icon, on the one feature the product is sold on.
+  // Same rule the platform settled on (`thumb_3d || !thumbnail_url`), for the same reason.
+  const live = canDraw3d && (item.thumb_3d || !item.thumbnail_url);
   // **A dish claims 3D only when there is a model to show.**
   //
   // `is_3d` is the owner's INTENT and nothing more. Three of the places below promised 3D
@@ -294,7 +316,12 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
   // the ones a diner was actually looking at queued behind the lazy-loader.
   const left = noImage ? "" :
     `<div class="item-left"><div class="thumb-wrap">` +
-    `<img class="thumb-img"${item.thumbnail_url ? ` src="${e(item.thumbnail_url)}"` : ""}` +
+    // A transparent pixel rather than no `src`, when the model IS the thumbnail. The
+    // element has to stay an `<img class="thumb-img" data-model>` because that is what the
+    // ported `_upgradeThumb` looks for, and the ported viewer is not ours to edit - so the
+    // fix is to give the browser something valid to draw for the frames before the upgrade
+    // runs, rather than a broken icon. 43 bytes, inline, never fetched.
+    `<img class="thumb-img" src="${item.thumbnail_url ? e(item.thumbnail_url) : BLANK_PIXEL}"` +
     `${live ? ` data-model="${e(item.model)}"` : ""} data-global-idx="${i}" ` +
     `alt="${e(name)}" width="430" height="220" decoding="async" ` +
     `${eager ? 'fetchpriority="high"' : 'loading="lazy"'}>` +
