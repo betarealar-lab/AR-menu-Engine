@@ -203,6 +203,81 @@ def main() -> int:
                   "row-level security" in denial.lower(),
                   denial.splitlines()[0][:90] if denial else "no error at all")
 
+            # The BetaReal library, 0024. `shared` says a model may be pointed at from
+            # ANY tenant, so who may set it is the whole security of the feature: an
+            # owner who could flip it on their own row would be publishing themselves
+            # into everyone's library. `models_rw` grants an owner full write on their
+            # own models and a new column comes along with that grant for free, so the
+            # restriction is a trigger, and this is the check that it is actually armed.
+            cur.execute("""insert into models (tenant_id, title, dish, variant)
+                           values (%s, 'lib check', %s, 'default') returning id""",
+                        (ta, uuid.uuid4().hex[:8]))
+            a_model = cur.fetchone()[0]
+            conn.commit()
+
+            cur.execute("savepoint sh")
+            refused = ""
+            try:
+                as_user(a_id,
+                        "update models set shared = true where id = %s returning id",
+                        (a_model,))
+            except Exception as e:                            # noqa: BLE001
+                refused = str(e)
+            cur.execute("rollback to savepoint sh")
+            check("an owner cannot put their own model in the BetaReal library",
+                  bool(refused), "the update SUCCEEDED" if not refused else "")
+            check("and is told why, rather than it silently not happening",
+                  "super admin" in refused.lower(),
+                  refused.splitlines()[0][:90] if refused else "no error at all")
+
+            # The other door into the same hole: writing it on the way IN.
+            cur.execute("savepoint sh2")
+            refused = ""
+            try:
+                as_user(a_id,
+                        """insert into models (tenant_id, title, dish, variant, shared)
+                           values (%s, 'sneak', %s, 'default', true) returning id""",
+                        (ta, uuid.uuid4().hex[:8]))
+            except Exception as e:                            # noqa: BLE001
+                refused = str(e)
+            cur.execute("rollback to savepoint sh2")
+            check("nor insert one that is already in it", bool(refused),
+                  "the insert SUCCEEDED" if not refused else "")
+
+            # ...and the owner must still be able to write everything ELSE about their
+            # own model, or the trigger has quietly become a lock on the whole table.
+            ok = as_user(a_id,
+                         "update models set title = 'renamed' where id = %s returning id",
+                         (a_model,))
+            check("while still being able to edit their own model", len(ok) == 1)
+
+            # A model in the library is READABLE by anyone signed in - without that, a
+            # restaurant borrowing one cannot resolve the model sitting on its own dish
+            # and its admin shows a 3D dish as having no 3D.
+            # `as_user` sets request.jwt.claims with is_local = true, which lasts for the
+            # rest of the TRANSACTION, not just the statement. Without clearing it, the
+            # line below runs as owner A - and the guard we just proved works refuses it,
+            # which reads as a broken check rather than a working one.
+            cur.execute("select set_config('request.jwt.claims', '', true)")
+            cur.execute("update models set shared = true where id = %s", (a_model,))
+            conn.commit()
+            seen_lib = as_user(b_id, "select id from models where id = %s", (a_model,))
+            check("a library model is readable by another restaurant", len(seen_lib) == 1)
+
+            # But only READABLE. B may not rename A's model just because it is shared.
+            cur.execute("savepoint sh3")
+            refused = ""
+            try:
+                as_user(b_id,
+                        "update models set title = 'hijacked' where id = %s returning id",
+                        (a_model,))
+            except Exception as e:                            # noqa: BLE001
+                refused = str(e)
+            got = cur.execute("select title from models where id = %s",
+                              (a_model,)).fetchone()[0]
+            cur.execute("rollback to savepoint sh3")
+            check("and a borrower cannot edit it", got != "hijacked", got)
+
             # ...which is only meaningful if the grant really is there. Otherwise the
             # check above could be satisfied by a table nobody can touch for any reason.
             cur.execute("""

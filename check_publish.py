@@ -50,6 +50,7 @@ def main() -> int:
     import psycopg
 
     slug = f"pubcheck-{uuid.uuid4().hex[:8]}"
+    other_slug = f"pubcheck-lib-{uuid.uuid4().hex[:8]}"
     conn = psycopg.connect(db, connect_timeout=15)
     keys_written: list[str] = []
     try:
@@ -88,18 +89,41 @@ def main() -> int:
                     values (%s,%s,%s,%s,%s,%s,0)
                 """, (tid, cat, name, price, model_id, visible))
 
+            # A SECOND restaurant, so the library can be tested for what it is: a model
+            # that lives somewhere else. Both of its models are approved and have files,
+            # so the only thing that can decide their fate here is `shared` (0024).
+            cur.execute("""
+                insert into tenants (slug, name, template_id)
+                values (%s,'Check other','checktpl') returning id
+            """, (other_slug,))
+            other_tid = cur.fetchone()[0]
+
+            def other_model(shared):
+                cur.execute("""
+                    insert into models (tenant_id,title,dish,variant,draco_key,usdz_key,
+                                        scale_cm,scale_axis,tenant_state,shared)
+                    values (%s,'lib',%s,'default','catalog/x/model_draco.glb',
+                            'catalog/x/model.usdz',26,'width','approved',%s) returning id
+                """, (other_tid, uuid.uuid4().hex[:8], shared))
+                return cur.fetchone()[0]
+
+            library = other_model(True)
+            someone_elses = other_model(False)
+
             item("Visible with approved model", approved)
             item("Visible with draft model", draft)
             item("Visible with rejected model", rejected)
             item("Visible with a model that has no files", fileless)
             item("Visible, no model at all")
+            item("Visible with a LIBRARY model", library)
+            item("Visible with SOMEONE ELSE'S model", someone_elses)
             item("HIDDEN, must never appear", approved, visible=False)
         conn.commit()
 
         print("\n== what the snapshot contains ==")
         snap = pub.compile_snapshot(conn, tid)
         names = [i["name"] for i in snap["items"]]
-        check("only visible items are in it", len(names) == 5, f"{len(names)}: {names}")
+        check("only visible items are in it", len(names) == 7, f"{len(names)}: {names}")
         check("the hidden item is ABSENT, not flagged",
               not any("HIDDEN" in n for n in names), str(names))
 
@@ -113,6 +137,16 @@ def main() -> int:
               by["Visible with a model that has no files"]["model"] is None)
         check("an item with no model is still on the menu",
               "Visible, no model at all" in by)
+
+        # The BetaReal library, 0024. These two rows differ in exactly one boolean, and
+        # the pair is the point: the first proves a library model crosses the tenant
+        # boundary, the second proves that nothing else does. Flip `shared` on the second
+        # and the first check stays green while the second goes red, which is what tells
+        # you the rule is the flag and not the join being gone.
+        check("a model from the BetaReal library IS attached across tenants",
+              by["Visible with a LIBRARY model"]["model"] is not None)
+        check("another restaurant's model is NOT, library or no library",
+              by["Visible with SOMEONE ELSE'S model"]["model"] is None)
 
         m = by["Visible with approved model"]["model"]
         check("the model carries real-world scale",
@@ -133,7 +167,7 @@ def main() -> int:
         r1 = pub.publish(conn, tid)
         keys_written.append(r1["key"])
         check("version 1 published", r1["changed"] and r1["version"] == 1, str(r1))
-        check("it counted the items", r1["items"] == 5, str(r1["items"]))
+        check("it counted the items", r1["items"] == 7, str(r1["items"]))
 
         stored = pub.read_snapshot(tid, 1)
         check("the object is really in R2", stored is not None)
@@ -170,10 +204,27 @@ def main() -> int:
               str(sorted(live or {})))
         size = len(json.dumps(live, separators=(",", ":")).encode())
         check("a whole menu is a few KB", size < 32_000, f"{size:,} bytes")
+
+        # `public_menu()` is a SECOND implementation of the same join, in SQL, and it is
+        # the one the live Astro page actually calls. Both were changed in 0024 and either
+        # could have been missed, so both are asked the same question here.
+        print()
+        print("== public_menu, which is the live path ==")
+        with conn.cursor() as cur:
+            cur.execute("select public_menu(%s)", (slug,))
+            pm = cur.fetchone()[0]
+        pub_by = {i["name"]: i for i in (pm or {}).get("items", [])}
+        check("public_menu serves a library model",
+              (pub_by.get("Visible with a LIBRARY model") or {}).get("draco_key")
+              is not None)
+        check("public_menu still refuses another restaurant's model",
+              (pub_by.get("Visible with SOMEONE ELSE'S model") or {}).get("draco_key")
+              is None)
     finally:
         try:
             with conn.cursor() as cur:
-                cur.execute("delete from tenants where slug = %s", (slug,))
+                cur.execute("delete from tenants where slug in (%s, %s)",
+                            (slug, other_slug))
                 cur.execute("delete from templates where id = 'checktpl'")
             conn.commit()
         except Exception:                                     # noqa: BLE001

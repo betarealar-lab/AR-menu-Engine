@@ -28,6 +28,8 @@ export type TenantModel = {
   scale_cm: number | null
   state: 'draft' | 'approved' | 'rejected'
   archived: boolean
+  /** In the BetaReal library - attachable to a dish in any restaurant (0024). */
+  shared: boolean
   scale_axis: string | null
   width_cm: number | null
   length_cm: number | null
@@ -65,34 +67,15 @@ type ModelRow = {
   view_orbit: string | null; scale_cm: number | null; scale_axis: string | null
   width_cm: number | null; length_cm: number | null; height_cm: number | null
   tenant_state: 'draft' | 'approved' | 'rejected'; archived: boolean; created_utc: string
+  shared?: boolean
 }
 
-export async function loadLibrary(tenantId: string) {
-  const supabase = createClient()
-
-  const [{ data: rows }, { data: items }, { data: reqs }, { data: tenant }] =
-    await Promise.all([
-      supabase.from('models')
-        .select('id, title, dish, variant, poster_key, draco_key, usdz_key, ' +
-                'external_glb, external_usdz, view_orbit, ' +
-                'scale_cm, scale_axis, width_cm, length_cm, height_cm, ' +
-                'tenant_state, archived, created_utc')
-        .eq('tenant_id', tenantId).order('created_utc', { ascending: false }),
-      supabase.from('items').select('id, name, model_id').eq('tenant_id', tenantId),
-      supabase.from('model_requests')
-        .select('id, title, kind, dish, variant, state, note, item_id, photo_keys, requested_utc')
-        .eq('tenant_id', tenantId)
-        .in('state', ['pending', 'approved', 'running', 'failed'])
-        .order('requested_utc', { ascending: false }),
-      supabase.from('tenants').select('model_quota').eq('id', tenantId).single(),
-    ])
-
-  const usedBy = new Map<string, { id: string; name: string }>()
-  for (const i of (items || []) as { id: string; name: string; model_id: string | null }[]) {
-    if (i.model_id) usedBy.set(i.model_id, { id: i.id, name: i.name })
-  }
-
-  const models: TenantModel[] = ((rows || []) as unknown as ModelRow[]).map(r => ({
+/** One database row as the screens want it. Shared by the restaurant's own library and
+ *  by the BetaReal library, because two copies of this mapping would drift the first
+ *  time a column was added - and the `draco_key || external_glb` line below is exactly
+ *  the kind of thing that was already missed once. */
+function toModel(r: ModelRow, usedBy: { id: string; name: string } | null): TenantModel {
+  return {
     id: r.id,
     title: r.title || r.dish,
     dish: r.dish,
@@ -114,8 +97,94 @@ export async function loadLibrary(tenantId: string) {
     state: r.tenant_state,
     archived: !!r.archived,
     created_utc: r.created_utc,
-    usedBy: usedBy.get(r.id) ?? null,
+    shared: !!r.shared,
+    usedBy,
+  }
+}
+
+
+
+/** A model in the BetaReal library, as the shared view lists it: everything a model
+ *  card needs, plus WHICH restaurant it came from. The owning tenant is shown rather
+ *  than hidden - a stock model is still somebody's dish, and putting "from Monday
+ *  Greens" on the card is what stops us quietly reselling a client's khachapuri as
+ *  generic stock. */
+export type LibraryModel = TenantModel & { tenantId: string; tenantName: string }
+
+/** The whole BetaReal library, across every restaurant.
+ *
+ *  Readable because of the `models_shared_read` policy in 0024, not because of any
+ *  privilege this page holds - which is deliberate: a borrowing restaurant's own admin
+ *  has to be able to resolve a library model sitting on its dish, so the read had to be
+ *  open to any signed-in user anyway. What is super-admin-only is PUTTING a model in
+ *  here (`models_shared_guard`) and the screen that browses it. */
+export async function loadSharedModels(): Promise<LibraryModel[]> {
+  const supabase = createClient()
+  const { data: rows } = await supabase.from('models')
+    .select('id, tenant_id, title, dish, variant, poster_key, draco_key, usdz_key, ' +
+            'external_glb, external_usdz, view_orbit, ' +
+            'scale_cm, scale_axis, width_cm, length_cm, height_cm, ' +
+            'tenant_state, archived, created_utc, shared')
+    .eq('shared', true)
+    .order('created_utc', { ascending: false })
+
+  const owned = (rows || []) as unknown as (ModelRow & { tenant_id: string })[]
+  if (!owned.length) return []
+
+  // One query for the names, not one per card. A super admin reading `tenants` gets
+  // every row (is_member_of short-circuits on super_admins), and anybody else gets
+  // none - in which case the cards say the model is shared and simply do not name a
+  // restaurant, rather than failing to render.
+  const { data: tenants } = await supabase.from('tenants')
+    .select('id, name').in('id', [...new Set(owned.map(r => r.tenant_id))])
+  const names = new Map(((tenants || []) as { id: string; name: string }[])
+    .map(t => [t.id, t.name]))
+
+  return owned.map(r => ({
+    ...toModel(r, null),
+    tenantId: r.tenant_id,
+    tenantName: names.get(r.tenant_id) || '',
   }))
+}
+
+/** Put a model into the BetaReal library, or take it out.
+ *
+ *  The database decides who may: `models_shared_guard` (0024) refuses anyone but a super
+ *  admin, on insert as well as update. So this function is not the security - it is the
+ *  button, and the error it returns is a real refusal rather than a UI that was hidden. */
+export async function setShared(id: string, shared: boolean) {
+  const supabase = createClient()
+  const { error } = await supabase.from('models').update({ shared }).eq('id', id)
+  return error
+}
+
+export async function loadLibrary(tenantId: string) {
+  const supabase = createClient()
+
+  const [{ data: rows }, { data: items }, { data: reqs }, { data: tenant }] =
+    await Promise.all([
+      supabase.from('models')
+        .select('id, title, dish, variant, poster_key, draco_key, usdz_key, ' +
+                'external_glb, external_usdz, view_orbit, ' +
+                'scale_cm, scale_axis, width_cm, length_cm, height_cm, ' +
+                'tenant_state, archived, created_utc, shared')
+        .eq('tenant_id', tenantId).order('created_utc', { ascending: false }),
+      supabase.from('items').select('id, name, model_id').eq('tenant_id', tenantId),
+      supabase.from('model_requests')
+        .select('id, title, kind, dish, variant, state, note, item_id, photo_keys, requested_utc')
+        .eq('tenant_id', tenantId)
+        .in('state', ['pending', 'approved', 'running', 'failed'])
+        .order('requested_utc', { ascending: false }),
+      supabase.from('tenants').select('model_quota').eq('id', tenantId).single(),
+    ])
+
+  const usedBy = new Map<string, { id: string; name: string }>()
+  for (const i of (items || []) as { id: string; name: string; model_id: string | null }[]) {
+    if (i.model_id) usedBy.set(i.model_id, { id: i.id, name: i.name })
+  }
+
+  const models: TenantModel[] = ((rows || []) as unknown as ModelRow[])
+    .map(r => toModel(r, usedBy.get(r.id) ?? null))
 
   const { data: used } = await supabase.rpc('model_requests_used', { t: tenantId })
 

@@ -36,7 +36,12 @@ OUT = HERE.parent.parent / "app" / "src" / "lib" / "css"
 # The only templates that matter now (Temo, 2026-09-06): Monday Greens, and Corner at
 # Tabidze which runs elegant_black. Everything else is for a later generation of
 # templates and is not carried.
-KEEP_TEMPLATES = ["monday_greens", "elegant_black"]
+# `japan` is OURS, not the platform's: `full.css` contains no rule scoped to it, so the
+# trimmer emits the generic base - the structural CSS every template is built on - and the
+# look itself lives in `app/src/lib/css/japan.skin.css`, which is hand-written and is the
+# only sheet in this directory that is not generated. That split is the point: a new
+# template is "the shared structure, plus a small sheet somebody can read".
+KEEP_TEMPLATES = ["monday_greens", "elegant_black", "japan"]
 
 TEMPLATE_ATTR = re.compile(r'\[data-template\s*=\s*"([a-z0-9_]+)"\]')
 TENANT_ATTR = re.compile(r'\[data-(?:tenant|brand-slug)\s*=\s*"([a-z0-9-]+)"\]')

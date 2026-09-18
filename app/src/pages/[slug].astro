@@ -42,10 +42,18 @@ import chromeHtml from "../../../menu/render/ported/chrome.html?raw";
 import platformCss from "../lib/platform.css?raw";
 import mondayGreensCss from "../lib/css/monday_greens.css?raw";
 import elegantBlackCss from "../lib/css/elegant_black.css?raw";
+// JAPAN is the first template that is ours rather than the platform's, so it arrives in
+// two pieces: the trimmed generic base every template shares, and a small hand-written
+// skin. The skin is LAST, so it wins over the base by order rather than by specificity
+// games - the same rule the palette below follows, for the same reason.
+import japanCss from "../lib/css/japan.css?raw";
+import japanSkinCss from "../lib/css/japan.skin.css?raw";
 
 const SHEETS = {
   monday_greens: mondayGreensCss,
   elegant_black: elegantBlackCss,
+  japan: `${japanCss}
+${japanSkinCss}`,
 };
 // Only two templates matter now - Monday Greens, and Corner at Tabidze on elegant_black.
 // Everything else waits for a later generation. A restaurant with no template chosen gets

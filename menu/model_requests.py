@@ -405,6 +405,22 @@ def main() -> int:
                          "where there is no console to print to")
     a = ap.parse_args()
 
+    # Line-buffered, always. Started by `keepalive.py` there is no console: stdout is an
+    # inherited FILE handle, and Python block-buffers those at 8 KB. The bridge prints
+    # about forty bytes a pass, so `out/bridge.log` ran roughly two hundred passes - over
+    # an hour and a half - behind the process, and the file's mtime lagged with it.
+    #
+    # That is not a cosmetic problem. `install-engine.ps1 -Status` judges health by
+    # grepping the last sixty lines of that file for 'pass failed', and the one thing the
+    # log is for is answering "is it working right now" during an incident. A log that is
+    # ninety minutes stale answers the wrong question and looks exactly like a hung
+    # process, which is what it was mistaken for.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass                      # a stream that cannot be reconfigured is already fine
+
     if a.log:
         # Started hidden at logon there is nowhere for print() to go. Without this the
         # installer's launcher passed `--log`, argparse rejected the unknown flag, and the

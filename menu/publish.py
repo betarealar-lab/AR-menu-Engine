@@ -107,7 +107,11 @@ def compile_snapshot(conn, tenant_id: str) -> dict:
             from items i
             left join models m
                    on m.id = i.model_id
-                  and m.tenant_id = i.tenant_id
+                  -- Its own, or one from the BetaReal library (0024). A model belonging
+                  -- to another restaurant and NOT shared is still dropped here, which is
+                  -- the tenancy rule; `shared` is the one deliberate exception and it is
+                  -- set by a super admin alone.
+                  and (m.tenant_id = i.tenant_id or m.shared)
                   and m.tenant_state = 'approved'
             where i.tenant_id = %s and i.visible
             order by i.position, i.name

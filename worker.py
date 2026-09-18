@@ -172,6 +172,15 @@ def main() -> int:
                          "where there is no console to print to")
     a = ap.parse_args()
 
+    # Line-buffered, always - same reason as the bridge (`menu/model_requests.py`).
+    # Under `keepalive.py` stdout is an inherited file handle, which Python block-buffers
+    # at 8 KB, so `out/worker.log` sat a week behind the process that was writing it.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+        sys.stderr.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass
+
     if a.log:
         # Started hidden at logon there is nowhere for print() to go, and a worker that
         # fails silently is the thing this whole file exists to stop happening.

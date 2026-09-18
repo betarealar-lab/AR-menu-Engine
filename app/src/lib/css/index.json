@@ -1,10 +1,12 @@
 {
  "templates": [
   "monday_greens",
-  "elegant_black"
+  "elegant_black",
+  "japan"
  ],
  "sizes": {
   "monday_greens": 114564,
-  "elegant_black": 110682
+  "elegant_black": 110682,
+  "japan": 104787
  }
 }

@@ -20,7 +20,8 @@ import { usePlan } from '@/lib/usePlan'
 import Plate from '@/components/Plate'
 import {
   loadLibrary, setVerdict, renameModel, setOrbit, attachModel, cancelRequest,
-  type TenantModel, type ModelRequest,
+  loadSharedModels, setShared,
+  type TenantModel, type ModelRequest, type LibraryModel,
 } from '@/lib/data/models'
 import { loadCaptures, requestRescale, setArchived, hasDims, type Capture, type Dims } from '@/lib/data/studio'
 import SizeInput from '@/components/SizeInput'
@@ -35,7 +36,7 @@ import { text, type Translations } from '@/lib/i18n'
 
 const MENU_ORIGIN = process.env.NEXT_PUBLIC_MENU_ORIGIN || ''
 
-type View = 'library' | 'photos' | 'new'
+type View = 'library' | 'photos' | 'new' | 'shared'
 type Dish = { id: string; name: string; model_id: string | null }
 
 // A function of T, not a module constant: a constant is evaluated once at import and
@@ -80,6 +81,7 @@ export default function StudioPage() {
   const [requests, setRequests] = useState<ModelRequest[]>([])
   const [captures, setCaptures] = useState<Capture[]>([])
   const [dishes, setDishes] = useState<Dish[]>([])
+  const [sharedModels, setSharedModels] = useState<LibraryModel[]>([])
   const [quota, setQuota] = useState(0)
   const [used, setUsed] = useState(0)
   // `loading` is DERIVED, not set inside the effect. Every one of these screens used to
@@ -108,7 +110,11 @@ export default function StudioPage() {
     setUsed(lib.used)
     setCaptures(caps)
     setLoadedFor(plan.restaurantId)
-  }, [plan.loading, plan.restaurantId])
+    // The BetaReal library is not this restaurant's data, so it is loaded separately and
+    // only for the people who can act on it. An owner never sees the tab, and the fetch
+    // they would get nothing useful from is never made.
+    if (plan.canUploadModels) setSharedModels(await loadSharedModels())
+  }, [plan.loading, plan.restaurantId, plan.canUploadModels])
 
   useEffect(() => { void load() }, [load])
 
@@ -150,7 +156,10 @@ export default function StudioPage() {
         </div>
 
         <div className="flex rounded-lg p-0.5" style={{ background: 'var(--card2)' }}>
-          {([['library', T.viewLibrary], ['photos', T.viewPhotos]] as [View, string][]).map(([id, label]) => (
+          {([['library', T.viewLibrary], ['photos', T.viewPhotos],
+             ...(plan.canUploadModels
+               ? [['shared', T.viewBetaLibrary] as [View, string]] : []),
+            ] as [View, string][]).map(([id, label]) => (
             <button key={id} onClick={() => { setView(id); setPlateFor(null) }}
                     className="px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors"
                     style={{ background: view === id ? 'var(--card)' : 'transparent',
@@ -193,6 +202,8 @@ export default function StudioPage() {
                    void load()
                  }} />
         </div>
+      ) : view === 'shared' ? (
+        <SharedLibrary models={sharedModels} dishes={dishes} onChanged={load} onSay={say} />
       ) : view === 'photos' ? (
         <PhotoLibrary captures={captures} dishes={dishes} models={models}
                       onContinue={(dish, variant, title) => { setPlateFor({ dish, variant, title }); setView('new') }} />
@@ -200,6 +211,104 @@ export default function StudioPage() {
         <Library models={models} requests={requests} dishes={dishes} quota={quota}
                  onChanged={load} onSay={say} onStart={() => setView('new')} />
       )}
+    </div>
+  )
+}
+
+// ── the BetaReal library ─────────────────────────────────────────────────────
+
+/** Every model we have marked as stock, across every restaurant, and a way to put one on
+ *  a dish in the restaurant currently selected.
+ *
+ *  **Why there is no restaurant picker on this screen.** "Any model onto any menu" sounds
+ *  like it wants two pickers - choose a model, choose a restaurant. But the admin already
+ *  has a restaurant selected at all times, every other screen acts on that one, and a
+ *  second picker here would mean a super admin could attach a model to a menu they are
+ *  not looking at. Switch restaurant in the header, come back, attach: the thing you are
+ *  about to change is the thing named at the top of the page.
+ *
+ *  The card says which restaurant a model came from, deliberately. A stock model is still
+ *  somebody's dish, and "from Monday Greens" on the card is the difference between
+ *  reusing our own work and quietly reselling a client's khachapuri.
+ */
+function SharedLibrary({ models, dishes, onChanged, onSay }: {
+  models: LibraryModel[]
+  dishes: Dish[]
+  onChanged: () => void
+  onSay: (m: string, bad?: boolean) => void
+}) {
+  const [T] = useLang()
+  const [open, setOpen] = useState<string | null>(null)
+  const [q, setQ] = useState('')
+
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (!needle) return models
+    return models.filter(m => `${m.title} ${m.tenantName}`.toLowerCase().includes(needle))
+  }, [models, q])
+
+  if (!models.length) {
+    return (
+      <div className="card p-6 text-sm grid gap-1">
+        <div className="font-semibold">{T.studioLibraryEmpty}</div>
+        <p style={{ color: 'var(--dim)' }}>{T.studioLibraryEmptyHint}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="card p-4 flex items-center gap-3 flex-wrap">
+        <p className="text-xs mr-auto" style={{ color: 'var(--dim)' }}>
+          {T.studioLibraryIntro}
+        </p>
+        <input className="text-sm" value={q} onChange={e => setQ(e.target.value)}
+               placeholder={T.studioLibrarySearch} />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {shown.map(m => (
+          <div key={m.id} className="card p-4 grid gap-3">
+            <Preview model={m} pill={m.tenantName || T.studioLibraryPill}
+                     open={open === m.id} onOpen={() => setOpen(open === m.id ? null : m.id)} />
+            <div>
+              <div className="font-semibold truncate">{m.title}</div>
+              {m.tenantName && (
+                <div className="text-[11px]" style={{ color: 'var(--dim)' }}>
+                  {text(T.studioLibraryFrom, { name: m.tenantName })}
+                </div>
+              )}
+            </div>
+
+            {/* The whole point of the screen, and the same control as the one on a
+                restaurant's own model - so attaching a library model is not a different
+                gesture from attaching your own. `dishes` is THIS restaurant's dishes. */}
+            <select
+              value={dishes.find(d => d.model_id === m.id)?.id ?? ''}
+              className="text-xs"
+              onChange={async e => {
+                const was = dishes.find(d => d.model_id === m.id)
+                if (was) await attachModel(was.id, null)
+                if (e.target.value) await attachModel(e.target.value, m.id)
+                onSay(e.target.value ? T.studioLibraryPutOn : T.studioLibraryTakenOff)
+                onChanged()
+              }}>
+              <option value="">{T.studioNotOnDishOption}</option>
+              {dishes.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+
+            <button className="text-[11px] underline justify-self-start"
+                    style={{ color: 'var(--dim)' }}
+                    onClick={async () => {
+                      const err = await setShared(m.id, false)
+                      if (err) onSay(err.message, true)
+                      else { onSay(T.studioRemovedFromLibrary); onChanged() }
+                    }}>
+              {T.studioRemoveFromLibrary}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -593,6 +702,20 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
           {plan.canUploadModels && (m.glb || m.usdz || m.poster) && (
             <button className="underline"
                     onClick={() => setPanel(panel === 'files' ? null : 'files')}>files</button>
+          )}
+          {/* Into the BetaReal library, or back out (0024). Super admin only, and the
+              database says so too - `models_shared_guard` refuses anybody else, so this
+              is the button rather than the rule. Only offered for a model that HAS a
+              file: a library entry nobody can attach is a row that wastes a search.
+              Marked, not moved - the model stays this restaurant's. */}
+          {plan.canUploadModels && m.glb && (
+            <button className="underline"
+                    style={{ color: m.shared ? 'var(--gold)' : undefined }}
+                    onClick={() => run(() => setShared(m.id, !m.shared),
+                                       m.shared ? T.studioRemovedFromLibrary
+                                                : T.studioAddedToLibrary)}>
+              {m.shared ? T.studioInLibrary : T.studioAddToLibrary}
+            </button>
           )}
           <button className="underline ml-auto"
                   onClick={() => run(() => setArchived(m.id, !m.archived), m.archived ? 'Back in the library' : 'Hidden')}>
