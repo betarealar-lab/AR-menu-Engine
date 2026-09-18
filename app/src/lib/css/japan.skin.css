@@ -47,15 +47,23 @@
 }
 
 :root[data-template="japan"] {
-    /* The two inks. `--jp-red` is the red of a hanko seal rather than a fire-engine red:
-       small and pale, a saturated red reads as pink. */
+    /* The two inks. A deep hanko red rather than a bright one: at this size and opacity
+       a lighter red turns pink on white, and pink beside light grey is the failure this
+       file already had once. */
     --jp-ink: #14110f;
-    --jp-red: #c0392f;
-    /* How much of the wallpaper is visible - the two numbers to change if it reads as
-       busy on a real phone. Red sits slightly higher because a mid red on white reads
-       lighter than a near-black does at the same opacity. */
-    --jp-ink-alpha: 0.13;
-    --jp-red-alpha: 0.15;
+    --jp-red: #b0141d;
+    /* How much of the wallpaper is visible.
+       
+       These started at 0.13/0.15 and the alternation was invisible: near-black at 13%
+       on white is rgb(223) - a light grey - and the red at 15% is a pale pink, and at
+       a glance that is ONE colour, not two. The structure was right the whole time;
+       the strength was not. A colour has to be dark enough to be identifiable as that
+       colour, and "very small" is a size, not an excuse to make it disappear.
+       
+       Ink deliberately well above red: black carries at lower opacity than a mid red
+       does, so equal numbers do not read as equal weight. */
+    --jp-ink-alpha: 0.20;
+    --jp-red-alpha: 0.17;
 
     /* The vocabulary, split across the two layers rather than written twice.
 
@@ -74,16 +82,48 @@
     --jp-words-ink: "寿　刺　天　羅　噌　油　葵　苔　汁　茶　焼　鮪　老　鰻　麦　椀　皿　旬　和　料　板　職　包　炭　七　湯　香　塩　甘　苦　夏　冬　風　雪　川　空　影　動　道　気　侘　雅　幸　祭　縁　夢　望　誠　真　麗　柔　健　安　悠　永　円　匠　鮮　宴　樂　桜　菊　松　梅　亀　虎　燕　蛍　陽　雨　波　岩　庭　簾　畳　鉄　盃　利　陶　漆　銀　墨　紙　";
     --jp-words-red: "　司　身　婦　味　醤　山　海　出　米　酒　鮭　海　蟹　蕎　丼　箸　膳　旨　食　理　前　人　丁　火　輪　気　味　酢　辛　春　秋　花　月　山　海　光　静　間　心　禅　寂　粋　福　祝　結　希　志　信　美　優　剛　泰　寧　久　遠　華　極　活　禄　舞　椿　藤　竹　鶴　龍　鯉　蝶　星　雲　霧　潮　苔　灯　障　釜　瓶　徳　器　磁　金　朱　筆　印";
 
-    /* Doubling rather than thirty-two `var()`s on one line. A custom property substitutes
-       a token stream, so each of these really is the one above it four times over, and
-       the vocabulary still appears exactly once in this file. */
-    --jp-ink-x4:  var(--jp-words-ink) var(--jp-words-ink) var(--jp-words-ink) var(--jp-words-ink);
-    --jp-ink-x16: var(--jp-ink-x4) var(--jp-ink-x4) var(--jp-ink-x4) var(--jp-ink-x4);
-    --jp-ink-x32: var(--jp-ink-x16) var(--jp-ink-x16);
+    /* One pass of the vocabulary IS one line, ended explicitly with `\A`.
 
-    --jp-red-x4:  var(--jp-words-red) var(--jp-words-red) var(--jp-words-red) var(--jp-words-red);
-    --jp-red-x16: var(--jp-red-x4) var(--jp-red-x4) var(--jp-red-x4) var(--jp-red-x4);
-    --jp-red-x32: var(--jp-red-x16) var(--jp-red-x16);
+       This is the second thing that has to be true for the alternation to survive, and it
+       is not obvious. Letting the text wrap on its own looked right and was not: the two
+       strings carry their spaces in opposite cells, so their line-BREAK opportunities are
+       in different places, and two layers wrapping greedily choose different break points.
+       The grids then slide against each other, by a different amount on every line, and
+       the characters end up drawn on top of one another instead of between. That is what
+       "they all look the same colour" actually was - not a colour problem at all, but two
+       layers superimposed, compositing to one muddy tone.
+
+       An explicit newline is not a choice a layout engine gets to make. Both layers break
+       at cell 166 on every line because they are told to, so cell N of one is always
+       exactly over cell N of the other. `white-space: pre` below is the other half of it.
+
+       A line is 166 cells - about 3,650px at this size - so every line overflows the box
+       on any normal screen and is clipped rather than wrapped. That is deliberate: it
+       means the pattern is identical at every viewport width instead of re-flowing. */
+    --jp-ink-l1: "寿　刺　天　羅　噌　油　葵　苔　汁　茶　焼　鮪　老　鰻　麦　椀　皿　旬　和　料　板　職　包　炭　七　湯　香　塩　甘　苦　夏　冬　風　雪　川　空　影　動　道　気　侘　雅　幸　祭　縁　夢　望　誠　真　麗　柔　健　安　悠　永　円　匠　鮮　宴　樂　桜　菊　松　梅　亀　虎　燕　蛍　陽　雨　波　岩　庭　簾　畳　鉄　盃　利　陶　漆　銀　墨　紙　\A";
+    --jp-ink-l2: "職　包　炭　七　湯　香　塩　甘　苦　夏　冬　風　雪　川　空　影　動　道　気　侘　雅　幸　祭　縁　夢　望　誠　真　麗　柔　健　安　悠　永　円　匠　鮮　宴　樂　桜　菊　松　梅　亀　虎　燕　蛍　陽　雨　波　岩　庭　簾　畳　鉄　盃　利　陶　漆　銀　墨　紙　寿　刺　天　羅　噌　油　葵　苔　汁　茶　焼　鮪　老　鰻　麦　椀　皿　旬　和　料　板　\A";
+    --jp-ink-l3: "幸　祭　縁　夢　望　誠　真　麗　柔　健　安　悠　永　円　匠　鮮　宴　樂　桜　菊　松　梅　亀　虎　燕　蛍　陽　雨　波　岩　庭　簾　畳　鉄　盃　利　陶　漆　銀　墨　紙　寿　刺　天　羅　噌　油　葵　苔　汁　茶　焼　鮪　老　鰻　麦　椀　皿　旬　和　料　板　職　包　炭　七　湯　香　塩　甘　苦　夏　冬　風　雪　川　空　影　動　道　気　侘　雅　\A";
+    --jp-ink-l4: "梅　亀　虎　燕　蛍　陽　雨　波　岩　庭　簾　畳　鉄　盃　利　陶　漆　銀　墨　紙　寿　刺　天　羅　噌　油　葵　苔　汁　茶　焼　鮪　老　鰻　麦　椀　皿　旬　和　料　板　職　包　炭　七　湯　香　塩　甘　苦　夏　冬　風　雪　川　空　影　動　道　気　侘　雅　幸　祭　縁　夢　望　誠　真　麗　柔　健　安　悠　永　円　匠　鮮　宴　樂　桜　菊　松　\A";
+    --jp-red-l1: "　司　身　婦　味　醤　山　海　出　米　酒　鮭　海　蟹　蕎　丼　箸　膳　旨　食　理　前　人　丁　火　輪　気　味　酢　辛　春　秋　花　月　山　海　光　静　間　心　禅　寂　粋　福　祝　結　希　志　信　美　優　剛　泰　寧　久　遠　華　極　活　禄　舞　椿　藤　竹　鶴　龍　鯉　蝶　星　雲　霧　潮　苔　灯　障　釜　瓶　徳　器　磁　金　朱　筆　印\A";
+    --jp-red-l2: "　人　丁　火　輪　気　味　酢　辛　春　秋　花　月　山　海　光　静　間　心　禅　寂　粋　福　祝　結　希　志　信　美　優　剛　泰　寧　久　遠　華　極　活　禄　舞　椿　藤　竹　鶴　龍　鯉　蝶　星　雲　霧　潮　苔　灯　障　釜　瓶　徳　器　磁　金　朱　筆　印　司　身　婦　味　醤　山　海　出　米　酒　鮭　海　蟹　蕎　丼　箸　膳　旨　食　理　前\A";
+    --jp-red-l3: "　福　祝　結　希　志　信　美　優　剛　泰　寧　久　遠　華　極　活　禄　舞　椿　藤　竹　鶴　龍　鯉　蝶　星　雲　霧　潮　苔　灯　障　釜　瓶　徳　器　磁　金　朱　筆　印　司　身　婦　味　醤　山　海　出　米　酒　鮭　海　蟹　蕎　丼　箸　膳　旨　食　理　前　人　丁　火　輪　気　味　酢　辛　春　秋　花　月　山　海　光　静　間　心　禅　寂　粋\A";
+    --jp-red-l4: "　鶴　龍　鯉　蝶　星　雲　霧　潮　苔　灯　障　釜　瓶　徳　器　磁　金　朱　筆　印　司　身　婦　味　醤　山　海　出　米　酒　鮭　海　蟹　蕎　丼　箸　膳　旨　食　理　前　人　丁　火　輪　気　味　酢　辛　春　秋　花　月　山　海　光　静　間　心　禅　寂　粋　福　祝　結　希　志　信　美　優　剛　泰　寧　久　遠　華　極　活　禄　舞　椿　藤　竹\A";
+
+    /* Four lines to a group, then the group repeated. One rotation of the vocabulary per
+       line, because a single line repeated down the page reads as stripes - every row
+       said the same thing in the same order, which looks like a bug even though it is
+       not. The rotations are EVEN numbers of cells, so a character stays on the layer it
+       started on and black keeps the even cells.
+       
+       Both layers rotate by the same amounts, in the same order. That is the rule the
+       whole effect rests on: anything done to one grid is done to the other. */
+    --jp-ink-g:   var(--jp-ink-l1) var(--jp-ink-l2) var(--jp-ink-l3) var(--jp-ink-l4);
+    --jp-ink-x16: var(--jp-ink-g) var(--jp-ink-g) var(--jp-ink-g) var(--jp-ink-g);
+    --jp-ink-x48: var(--jp-ink-x16) var(--jp-ink-x16) var(--jp-ink-x16);
+
+    --jp-red-g:   var(--jp-red-l1) var(--jp-red-l2) var(--jp-red-l3) var(--jp-red-l4);
+    --jp-red-x16: var(--jp-red-g) var(--jp-red-g) var(--jp-red-g) var(--jp-red-g);
+    --jp-red-x48: var(--jp-red-x16) var(--jp-red-x16) var(--jp-red-x16);
 }
 
 /* ── the characters ────────────────────────────────────────────────────────────── */
@@ -106,8 +146,27 @@
     user-select: none;
     -webkit-user-select: none;
     overflow: hidden;
-    white-space: normal;
-    word-break: break-all;
+    /* `pre-wrap`, and this is the load-bearing line of the whole effect.
+
+       With `normal`, CSS removes collapsible white space at the START of every line - and
+       an ideographic space counts. The red layer begins with one, to sit it in the black
+       layer's gap, so that space was dropped and the entire red run shifted one cell left:
+       every character drawn twice, black with red exactly on top, which composites to one
+       muddy colour and looks precisely like "the alternation does not work". It measured
+       fine mid-string, which is why the probe that measured a cell width said everything
+       was correct.
+
+       `pre-wrap` preserves spaces at line boundaries and still wraps. The strings contain
+       no newlines, so nothing else about it applies. */
+    /* `pre`: every space is kept and NOTHING wraps. Lines exist only where the content
+       puts a newline, which is the other half of keeping the two layers on one grid - see
+       the vocabulary block above. `normal` and `pre-wrap` were both tried, and both let
+       the engine pick break points per layer, which is exactly what tore the alternation
+       apart.
+
+       No `word-break` any more: it decides where text MAY break, and nothing breaks on
+       its own now. */
+    white-space: pre;
     text-align: left;
     /* The device's own CJK font. Named explicitly rather than left to `sans-serif`,
        because a generic sans may have no kanji at all and would draw a column of tofu
@@ -121,20 +180,23 @@
        than as words - a diner should notice the page has a texture, not start reading the
        wall. */
     font-size: 18px;
-    line-height: 2.1;
-    letter-spacing: 0.22em;
+    /* Every cell now carries a character - both layers are visible, which doubles the
+       density against the version where one of them was quietly drawing on top of the
+       other. Wider tracking and a taller line give it back the air it lost. */
+    line-height: 2.6;
+    letter-spacing: 0.55em;
     transform: rotate(-1.2deg);
 }
 
 :root[data-template="japan"] body::after {
-    content: var(--jp-ink-x32);
+    content: var(--jp-ink-x48);
     color: var(--jp-ink);
     opacity: var(--jp-ink-alpha);
     z-index: -1;
 }
 
 :root[data-template="japan"]::after {
-    content: var(--jp-red-x32);
+    content: var(--jp-red-x48);
     color: var(--jp-red);
     opacity: var(--jp-red-alpha);
     z-index: -2;
@@ -147,9 +209,9 @@
 @media (max-width: 520px) {
     :root[data-template="japan"]::after,
     :root[data-template="japan"] body::after {
-        font-size: 14px;
-        letter-spacing: 0.16em;
-        line-height: 2;
+        font-size: 13px;
+        letter-spacing: 0.4em;
+        line-height: 2.4;
     }
 }
 
