@@ -111,13 +111,15 @@ function toModel(r: ModelRow, usedBy: { id: string; name: string } | null): Tena
  *  generic stock. */
 export type LibraryModel = TenantModel & { tenantId: string; tenantName: string }
 
-/** The whole BetaReal library, across every restaurant.
+/** The whole BetaReal library, across every restaurant - which since 0027 is every
+ *  model, because the library is not a list somebody curates.
  *
- *  Readable because of the `models_shared_read` policy in 0024, not because of any
- *  privilege this page holds - which is deliberate: a borrowing restaurant's own admin
- *  has to be able to resolve a library model sitting on its dish, so the read had to be
- *  open to any signed-in user anyway. What is super-admin-only is PUTTING a model in
- *  here (`models_shared_guard`) and the screen that browses it. */
+ *  This returns everything only for a super admin, and that is the database's doing
+ *  rather than this file's: `is_member_of()` is true of every tenant for a super admin,
+ *  so `models_rw` hands them the lot. Everyone else gets, at most, the library models
+ *  their own dishes are using (`models_shared_read`, narrowed in 0027) - without that a
+ *  borrowing restaurant's admin could not resolve the model on its own item, and with
+ *  anything wider every owner could enumerate every other restaurant's models. */
 export async function loadSharedModels(): Promise<LibraryModel[]> {
   const supabase = createClient()
   const { data: rows } = await supabase.from('models')
@@ -126,6 +128,9 @@ export async function loadSharedModels(): Promise<LibraryModel[]> {
             'scale_cm, scale_axis, width_cm, length_cm, height_cm, ' +
             'tenant_state, archived, created_utc, shared')
     .eq('shared', true)
+    // Hidden models stay hidden. `archived` is "I do not want to look at this any more",
+    // and a library that shows them offers a dish its own restaurant has put away.
+    .eq('archived', false)
     .order('created_utc', { ascending: false })
 
   const owned = (rows || []) as unknown as (ModelRow & { tenant_id: string })[]
