@@ -10,6 +10,7 @@ export type StarterTemplateKey =
   | 'mediterranean_air'
   | 'elegant_black'
   | 'monday_greens'
+  | 'japan'
   | 'baoma'
   | 'burger_lions'
   | 'burger_bar'
@@ -190,6 +191,31 @@ const TEMPLATE_VISUAL_TOKENS: Record<StarterTemplateKey, ThemeConfig> = {
     day_accent_edge: 'linear-gradient(180deg, #247ba0, #7a8f48)', day_thumb_vignette: 'radial-gradient(ellipse at center, transparent 36%, rgba(255,253,247,0.78) 100%)',
     day_item_shadow: '0 4px 14px rgba(36,72,80,0.11)', day_item_hover_shadow: '0 12px 26px rgba(36,72,80,0.15)',
     day_modal_bg_image: 'radial-gradient(70% 48% at 50% 36%, rgba(36,123,160,0.13) 0%, transparent 62%), radial-gradient(130% 100% at 50% 50%, #e7f4f4 0%, #fffdf7 72%)',
+  },
+  // White paper, near-black ink, one seal red - and no gradients or shadows anywhere,
+  // because "clean" is mostly their absence. The Japanese-character wallpaper is not
+  // here: it lives in `japan.skin.css`, keyed on `data-template="japan"`, so it comes with
+  // the TEMPLATE and not with these colours. Night is the same paper on purpose - the
+  // wallpaper is black and red ink, and on a dark page half of it would disappear.
+  japan: {
+    night_bg_image: 'none', night_bg_size: 'auto', night_bg_repeat: 'no-repeat',
+    night_card_bg: '#ffffff', night_card_radius: '2px', night_card_blur: '0px',
+    night_stage_bg: '#ffffff',
+    night_pill_bg: '#f2efea', night_pill_active_bg: '#14110f',
+    night_cta_bg: '#c0392f', night_cta_shadow: 'none',
+    night_hero_color: '#14110f', night_hero_shadow: 'none', night_divider_bg: '#e6e1da',
+    night_accent_edge: '#c0392f', night_thumb_vignette: 'none',
+    night_item_shadow: 'none', night_item_hover_shadow: '0 2px 10px rgba(20,17,15,0.06)',
+    night_modal_bg_image: 'none',
+    day_bg_image: 'none', day_bg_size: 'auto', day_bg_repeat: 'no-repeat',
+    day_card_bg: '#ffffff', day_card_radius: '2px', day_card_blur: '0px',
+    day_stage_bg: '#ffffff',
+    day_pill_bg: '#f2efea', day_pill_active_bg: '#14110f',
+    day_cta_bg: '#c0392f', day_cta_shadow: 'none',
+    day_hero_color: '#14110f', day_hero_shadow: 'none', day_divider_bg: '#e6e1da',
+    day_accent_edge: '#c0392f', day_thumb_vignette: 'none',
+    day_item_shadow: 'none', day_item_hover_shadow: '0 2px 10px rgba(20,17,15,0.06)',
+    day_modal_bg_image: 'none',
   },
   elegant_black: {
     night_bg_image: 'radial-gradient(78% 48% at 50% -12%, rgba(215,189,122,0.16) 0%, transparent 62%), radial-gradient(58% 42% at 88% 26%, rgba(143,116,68,0.12) 0%, transparent 74%), linear-gradient(180deg, #080808 0%, #151414 58%, #050505 100%)',
@@ -736,6 +762,32 @@ export const TEMPLATE_PRESETS: ThemePreset[] = [
       day_glow: 'rgba(36,123,160,0.16)', day_glow2: 'rgba(122,143,72,0.10)', day_shadow: 'rgba(36,72,80,0.12)',
       ...TEMPLATE_VISUAL_TOKENS.mediterranean_air,
       font_body: 'Source Sans 3', font_heading: 'Playfair Display', template_key: 'mediterranean_air',
+    },
+  },
+  {
+    key: 'japan',
+    label: 'Japan',
+    description: 'Clean white page with tiny black and red Japanese characters in the background - for sushi and Japanese menus.',
+    primaryColor: '#c0392f',
+    secondaryColor: '#14110f',
+    createStarterCategory: true,
+    values: {
+      night_bg: '#ffffff', night_bg2: '#fbfaf8', night_card: '#ffffff', night_card2: '#f7f5f2', night_border: '#e6e1da',
+      night_text: '#14110f', night_dim: '#7d746c', night_accent: '#c0392f', night_accent2: '#9c2b23', night_accent_text: '#ffffff', night_thumb_bg: '#f7f5f2', night_modal_bg: '#ffffff',
+      night_glow: 'transparent', night_glow2: 'transparent', night_shadow: 'rgba(20,17,15,0.06)',
+      night_price_color: '#14110f', night_add_btn_color: '#c0392f',
+      day_bg: '#ffffff', day_bg2: '#fbfaf8', day_card: '#ffffff', day_card2: '#f7f5f2', day_border: '#e6e1da',
+      day_text: '#14110f', day_dim: '#7d746c', day_accent: '#c0392f', day_accent2: '#9c2b23', day_accent_text: '#ffffff', day_thumb_bg: '#f7f5f2', day_modal_bg: '#ffffff',
+      day_glow: 'transparent', day_glow2: 'transparent', day_shadow: 'rgba(20,17,15,0.06)',
+      day_price_color: '#14110f', day_add_btn_color: '#c0392f',
+      ...TEMPLATE_VISUAL_TOKENS.japan,
+      // Cleared rather than chosen. The JAPAN demo loads no web font at all - the base
+      // sheet names Nunito and Bebas Neue but nothing fetches them - so what everyone has
+      // been looking at and approving is the phone's own sans. An empty value is skipped
+      // by `fontLinks`, and writing it (rather than leaving the key out) is what stops a
+      // restaurant switching FROM another template keeping that template's fonts.
+      font_body: '', font_heading: '', template_key: 'japan',
+      default_theme: 'day',
     },
   },
   {

@@ -38,7 +38,10 @@ export type Template = {
 /** The stylesheets the menu app ships. A template whose id is not in here renders as
  *  Monday Greens - see the header. Kept as a list rather than read from the filesystem
  *  because the admin is a separate app and cannot see the menu app's files. */
-export const SHIPPED_STYLESHEETS = ['monday_greens', 'elegant_black'] as const
+// `japan` is ours rather than extracted from the platform: `app/src/lib/css/japan.css`
+// (the generated structural base) plus `japan.skin.css` (the look). Both ship in the menu
+// app's SHEETS, so a restaurant on this template renders as Japan and not as a fallback.
+export const SHIPPED_STYLESHEETS = ['monday_greens', 'elegant_black', 'japan'] as const
 
 export async function loadTemplates(): Promise<Template[]> {
   const supabase = createClient()
