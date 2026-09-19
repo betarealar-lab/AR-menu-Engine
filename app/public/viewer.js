@@ -1332,8 +1332,17 @@ window.UI = {
         // anything from our pipeline and only an imported model carries a multiplier.
         model: d.glb || "",
         model_url: d.glb || "",
-        usdz: d.usdz || "",
-        usdz_url: d.usdz || "",
+        // **`model_usdz`, and it has to be exactly that.** It is the platform's column
+        // name and the only one `viewer.js` reads (`_usdzUrl` -> `item?.model_usdz`).
+        //
+        // This used to be `usdz` and `usdz_url`, which nothing reads - so on every page
+        // this app served, the viewer saw a dish with no USDZ. On an iPhone that is the
+        // whole of AR: `_canLikelyAR` for `arkit` is `!!_usdzUrl(item)`, so the button
+        // never offered "view on table", and a tap fell through to the no-USDZ path -
+        // build a hidden converter at tap time, find it not loaded, drop to the 3D modal.
+        // The routing code is byte-identical to production and was never the problem;
+        // it was being handed a dish without the one field Quick Look needs.
+        model_usdz: d.usdz || "",
         thumbnail_url: d.poster || "",
         ar_scale: d.arScale ? parseFloat(d.arScale) : 1,
         // The card's own answer, not "does it have a GLB". See markup.js on `data-is3d`:

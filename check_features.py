@@ -601,6 +601,32 @@ def main() -> int:
     check("the built bundle matches the shim it came from",
           ("const PREVIEW = " in shim) and ("const PREVIEW = " in built))
 
+    # -- 11b2. every field the viewer reads, the shim provides -------------------------
+    #
+    # iPhone AR did not work, with routing code byte-identical to production. The viewer
+    # reads the USDZ off `item?.model_usdz` - the platform's column name - and the shim
+    # built the dish as `usdz` / `usdz_url`, which nothing reads. So every dish arrived
+    # with no USDZ, `_canLikelyAR` on iOS (`!!_usdzUrl(item)`) was false everywhere, and
+    # a tap fell to the no-USDZ path and landed in the 3D modal. Nothing errored: an
+    # absent property is `undefined`, and `undefined` is a perfectly good empty string.
+    #
+    # So this is not a check about USDZ. It is the contract between the two files, read
+    # off the READER: every `item.<field>` in viewer.js must be a key the shim writes. It
+    # would have caught this, and it catches the next rename in either direction.
+    viewer_src = (ROOT / "menu" / "render" / "ported" / "viewer.js").read_text(encoding="utf-8")
+    reads = set(re.findall(r"\bitem\??\.([a-z][a-z0-9_]*)", viewer_src))
+    obj = re.search(r"out\[i\]\s*=\s*\{(.*?)\n\s*\};", shim, re.S)
+    body = re.sub(r"//[^\n]*", "", obj.group(1)) if obj else ""
+    writes = set(re.findall(r"^\s*([a-z][a-z0-9_]*)\s*:", body, re.M))
+    missing = sorted(reads - writes)
+    check("the shim builds the dish object the viewer reads", obj is not None and writes,
+          "could not find `out[i] = {...}` in shim.js")
+    check("...with EVERY field the viewer reads off a dish", not missing,
+          f"viewer reads, shim never sets: {missing}")
+    check("...including model_usdz, which is the whole of iPhone AR",
+          "model_usdz" in reads and "model_usdz" in writes,
+          f"reads={'model_usdz' in reads} writes={'model_usdz' in writes}")
+
     # -- 11b3. the card never shows a price nobody can choose -------------------------
     #
     # The first size is marked `selected` in the markup, and `platform.js` rewrites the
