@@ -53,7 +53,7 @@ export default function EmbedSection({ tenantId, isSuper }: { tenantId: string; 
     <div className="card p-5 mt-5 no-print">
       <div className="flex items-baseline gap-3 flex-wrap mb-1">
         <div className="font-semibold mr-auto">{T.embedTitle}</div>
-        <a href={`${origin}/help/embed`} target="_blank" rel="noreferrer"
+        <a href={`${origin}/help/embed/`} target="_blank" rel="noreferrer"
            className="text-xs" style={{ color: 'var(--gold)' }}>{T.embedHowTo} ↗</a>
       </div>
       <p className="text-xs mb-4" style={{ color: 'var(--dim)' }}>{T.embedIntro}</p>
