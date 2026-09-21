@@ -1,0 +1,202 @@
+---
+// "How do I put my 3D dishes on my own website?" - the page a restaurant owner, or whoever
+// looks after their website, is sent to. Static: it says the same thing to everybody.
+//
+// Written for the person who will actually do it - often the owner, sometimes a relative
+// who "does the website" - so it is steps and screenshots-in-words, not an API reference.
+// The admin's Share page hands out the code; this page says where to paste it.
+export const prerender = true;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Add your 3D dishes to your website · BetaReal</title>
+    <meta name="description" content="Paste one block next to a dish and it shows up in 3D, with a View on your table button." />
+    <style>
+      :root { --bg:#f6f4f0; --card:#fff; --fg:#1b1a17; --dim:#66615a; --line:#e6e1d9; --accent:#b7791f; --code:#f1ede6; }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#131416; --card:#1b1d20; --fg:#ecebe7; --dim:#a29d95; --line:#2c2f33; --accent:#f3b545; --code:#24272b; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg);
+             font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+      h1 { font-size: 1.7rem; line-height: 1.2; margin: 0 0 8px; letter-spacing: -.01em; }
+      h2 { font-size: 1.15rem; margin: 36px 0 10px; }
+      h3 { font-size: 1rem; margin: 20px 0 6px; }
+      p, li { color: var(--fg); }
+      .lead { color: var(--dim); margin: 0 0 20px; }
+      .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin: 14px 0; }
+      ol, ul { padding-left: 1.25rem; }
+      li { margin: 4px 0; }
+      code, pre { font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; background: var(--code); border-radius: 6px; }
+      code { padding: 1px 5px; }
+      pre { padding: 12px 14px; overflow-x: auto; white-space: pre; }
+      .note { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; color: var(--dim); }
+      .lang { display: flex; gap: 8px; margin-bottom: 18px; }
+      .lang button { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+                     border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+      .lang button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+      [data-l] { display: none; }
+      html[data-lang="en"] [data-l="en"], html[data-lang="ka"] [data-l="ka"] { display: block; }
+    </style>
+    <script is:inline>
+      (function () {
+        var l = "en";
+        try { l = localStorage.getItem("br-help-lang") || ((navigator.language || "").indexOf("ka") === 0 ? "ka" : "en"); } catch (_) {}
+        document.documentElement.setAttribute("data-lang", l === "ka" ? "ka" : "en");
+      })();
+    </script>
+  </head>
+  <body>
+    <main>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-set="en">English</button>
+        <button type="button" data-set="ka">ქართული</button>
+      </div>
+
+      <!-- ─────────────────────────── English ─────────────────────────── -->
+      <div data-l="en">
+        <h1>Add your 3D dishes to your website</h1>
+        <p class="lead">Keep your website exactly as it is. Paste one block next to a dish, and that dish shows up in 3D, with a <b>View on your table</b> button that puts it on the guest's table through their phone camera.</p>
+
+        <div class="card">
+          <h2 style="margin-top:0">The three steps</h2>
+          <ol>
+            <li>In your BetaReal admin, open <b>QR &amp; share</b> and scroll to <b>On your website</b>.</li>
+            <li>Next to the dish you want, press <b>Copy code</b>.</li>
+            <li>In your website's editor, add an <b>HTML</b> or <b>Embed code</b> block where the dish should appear, paste, and save.</li>
+          </ol>
+          <p>That is all. There is nothing to configure, no account to create and nothing to update later — when we improve a model, your website shows the new one by itself.</p>
+        </div>
+
+        <h2>Where to paste it, by website builder</h2>
+
+        <h3>WordPress</h3>
+        <p>Edit the page → press <b>+</b> → search <b>Custom HTML</b> → paste → <b>Update</b>. With Elementor: drag the <b>HTML</b> widget onto the page and paste into it.</p>
+
+        <h3>Wix</h3>
+        <p>Press <b>Add (+)</b> → <b>Embed Code</b> → <b>Embed HTML</b> → <b>Enter Code</b> → paste → <b>Update</b>. Make the box about as tall as it is wide.</p>
+        <p class="note">On Wix the 3D view always works. The table (AR) view may open the dish on its own page instead of inside yours — Wix wraps pasted code in a box of its own that blocks the camera. It still works, one tap later.</p>
+
+        <h3>Shopify</h3>
+        <p><b>Online Store → Themes → Customize</b> → on the page you want, <b>Add section</b> (or <b>Add block</b>) → <b>Custom Liquid</b> → paste → <b>Save</b>.</p>
+
+        <h3>Squarespace</h3>
+        <p>Edit the page → <b>Add block</b> → <b>Code</b> → paste → make sure the mode is <b>HTML</b> → save. Code blocks with scripts need the Core plan or higher; on lower plans use an <b>Embed</b> block instead.</p>
+
+        <h3>Tilda</h3>
+        <p><b>Add block</b> → <b>Other</b> → <b>T123 HTML code</b> → <b>Content</b> → paste → save and <b>Publish</b>.</p>
+
+        <h3>Webflow</h3>
+        <p>Press <b>Add (+)</b> → drag an <b>Embed</b> element onto the page → paste → <b>Save &amp; Close</b> → publish.</p>
+
+        <h3>A website someone built for you</h3>
+        <p>Send them the code and this page. It is one self-contained block that goes wherever the dish is shown; it needs nothing in the page header.</p>
+
+        <h2>Good to know</h2>
+        <ul>
+          <li><b>Your website needs to be HTTPS</b> (the address starts with <code>https://</code>) for the table view. Phones only open the camera for secure sites. The 3D view works either way.</li>
+          <li><b>It will not slow your page down.</b> Nothing heavy loads until a guest scrolls to the dish.</li>
+          <li><b>No cookies.</b> It does not track your guests and does not need a cookie banner.</li>
+          <li><b>A link works too.</b> Every dish also has its own address — put it in your Instagram bio, a WhatsApp message, or a QR code on a delivery bag.</li>
+          <li><b>Hidden dish, hidden embed.</b> If you hide a dish in your menu, it disappears from your website too.</li>
+        </ul>
+
+        <h2>For developers</h2>
+        <p>The block is an <code>&lt;iframe&gt;</code> plus an optional loader. The loader is what lets iPhones open the table view directly from your page; without it, iPhone opens the dish on its own page first.</p>
+        <pre>&lt;div data-betareal-dish="DISH_ID" style="position:relative;max-width:560px"&gt;
+  &lt;iframe src="https://MENU_HOST/d/DISH_ID" title="Dish in 3D" loading="lazy"
+          allow="xr-spatial-tracking; fullscreen" allowfullscreen
+          style="display:block;width:100%;aspect-ratio:4/3;border:0;border-radius:12px"&gt;&lt;/iframe&gt;
+&lt;/div&gt;
+&lt;script async src="https://MENU_HOST/embed.js"&gt;&lt;/script&gt;</pre>
+        <p>Or, with the loader on the page, a tag: <code>&lt;betareal-dish dish="DISH_ID"&gt;&lt;/betareal-dish&gt;</code>. Optional attributes: <code>lang</code> (<code>en</code>, <code>ka</code>, <code>ru</code>), <code>theme</code> (<code>light</code>, <code>dark</code>), <code>load</code> (<code>visible</code>, <code>tap</code>, <code>eager</code>), <code>title="0"</code> to hide the dish name, <code>aspect</code> (e.g. <code>1/1</code>).</p>
+        <p>Keep <code>allow="xr-spatial-tracking"</code> on the iframe — without it, Android cannot open the table view inside your page. If your site sends a Content-Security-Policy, allow the menu host in <code>frame-src</code> and <code>script-src</code>.</p>
+      </div>
+
+      <!-- ─────────────────────────── ქართული ─────────────────────────── -->
+      <div data-l="ka">
+        <h1>დაამატე შენი 3D კერძები შენს ვებსაიტზე</h1>
+        <p class="lead">შენი საიტი რჩება ისეთი, როგორიც არის. კერძის გვერდით ჩასვამ ერთ ბლოკს და კერძი გამოჩნდება 3D-ში, ღილაკით <b>ნახე შენს მაგიდაზე</b> — სტუმარი ტელეფონის კამერით კერძს საკუთარ მაგიდაზე ხედავს.</p>
+
+        <div class="card">
+          <h2 style="margin-top:0">სამი ნაბიჯი</h2>
+          <ol>
+            <li>BetaReal-ის ადმინში გახსენი <b>QR და გაზიარება</b> და ჩადი <b>შენს ვებსაიტზე</b> განყოფილებამდე.</li>
+            <li>სასურველი კერძის გვერდით დააჭირე <b>კოდის კოპირებას</b>.</li>
+            <li>შენი საიტის რედაქტორში, იქ სადაც კერძი უნდა გამოჩნდეს, დაამატე <b>HTML</b> ან <b>Embed code</b> ბლოკი, ჩასვი კოდი და შეინახე.</li>
+          </ol>
+          <p>ეს არის ყველაფერი. არაფრის დაყენება, ანგარიშის შექმნა ან შემდეგ განახლება არ გჭირდება — როცა მოდელს გავაუმჯობესებთ, შენს საიტზე ახალი თავისით გამოჩნდება.</p>
+        </div>
+
+        <h2>სად ჩავსვა — საიტის მიხედვით</h2>
+
+        <h3>WordPress</h3>
+        <p>გახსენი გვერდის რედაქტირება → <b>+</b> → მოძებნე <b>Custom HTML</b> → ჩასვი → <b>Update</b>. Elementor-ში: გვერდზე გადაიტანე <b>HTML</b> ვიჯეტი და ჩასვი მასში.</p>
+
+        <h3>Wix</h3>
+        <p><b>Add (+)</b> → <b>Embed Code</b> → <b>Embed HTML</b> → <b>Enter Code</b> → ჩასვი → <b>Update</b>. ბლოკი დაახლოებით იმდენივე სიმაღლის გააკეთე, რამდენიც სიგანისაა.</p>
+        <p class="note">Wix-ზე 3D ხედი ყოველთვის მუშაობს. მაგიდის (AR) ხედი შეიძლება ცალკე გვერდზე გაიხსნას — Wix ჩასმულ კოდს საკუთარ ჩარჩოში სვამს და კამერას ბლოკავს. მაინც მუშაობს, უბრალოდ ერთი შეხებით მეტი სჭირდება.</p>
+
+        <h3>Shopify</h3>
+        <p><b>Online Store → Themes → Customize</b> → სასურველ გვერდზე <b>Add section</b> (ან <b>Add block</b>) → <b>Custom Liquid</b> → ჩასვი → <b>Save</b>.</p>
+
+        <h3>Squarespace</h3>
+        <p>გვერდის რედაქტირება → <b>Add block</b> → <b>Code</b> → ჩასვი → რეჟიმი იყოს <b>HTML</b> → შეინახე. სკრიპტიანი Code ბლოკი Core გეგმიდან მუშაობს; დაბალ გეგმებზე გამოიყენე <b>Embed</b> ბლოკი.</p>
+
+        <h3>Tilda</h3>
+        <p><b>Add block</b> → <b>Other</b> → <b>T123 HTML code</b> → <b>Content</b> → ჩასვი → შეინახე და <b>Publish</b>.</p>
+
+        <h3>Webflow</h3>
+        <p><b>Add (+)</b> → გვერდზე გადაიტანე <b>Embed</b> ელემენტი → ჩასვი → <b>Save &amp; Close</b> → გამოაქვეყნე.</p>
+
+        <h3>საიტი, რომელიც ვინმემ აგიწყო</h3>
+        <p>გაუგზავნე მათ კოდი და ეს გვერდი. ეს ერთი დამოუკიდებელი ბლოკია, რომელიც კერძის ადგილას ისმება; გვერდის თავში (header) არაფერი სჭირდება.</p>
+
+        <h2>კარგია იცოდე</h2>
+        <ul>
+          <li><b>მაგიდის ხედისთვის საიტი HTTPS უნდა იყოს</b> (მისამართი იწყება <code>https://</code>-ით). ტელეფონი კამერას მხოლოდ დაცულ საიტზე ხსნის. 3D ხედი ორივე შემთხვევაში მუშაობს.</li>
+          <li><b>საიტს არ შეანელებს.</b> მძიმე არაფერი იტვირთება, სანამ სტუმარი კერძამდე არ ჩავა.</li>
+          <li><b>ქუქიების გარეშე.</b> სტუმრებს არ აკვირდება და ქუქი-ბანერი არ სჭირდება.</li>
+          <li><b>ბმულიც მუშაობს.</b> ყველა კერძს საკუთარი მისამართი აქვს — ჩასვი Instagram-ის ბიოში, WhatsApp-ის მესიჯში ან მიტანის პაკეტის QR კოდში.</li>
+          <li><b>დამალული კერძი — დამალული ჩასმა.</b> თუ კერძს მენიუში დამალავ, საიტიდანაც გაქრება.</li>
+        </ul>
+
+        <h2>დეველოპერებისთვის</h2>
+        <p>ბლოკი არის <code>&lt;iframe&gt;</code> და არასავალდებულო ჩამტვირთავი სკრიპტი. სკრიპტი iPhone-ს აძლევს საშუალებას, მაგიდის ხედი პირდაპირ შენი გვერდიდან გახსნას; მის გარეშე iPhone ჯერ კერძის ცალკე გვერდს ხსნის.</p>
+        <pre>&lt;div data-betareal-dish="DISH_ID" style="position:relative;max-width:560px"&gt;
+  &lt;iframe src="https://MENU_HOST/d/DISH_ID" title="Dish in 3D" loading="lazy"
+          allow="xr-spatial-tracking; fullscreen" allowfullscreen
+          style="display:block;width:100%;aspect-ratio:4/3;border:0;border-radius:12px"&gt;&lt;/iframe&gt;
+&lt;/div&gt;
+&lt;script async src="https://MENU_HOST/embed.js"&gt;&lt;/script&gt;</pre>
+        <p>ან, როცა სკრიპტი გვერდზეა, ტეგი: <code>&lt;betareal-dish dish="DISH_ID"&gt;&lt;/betareal-dish&gt;</code>. არასავალდებულო ატრიბუტები: <code>lang</code> (<code>en</code>, <code>ka</code>, <code>ru</code>), <code>theme</code> (<code>light</code>, <code>dark</code>), <code>load</code> (<code>visible</code>, <code>tap</code>, <code>eager</code>), <code>title="0"</code> კერძის სახელის დასამალად, <code>aspect</code> (მაგ. <code>1/1</code>).</p>
+        <p>iframe-ზე დატოვე <code>allow="xr-spatial-tracking"</code> — მის გარეშე Android მაგიდის ხედს შენს გვერდზე ვერ გახსნის. თუ საიტი Content-Security-Policy-ს აგზავნის, დაუშვი მენიუს ჰოსტი <code>frame-src</code>-სა და <code>script-src</code>-ში.</p>
+      </div>
+    </main>
+    <script is:inline>
+      (function () {
+        var root = document.documentElement;
+        function sync() {
+          var l = root.getAttribute("data-lang");
+          document.querySelectorAll("[data-set]").forEach(function (b) {
+            b.setAttribute("aria-pressed", String(b.getAttribute("data-set") === l));
+          });
+          root.setAttribute("lang", l);
+        }
+        document.querySelectorAll("[data-set]").forEach(function (b) {
+          b.addEventListener("click", function () {
+            var l = b.getAttribute("data-set");
+            root.setAttribute("data-lang", l);
+            try { localStorage.setItem("br-help-lang", l); } catch (_) {}
+            sync();
+          });
+        });
+        sync();
+      })();
+    </script>
+  </body>
+</html>

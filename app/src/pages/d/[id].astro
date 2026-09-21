@@ -1,0 +1,361 @@
+---
+// One dish, in 3D, with "View on your table" - for a page that is not ours.
+//
+// The same page is the LINK (opened on its own: a bio, a message, a sticker on a delivery
+// bag) and the EMBED (in an <iframe> on the restaurant's own site). The decisions -
+// photo or 3D, where it may be framed - live in `lib/embed.js`; see there and EMBED.md.
+//
+// What it deliberately shares with the menu, so the two cannot drift:
+//   the data rule    public_dish (0028) is public_menu's rule for one dish
+//   the files        /a/<key>, the same private-bucket route, already sending
+//                    Access-Control-Allow-Origin: * for exactly this
+//   the viewer       model-viewer 3.4.0 from the same CDN as /ar
+//   the analytics    /e and record_events, with three embed_* names of its own
+//
+// AR, and why iPhone is special. Android runs WebXR inside this frame - legal because the
+// block we hand out sets allow="xr-spatial-tracking". iPhone's Quick Look is launched by a
+// click on <a rel="ar">, and whether that works from inside a cross-origin frame is not
+// something Apple documents. So on an iPhone this page asks the restaurant's page to do it:
+// `embed.js` (the loader in the block) draws the button in the TOP document and the tap
+// happens there. Without the loader, the button opens this page on its own, where it works.
+import { loadDish, decide, frameAncestors, ownOrigins, DISH_ID } from "../../lib/embed.js";
+import { envFrom } from "../../lib/env.js";
+
+export const prerender = false;
+
+const { id } = Astro.params;
+const q = Astro.url.searchParams;
+const langParam = (q.get("lang") || "").toLowerCase();
+const theme = q.get("theme") === "dark" ? "dark" : "light";
+const loadWhen = ["tap", "eager"].includes(q.get("load") || "") ? q.get("load") : "visible";
+const showTitle = q.get("title") !== "0";
+const wantsAr = q.get("ar") === "1";
+
+const notFound = (msg) => new Response(
+  `<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex">` +
+  `<body style="margin:0;display:grid;place-items:center;height:100vh;` +
+  `font:14px system-ui;color:#8a857d;background:#f4f2ee">${msg}</body>`,
+  { status: 404, headers: { "Content-Type": "text/html; charset=utf-8" } });
+
+if (!DISH_ID.test(String(id || ""))) return notFound("Dish not available");
+
+let dish = null;
+try {
+  dish = await loadDish(id, { locals: Astro.locals, lang: langParam });
+} catch {
+  return new Response("Temporarily unavailable", { status: 503,
+    headers: { "Retry-After": "30", "Cache-Control": "no-store" } });
+}
+if (!dish) return notFound("Dish not available");
+
+const env = envFrom(Astro.locals);
+const own = ownOrigins(env("PREVIEW_ORIGINS", "http://127.0.0.1:3001,http://localhost:3001"));
+const dest = (Astro.request.headers.get("sec-fetch-dest") || "").toLowerCase();
+let refererHost = "";
+try { refererHost = new URL(Astro.request.headers.get("referer") || "").hostname; } catch {}
+const { mode, restrict } = decide({ dish, dest, refererHost, own });
+
+const h = Astro.response.headers;
+h.set("Cache-Control", "private, max-age=60");
+h.set("Vary", "Referer, Sec-Fetch-Dest");
+h.set("X-Robots-Tag", "noindex");
+if (restrict) h.set("Content-Security-Policy", frameAncestors(restrict, own));
+
+const full = mode === "full";
+const lang = dish.lang;
+const LABELS = {
+  en: { ar: "View on your table", view: "Tap to view in 3D", drag: "Drag to turn it",
+        loading: "Loading 3D…", noar: "AR needs a phone. Here it is in 3D.",
+        by: "3D by BetaReal" },
+  ka: { ar: "ნახე შენს მაგიდაზე", view: "შეეხე და ნახე 3D-ში", drag: "გადაატრიალე თითით",
+        loading: "3D იტვირთება…", noar: "AR-ისთვის ტელეფონია საჭირო. აი, 3D-ში.",
+        by: "3D — BetaReal" },
+  ru: { ar: "Посмотреть на столе", view: "Нажмите, чтобы увидеть в 3D", drag: "Поверните пальцем",
+        loading: "Загрузка 3D…", noar: "Для AR нужен телефон. Вот блюдо в 3D.",
+        by: "3D — BetaReal" },
+};
+const T = LABELS[lang] || LABELS.en;
+
+const poster = (full ? dish.poster || dish.photo : dish.photo || dish.poster) || "";
+const origin = Astro.url.origin;
+const abs = (u) => (u ? new URL(u, origin).href : "");
+const title = dish.tenant.name ? `${dish.name} · ${dish.tenant.name}` : dish.name;
+
+// What the client script needs, and nothing else. `</` escaped - see [slug].astro.
+const boot = {
+  id: dish.id, tenant: dish.tenant.id, mode, lang,
+  glb: full ? abs(dish.glb) : "", usdz: full ? abs(dish.usdz) : "",
+  arScale: dish.arScale, orbit: dish.orbit, load: loadWhen, wantsAr,
+  host: refererHost, t: T,
+};
+---
+<!doctype html>
+<html lang={lang} data-theme={theme} data-mode={mode}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta property="og:title" content={title} />
+    {dish.description && <meta property="og:description" content={dish.description.slice(0, 200)} />}
+    {poster && <meta property="og:image" content={abs(poster)} />}
+    <meta property="og:type" content="website" />
+    <script is:inline>
+      // Before first paint, so the framed and standalone layouts never swap in front of
+      // anybody: a frame is compact, a link is a page.
+      try { if (window.self !== window.top) document.documentElement.classList.add("framed"); }
+      catch (_) { document.documentElement.classList.add("framed"); }
+    </script>
+    {/* is:global - this page is its own document, and the viewer is created by script
+        after load. Astro scopes a page's <style> to elements written in the template, so
+        scoped, not one rule reached <model-viewer>: it drew at the browser's default
+        300x150 in the top corner, and the ::part rule hiding its AR icon never applied. */}
+    <style is:global>
+      :root { --bg:#f4f2ee; --fg:#1b1a17; --dim:#6f6a62; --chip:rgba(255,255,255,.9);
+              --btn:#1b1a17; --btnfg:#fff; --line:rgba(0,0,0,.08); }
+      [data-theme="dark"] { --bg:#141517; --fg:#eeece8; --dim:#a39e96; --chip:rgba(20,21,23,.82);
+              --btn:#f3b545; --btnfg:#15120b; --line:rgba(255,255,255,.1); }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+                   font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+                   -webkit-tap-highlight-color: transparent; }
+      body { display: flex; flex-direction: column; }
+      .stage { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+      .poster, model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; }
+      .poster { object-fit: cover; transition: opacity .35s; }
+      [data-mode="full"] .poster { object-fit: contain; }
+      model-viewer { opacity: 0; transition: opacity .35s; background: transparent;
+                     --poster-color: transparent; }
+      .ready model-viewer { opacity: 1; }
+      /* model-viewer draws its own AR icon when it can do AR. Ours is the "View on your
+         table" button - one call to action, in words, not a cube a diner has to decode. */
+      model-viewer::part(default-ar-button) { display: none; }
+      .ready .poster { opacity: 0; }
+      .chip { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px;
+              align-items: baseline; pointer-events: none; }
+      .chip b { background: var(--chip); padding: 5px 10px; border-radius: 999px; font-size: 13px;
+                max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                box-shadow: 0 1px 2px var(--line); }
+      .cta { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+             border: 0; border-radius: 999px; padding: 11px 18px; font-family: inherit;
+             font-size: 14px; font-weight: 600; line-height: 1;
+             background: var(--btn); color: var(--btnfg); cursor: pointer; white-space: nowrap;
+             box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+      .cta[hidden], .tap[hidden] { display: none; }
+      .hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+              font-size: 12px; color: var(--dim); background: var(--chip); padding: 4px 10px;
+              border-radius: 999px; pointer-events: none; transition: opacity .4s; }
+      .hint.gone { opacity: 0; }
+      .has-cta .hint { bottom: 64px; }
+      .tap { position: absolute; inset: 0; display: grid; place-items: center; cursor: pointer;
+             background: none; border: 0; color: inherit; font: inherit; }
+      .tap span { background: var(--chip); padding: 8px 14px; border-radius: 999px; font-size: 13px;
+                  font-weight: 600; box-shadow: 0 1px 3px var(--line); }
+      .mark { position: absolute; right: 10px; bottom: 10px; font-size: 10px; color: var(--dim);
+              opacity: .75; text-decoration: none; }
+      .has-cta .mark { display: none; }
+      .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); }
+
+      /* Opened on its own: a page, not a card. Name, restaurant and price get a bar. */
+      html:not(.framed) .stage { min-height: 62vh; }
+      .info { padding: 14px 18px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+      .info h1 { font-size: 1.1rem; margin: 0; }
+      .info p { margin: 4px 0 0; color: var(--dim); font-size: .9rem; }
+      .framed .info { display: none; }
+      html:not(.framed) .chip { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="stage" id="stage">
+      {poster
+        ? <img class="poster" src={poster} alt={dish.name} decoding="async" />
+        : <div class="empty">{dish.name}</div>}
+      {showTitle && <div class="chip"><b>{dish.name}</b></div>}
+      {full && <button class="tap" id="tap" type="button" hidden><span>{T.view}</span></button>}
+      {full && <button class="cta" id="cta" type="button" hidden>{T.ar}</button>}
+      {full && <div class="hint gone" id="hint">{T.drag}</div>}
+      <a class="mark" href={`${origin}/help/embed`} target="_blank" rel="noopener">{T.by}</a>
+    </div>
+    <div class="info">
+      <h1>{dish.name}</h1>
+      <p>{[dish.tenant.name, dish.price].filter(Boolean).join(" · ")}</p>
+      {dish.description && <p>{dish.description}</p>}
+    </div>
+
+    <script is:inline set:html={`window.__DISH=${JSON.stringify(boot).replace(/</g, "\\u003c")};`} />
+    <script is:inline>
+    (function () {
+      var D = window.__DISH, T = D.t, doc = document, root = doc.documentElement;
+      var framed = root.classList.contains("framed");
+      var stage = doc.getElementById("stage"), cta = doc.getElementById("cta");
+      var tap = doc.getElementById("tap"), hint = doc.getElementById("hint");
+
+      // ── counts ─────────────────────────────────────────────────────────────────────
+      // /e and record_events, like the menu. No cookie and nothing kept: a frame's storage
+      // is partitioned per site anyway, so a "visitor" id here would count wrong.
+      var session = (function () {
+        var a = new Uint8Array(12);
+        try { crypto.getRandomValues(a); } catch (_) { for (var i = 0; i < 12; i++) a[i] = Math.random() * 256; }
+        return Array.prototype.map.call(a, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+      })();
+      function track(name, meta) {
+        try {
+          var m = { host: D.host || "", framed: framed, mode: D.mode };
+          for (var k in meta || {}) m[k] = meta[k];
+          var body = JSON.stringify({ tenant: D.tenant, session: session,
+                                      events: [{ name: name, item: D.id, meta: m }] });
+          if (navigator.sendBeacon) navigator.sendBeacon("/e", new Blob([body], { type: "text/plain" }));
+          else fetch("/e", { method: "POST", body: body, keepalive: true });
+        } catch (_) {}
+      }
+      track("embed_view");
+      if (D.mode !== "full") return;
+
+      // ── what this device can do ─────────────────────────────────────────────────────
+      var ua = navigator.userAgent;
+      var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      var touch = (navigator.maxTouchPoints || 0) > 0 ||
+                  (window.matchMedia && matchMedia("(any-pointer: coarse)").matches);
+      var canAR = touch && (isIOS ? !!D.usdz : true);
+      var standaloneUrl = location.origin + location.pathname + "?ar=1" + (D.lang ? "&lang=" + D.lang : "");
+
+      // ── the viewer, on demand ───────────────────────────────────────────────────────
+      var mv = null, loading = null, turned = false;
+      function load() {
+        if (loading) return loading;
+        tap && (tap.hidden = true);
+        loading = new Promise(function (resolve) {
+          var go = function () {
+            mv = doc.createElement("model-viewer");
+            mv.setAttribute("src", D.glb);
+            if (D.usdz) mv.setAttribute("ios-src", D.usdz);
+            mv.setAttribute("camera-controls", "");
+            mv.setAttribute("touch-action", "pan-y");
+            mv.setAttribute("interaction-prompt", "none");
+            mv.setAttribute("shadow-intensity", "0.8");
+            mv.setAttribute("min-camera-orbit", "auto 0deg auto");
+            mv.setAttribute("max-camera-orbit", "auto 85deg auto");
+            if (D.orbit) mv.setAttribute("camera-orbit", D.orbit);
+            // True size, not pinchable - the portion is the point (see /ar).
+            mv.setAttribute("ar", "");
+            mv.setAttribute("ar-modes", "webxr scene-viewer quick-look");
+            mv.setAttribute("ar-scale", "fixed");
+            if (D.arScale && D.arScale !== 1) mv.setAttribute("scale", D.arScale + " " + D.arScale + " " + D.arScale);
+            mv.setAttribute("alt", doc.title);
+            // Replace model-viewer's own AR icon with nothing - "View on your table" is the
+            // one call to action. Filling the documented `ar-button` slot is what removes it;
+            // the ::part rule below is the belt to this brace.
+            var slot = doc.createElement("span");
+            slot.setAttribute("slot", "ar-button");
+            slot.style.display = "none";
+            mv.appendChild(slot);
+            mv.addEventListener("load", function () {
+              stage.classList.add("ready");
+              if (hint) { hint.classList.remove("gone"); setTimeout(function () { hint.classList.add("gone"); }, 2600); }
+              resolve(mv);
+            }, { once: true });
+            mv.addEventListener("error", function () { resolve(null); }, { once: true });
+            mv.addEventListener("camera-change", function (e) {
+              if (!turned && e.detail && e.detail.source === "user-interaction") {
+                turned = true; track("embed_3d");
+              }
+            });
+            mv.addEventListener("ar-status", function (e) {
+              var s = e.detail && e.detail.status;
+              if (s === "session-started") track("embed_ar", { via: "webxr", stage: "placed" });
+              if (s === "failed") {
+                if (hint) { hint.textContent = T.noar; hint.classList.remove("gone"); }
+                if (framed) window.open(standaloneUrl, "_blank", "noopener");
+              }
+            });
+            // Above the poster, below the name and the buttons: stacking is document order.
+            var under = stage.querySelector(".poster, .empty");
+            if (under) under.after(mv); else stage.prepend(mv);
+          };
+          if (window.customElements && customElements.get("model-viewer")) return go();
+          var s = doc.createElement("script");
+          s.type = "module";
+          s.src = "https://cdnjs.cloudflare.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js";
+          s.onload = function () { customElements.whenDefined("model-viewer").then(go); };
+          s.onerror = function () { resolve(null); };
+          doc.head.appendChild(s);
+        });
+        return loading;
+      }
+
+      if (D.load === "eager") load();
+      else if (D.load === "tap") { tap.hidden = false; tap.addEventListener("click", load); }
+      else if ("IntersectionObserver" in window) {
+        // In a frame, the implicit root is the TOP page's viewport, so this is "the dish
+        // scrolled into view on their site" - exactly when it is worth 250 KB.
+        var io = new IntersectionObserver(function (es) {
+          if (es.some(function (e) { return e.isIntersecting; })) { io.disconnect(); load(); }
+        }, { rootMargin: "200px" });
+        io.observe(stage);
+      } else load();
+      stage.addEventListener("pointerdown", function () { load(); }, { once: true });
+
+      // ── AR ──────────────────────────────────────────────────────────────────────────
+      function quickLook() {
+        // The platform's launcher: an <a rel="ar"> holding an <img>, clicked inside the tap.
+        var a = doc.createElement("a");
+        a.setAttribute("rel", "ar");
+        a.href = D.usdz;
+        a.appendChild(doc.createElement("img"));
+        doc.body.appendChild(a);
+        a.click();
+        setTimeout(function () { a.remove(); }, 1000);
+      }
+      function arTap() {
+        if (isIOS) {
+          if (framed) { track("embed_ar", { via: "newtab", stage: "tap" }); window.open(standaloneUrl, "_blank", "noopener"); }
+          else { track("embed_ar", { via: "quicklook", stage: "tap" }); quickLook(); }
+          return;
+        }
+        track("embed_ar", { via: "webxr", stage: "tap" });
+        load().then(function (el) {
+          if (el && el.canActivateAR) el.activateAR();
+          else if (framed) window.open(standaloneUrl, "_blank", "noopener");
+          else if (hint) { hint.textContent = T.noar; hint.classList.remove("gone"); }
+        });
+      }
+      if (canAR) {
+        cta.addEventListener("click", arTap);
+        // iPhone in a frame: give the restaurant's page a moment to say it will draw the
+        // button itself (embed.js). If it does, ours stays hidden; if not, ours opens the
+        // standalone page, where Quick Look is a top-level click and simply works.
+        if (isIOS && framed) {
+          var parentAR = false;
+          var hello = function () {
+            try {
+              // Our button's colours travel with it, so the one the parent draws matches the
+              // theme this frame is in - dark-on-dark is what happened without them.
+              var cs = getComputedStyle(root);
+              window.parent.postMessage({ betareal: 1, type: "hello", dish: D.id,
+                                          usdz: D.usdz, label: T.ar,
+                                          bg: cs.getPropertyValue("--btn").trim(),
+                                          fg: cs.getPropertyValue("--btnfg").trim() }, "*");
+            } catch (_) {}
+          };
+          addEventListener("message", function (e) {
+            if (e.source !== window.parent) return;
+            var m = e.data;
+            if (!m || m.betareal !== 1) return;
+            // The loader arrived after our hello - it asks again, and we answer.
+            if (m.type === "ping" && !parentAR) hello();
+            // Any time, even after our own button showed: theirs takes over.
+            if (m.type === "parent-ar") { parentAR = true; cta.hidden = true; root.classList.remove("has-cta"); }
+            if (m.type === "ar-launched") track("embed_ar", { via: "parent", stage: "tap" });
+          });
+          hello();
+          setTimeout(function () { if (!parentAR) { cta.hidden = false; root.classList.add("has-cta"); } }, 900);
+        } else {
+          cta.hidden = false; root.classList.add("has-cta");
+        }
+        // Opened from a "View on your table" elsewhere: the page is here for exactly one
+        // tap, so it is the loud thing on it.
+        if (D.wantsAr && !framed) cta.focus();
+      }
+    })();
+    </script>
+  </body>
+</html>

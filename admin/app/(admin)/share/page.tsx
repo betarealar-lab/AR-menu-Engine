@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { usePlan } from '@/lib/usePlan'
 import QrCode from '@/components/QrCode'
+import EmbedSection from '@/components/EmbedSection'
 import { useLang } from '@/lib/useLang'
 import { text } from '@/lib/i18n'
 
@@ -89,6 +90,9 @@ export default function SharePage() {
           </div>
         )}
       </div>
+
+      {/* A restaurant that already has a website puts its 3D dishes there (EMBED.md). */}
+      <EmbedSection tenantId={plan.restaurantId} isSuper={plan.role === 'super_admin'} />
 
       {/* The restaurant's own code, for the door and the bill. Hidden on screen because
           the card at the top already shows it; present here so that Print gives a sheet
