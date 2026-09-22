@@ -131,6 +131,10 @@ export async function loadSharedModels(): Promise<LibraryModel[]> {
     // Hidden models stay hidden. `archived` is "I do not want to look at this any more",
     // and a library that shows them offers a dish its own restaurant has put away.
     .eq('archived', false)
+    // A rejected model is somebody's "no". Offering it for another menu would overrule
+    // that without anyone noticing. Drafts ARE offered - see SharedLibrary for what
+    // using one does.
+    .neq('tenant_state', 'rejected')
     .order('created_utc', { ascending: false })
 
   const owned = (rows || []) as unknown as (ModelRow & { tenant_id: string })[]

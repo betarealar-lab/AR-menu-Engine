@@ -274,7 +274,9 @@ function SharedLibrary({ models, dishes, tenantId, onChanged, onSay }: {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {shown.map(m => (
           <div key={m.id} className="card p-4 grid gap-3">
-            <Preview model={m} pill={m.tenantName || T.studioLibraryPill}
+            <Preview model={m}
+                     pill={m.state === 'draft' ? T.studioLibraryDraftPill
+                           : (m.tenantName || T.studioLibraryPill)}
                      open={open === m.id} onOpen={() => setOpen(open === m.id ? null : m.id)} />
             <div>
               <div className="font-semibold truncate">{m.title}</div>
@@ -292,6 +294,18 @@ function SharedLibrary({ models, dishes, tenantId, onChanged, onSay }: {
               value={dishes.find(d => d.model_id === m.id)?.id ?? ''}
               className="text-xs"
               onChange={async e => {
+                // **Using a draft approves it.** `public_menu` serves only approved models,
+                // so a draft put on a dish gave that dish no 3D at all, with no error -
+                // Temo did exactly this on the Restaurant demo ("eggplant germany", a
+                // draft from sacdeli modelebi) and saw an empty card. This screen is super
+                // admin only, and a super admin choosing a model for a menu IS the
+                // judgement the draft state is waiting for - the same reason an upload is
+                // saved approved. Only on the way ON: taking a model off a dish decides
+                // nothing about it.
+                if (e.target.value && m.state === 'draft') {
+                  const err = await setVerdict(m.id, 'approved')
+                  if (err) { onSay(err.message, true); return }
+                }
                 // A new dish is its own gesture, not a re-point: nothing is detached, so
                 // the model can be on an existing dish AND become a new one.
                 if (e.target.value === NEW_DISH) {
