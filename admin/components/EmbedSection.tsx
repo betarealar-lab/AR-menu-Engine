@@ -165,7 +165,7 @@ function EmbedSettings({ tenantId }: { tenantId: string }) {
           <label className="grid gap-1 text-sm">
             <span className="font-medium">{T.embedSites}</span>
             <textarea value={sitesText} onChange={e => setSitesText(e.target.value)}
-                      placeholder="restaurant-x.ge" rows={3}
+                      placeholder={T.embedDomainsPlaceholder} rows={3}
                       style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 13 }} />
             <span className="text-xs" style={{ color: 'var(--dim)' }}>{T.embedSitesHint}</span>
           </label>

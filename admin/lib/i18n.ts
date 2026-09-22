@@ -719,6 +719,9 @@ const en = {
   guideWhy: 'Why so strict: the model is trained on evenly spaced views of an object. The closer your four photos are to that, the better it comes out — and a rebuild costs one of your free models.',
   guideGotIt: 'Got it',
   guideOpen: 'How to photograph',
+  // A domain, so the same in every language - but still a key, so the admin has one
+  // rule about where visible text lives rather than one rule and an exception.
+  embedDomainsPlaceholder: 'restaurant-x.ge',
 }
 
 const ka: typeof en = {
@@ -1432,6 +1435,7 @@ const ka: typeof en = {
   guideWhy: 'რატომ ასე მკაცრად: მოდელი დატრენინგებულია ობიექტის თანაბრად განლაგებულ ხედებზე. რაც უფრო ახლოსაა თქვენი ოთხი ფოტო ამასთან, მით უკეთესი შედეგი — ხელახლა აგება კი ერთ უფასო მოდელს დაგიჯდებათ.',
   guideGotIt: 'გასაგებია',
   guideOpen: 'როგორ გადავიღოთ',
+  embedDomainsPlaceholder: 'restaurant-x.ge',
 }
 
 export const translations = { en, ka }
