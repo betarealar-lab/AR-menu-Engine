@@ -11,6 +11,7 @@ export type StarterTemplateKey =
   | 'elegant_black'
   | 'monday_greens'
   | 'japan'
+  | 'clean'
   | 'baoma'
   | 'burger_lions'
   | 'burger_bar'
@@ -215,6 +216,29 @@ const TEMPLATE_VISUAL_TOKENS: Record<StarterTemplateKey, ThemeConfig> = {
     day_hero_color: '#14110f', day_hero_shadow: 'none', day_divider_bg: '#e6e1da',
     day_accent_edge: '#c0392f', day_thumb_vignette: 'none',
     day_item_shadow: 'none', day_item_hover_shadow: '0 2px 10px rgba(20,17,15,0.06)',
+    day_modal_bg_image: 'none',
+  },
+  // The generic catalogue: JAPAN's shape without the wallpaper (0028). White paper, dark
+  // ink, one warm accent. Night keeps the same paper for the same reason JAPAN does - a
+  // catalogue is meant to look the same whichever way a diner's phone is set.
+  clean: {
+    night_bg_image: 'none', night_bg_size: 'auto', night_bg_repeat: 'no-repeat',
+    night_card_bg: '#ffffff', night_card_radius: '12px', night_card_blur: '0px',
+    night_stage_bg: '#fafaf9',
+    night_pill_bg: '#f5f5f4', night_pill_active_bg: '#1c1917',
+    night_cta_bg: '#c2410c', night_cta_shadow: 'none',
+    night_hero_color: '#1c1917', night_hero_shadow: 'none', night_divider_bg: '#e7e5e4',
+    night_accent_edge: '#c2410c', night_thumb_vignette: 'none',
+    night_item_shadow: 'none', night_item_hover_shadow: '0 6px 20px rgba(28,25,23,0.08)',
+    night_modal_bg_image: 'none',
+    day_bg_image: 'none', day_bg_size: 'auto', day_bg_repeat: 'no-repeat',
+    day_card_bg: '#ffffff', day_card_radius: '12px', day_card_blur: '0px',
+    day_stage_bg: '#fafaf9',
+    day_pill_bg: '#f5f5f4', day_pill_active_bg: '#1c1917',
+    day_cta_bg: '#c2410c', day_cta_shadow: 'none',
+    day_hero_color: '#1c1917', day_hero_shadow: 'none', day_divider_bg: '#e7e5e4',
+    day_accent_edge: '#c2410c', day_thumb_vignette: 'none',
+    day_item_shadow: 'none', day_item_hover_shadow: '0 6px 20px rgba(28,25,23,0.08)',
     day_modal_bg_image: 'none',
   },
   elegant_black: {
@@ -762,6 +786,27 @@ export const TEMPLATE_PRESETS: ThemePreset[] = [
       day_glow: 'rgba(36,123,160,0.16)', day_glow2: 'rgba(122,143,72,0.10)', day_shadow: 'rgba(36,72,80,0.12)',
       ...TEMPLATE_VISUAL_TOKENS.mediterranean_air,
       font_body: 'Source Sans 3', font_heading: 'Playfair Display', template_key: 'mediterranean_air',
+    },
+  },
+  {
+    key: 'clean',
+    label: 'Clean',
+    description: 'White page, dark text and one warm accent, so the dishes and their 3D models are the whole design. For any restaurant.',
+    primaryColor: '#c2410c',
+    secondaryColor: '#1c1917',
+    createStarterCategory: true,
+    values: {
+      night_bg: '#ffffff', night_bg2: '#fafaf9', night_card: '#ffffff', night_card2: '#f5f5f4', night_border: '#e7e5e4',
+      night_text: '#1c1917', night_dim: '#78716c', night_accent: '#c2410c', night_accent2: '#9a3412', night_accent_text: '#ffffff', night_thumb_bg: '#f5f5f4', night_modal_bg: '#ffffff',
+      night_glow: 'transparent', night_glow2: 'transparent', night_shadow: 'rgba(28,25,23,0.08)',
+      night_price_color: '#1c1917', night_add_btn_color: '#c2410c',
+      day_bg: '#ffffff', day_bg2: '#fafaf9', day_card: '#ffffff', day_card2: '#f5f5f4', day_border: '#e7e5e4',
+      day_text: '#1c1917', day_dim: '#78716c', day_accent: '#c2410c', day_accent2: '#9a3412', day_accent_text: '#ffffff', day_thumb_bg: '#f5f5f4', day_modal_bg: '#ffffff',
+      day_glow: 'transparent', day_glow2: 'transparent', day_shadow: 'rgba(28,25,23,0.08)',
+      day_price_color: '#1c1917', day_add_btn_color: '#c2410c',
+      ...TEMPLATE_VISUAL_TOKENS.clean,
+      font_body: '', font_heading: '', template_key: 'clean',
+      default_theme: 'day',
     },
   },
   {

@@ -48,12 +48,18 @@ import elegantBlackCss from "../lib/css/elegant_black.css?raw";
 // games - the same rule the palette below follows, for the same reason.
 import japanCss from "../lib/css/japan.css?raw";
 import japanSkinCss from "../lib/css/japan.skin.css?raw";
+// CLEAN is JAPAN's shape without the wallpaper: the generic catalogue, for demos and for
+// any restaurant that wants the dishes to be the whole design. Same two-piece pattern.
+import cleanCss from "../lib/css/clean.css?raw";
+import cleanSkinCss from "../lib/css/clean.skin.css?raw";
 
 const SHEETS = {
   monday_greens: mondayGreensCss,
   elegant_black: elegantBlackCss,
   japan: `${japanCss}
 ${japanSkinCss}`,
+  clean: `${cleanCss}
+${cleanSkinCss}`,
 };
 // Only two templates matter now - Monday Greens, and Corner at Tabidze on elegant_black.
 // Everything else waits for a later generation. A restaurant with no template chosen gets

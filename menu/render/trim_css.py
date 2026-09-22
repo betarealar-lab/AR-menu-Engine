@@ -41,7 +41,7 @@ OUT = HERE.parent.parent / "app" / "src" / "lib" / "css"
 # look itself lives in `app/src/lib/css/japan.skin.css`, which is hand-written and is the
 # only sheet in this directory that is not generated. That split is the point: a new
 # template is "the shared structure, plus a small sheet somebody can read".
-KEEP_TEMPLATES = ["monday_greens", "elegant_black", "japan"]
+KEEP_TEMPLATES = ["monday_greens", "elegant_black", "japan", "clean"]
 
 TEMPLATE_ATTR = re.compile(r'\[data-template\s*=\s*"([a-z0-9_]+)"\]')
 TENANT_ATTR = re.compile(r'\[data-(?:tenant|brand-slug)\s*=\s*"([a-z0-9-]+)"\]')

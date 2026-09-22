@@ -20,7 +20,7 @@ import { usePlan } from '@/lib/usePlan'
 import Plate from '@/components/Plate'
 import {
   loadLibrary, setVerdict, renameModel, setOrbit, attachModel, cancelRequest,
-  loadSharedModels, setShared,
+  loadSharedModels, setShared, createDishWithModel,
   type TenantModel, type ModelRequest, type LibraryModel,
 } from '@/lib/data/models'
 import { loadCaptures, requestRescale, setArchived, hasDims, type Capture, type Dims } from '@/lib/data/studio'
@@ -203,7 +203,8 @@ export default function StudioPage() {
                  }} />
         </div>
       ) : view === 'shared' ? (
-        <SharedLibrary models={sharedModels} dishes={dishes} onChanged={load} onSay={say} />
+        <SharedLibrary models={sharedModels} dishes={dishes} tenantId={plan.restaurantId!}
+                       onChanged={load} onSay={say} />
       ) : view === 'photos' ? (
         <PhotoLibrary captures={captures} dishes={dishes} models={models}
                       onContinue={(dish, variant, title) => { setPlateFor({ dish, variant, title }); setView('new') }} />
@@ -231,9 +232,13 @@ export default function StudioPage() {
  *  somebody's dish, and "from Monday Greens" on the card is the difference between
  *  reusing our own work and quietly reselling a client's khachapuri.
  */
-function SharedLibrary({ models, dishes, onChanged, onSay }: {
+// Not a uuid, so it can never collide with a real dish id in the same <select>.
+const NEW_DISH = '__new_dish__'
+
+function SharedLibrary({ models, dishes, tenantId, onChanged, onSay }: {
   models: LibraryModel[]
   dishes: Dish[]
+  tenantId: string
   onChanged: () => void
   onSay: (m: string, bad?: boolean) => void
 }) {
@@ -287,6 +292,14 @@ function SharedLibrary({ models, dishes, onChanged, onSay }: {
               value={dishes.find(d => d.model_id === m.id)?.id ?? ''}
               className="text-xs"
               onChange={async e => {
+                // A new dish is its own gesture, not a re-point: nothing is detached, so
+                // the model can be on an existing dish AND become a new one.
+                if (e.target.value === NEW_DISH) {
+                  const err = await createDishWithModel(tenantId, m)
+                  if (err) onSay(err.message, true)
+                  else { onSay(T.studioLibraryNewDishDone); onChanged() }
+                  return
+                }
                 const was = dishes.find(d => d.model_id === m.id)
                 if (was) await attachModel(was.id, null)
                 if (e.target.value) await attachModel(e.target.value, m.id)
@@ -294,6 +307,7 @@ function SharedLibrary({ models, dishes, onChanged, onSay }: {
                 onChanged()
               }}>
               <option value="">{T.studioNotOnDishOption}</option>
+              <option value={NEW_DISH}>{T.studioLibraryNewDish}</option>
               {dishes.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
 

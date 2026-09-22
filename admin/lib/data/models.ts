@@ -242,6 +242,43 @@ export async function attachModel(itemId: string, modelId: string | null) {
   return error
 }
 
+/** A new dish on this restaurant's menu, built around a model, in one step.
+ *
+ *  **Why this exists.** The BetaReal library could only point a model at a dish the
+ *  restaurant already had. A brand-new restaurant - the demo Temo asked for, or any
+ *  self-serve signup - has no dishes, so the dropdown was empty and "assign any model to
+ *  any restaurant" was true of every restaurant except the one you had just made.
+ *
+ *  The dish takes the model's title and lands in the restaurant's FIRST category, with no
+ *  price. No questions asked: a dish is renamed, priced and moved in the menu editor in
+ *  seconds, and asking for all three here would turn one click into a form (the
+ *  zero-config rule). `is_3d` is on, because a dish created FROM a model that did not show
+ *  it would be a strange thing to have made; and with no photo, the card draws the model
+ *  itself (markup.js).
+ *
+ *  RLS decides who may: `items` is `is_member_of(tenant_id)`, which is true of every
+ *  restaurant for a super admin and of their own for anyone else. */
+export async function createDishWithModel(tenantId: string, model: { id: string; title: string }) {
+  const supabase = createClient()
+  const [{ data: cats }, { count }] = await Promise.all([
+    supabase.from('categories').select('id').eq('tenant_id', tenantId)
+      .order('position').limit(1),
+    supabase.from('items').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId),
+  ])
+  const { error } = await supabase.from('items').insert({
+    tenant_id: tenantId,
+    category_id: (cats as { id: string }[] | null)?.[0]?.id ?? null,
+    name: model.title || 'New dish',
+    price_minor: 0,
+    model_id: model.id,
+    is_3d: true,
+    // Last on the menu, not first. A dish added to a menu somebody is building should
+    // appear where they are looking next, which is the bottom.
+    position: count ?? 0,
+  })
+  return error
+}
+
 export async function requestModel(
   tenantId: string,
   photoKeys: string[],

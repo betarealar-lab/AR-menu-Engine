@@ -1,0 +1,74 @@
+/* clean.skin.css — the CLEAN template's own rules. Hand-written.
+ *
+ * The generic restaurant catalogue: white page, dark ink, one warm accent, and nothing
+ * else competing with the food. It exists for demos and for any restaurant that wants the
+ * dishes - and their 3D models - to be the whole design.
+ *
+ * It is JAPAN without the wallpaper, deliberately. Everything below that is not about the
+ * page itself was proven on `/japan` first: the flat card that the base sheet otherwise
+ * washes with a 12% tint of the accent, dish names in ink rather than accent, the hairline
+ * instead of a shadow. Loaded after `clean.css` (the generated structural base) in
+ * `[slug].astro`, so it wins by order rather than by specificity.
+ *
+ * The colours are NOT here. They are the template's `defaults` (0028) and the Clean preset
+ * in the admin, so a restaurant on this template changes its accent in the theme editor
+ * like any other - this file only decides shape.
+ */
+
+/* ── the page ──────────────────────────────────────────────────────────────────── */
+
+/* Flat. The base sheet's fixed background layer paints `--bg-image`, which on the other
+   templates is a gradient or a grain; a catalogue on white has neither. */
+:root[data-template="clean"] body::before {
+    background-image: none;
+}
+
+/* ── the menu ──────────────────────────────────────────────────────────────────── */
+
+/* A plain white card with a hairline and a small radius. The base sheet tints every card
+   with the accent, which on a warm accent turns a whole menu faintly orange - the one
+   thing a "white background" brief rules out. */
+:root[data-template="clean"] .menu-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    box-shadow: none;
+    border-radius: 12px;
+    transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+@media (hover: hover) {
+    :root[data-template="clean"] .menu-item:hover {
+        box-shadow: var(--item-hover-shadow);
+        border-color: transparent;
+    }
+}
+
+/* Dish names in ink. The accent is for the chosen category, the add button and the 3D
+   button - places where colour means "tap here". A menu whose every title is orange has
+   no accent left to give them. */
+:root[data-template="clean"] .menu-item .item-name {
+    color: var(--text);
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+:root[data-template="clean"] .header h1 {
+    letter-spacing: 0.02em;
+    font-weight: 700;
+}
+
+/* A short accent rule under the restaurant's name, and nothing else decorative. */
+:root[data-template="clean"] .header h1::after {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 3px;
+    margin: 12px auto 0;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+/* Rounded, quiet pills. */
+:root[data-template="clean"] .cat-filter button {
+    border-radius: 999px;
+}

@@ -41,7 +41,7 @@ export type Template = {
 // `japan` is ours rather than extracted from the platform: `app/src/lib/css/japan.css`
 // (the generated structural base) plus `japan.skin.css` (the look). Both ship in the menu
 // app's SHEETS, so a restaurant on this template renders as Japan and not as a fallback.
-export const SHIPPED_STYLESHEETS = ['monday_greens', 'elegant_black', 'japan'] as const
+export const SHIPPED_STYLESHEETS = ['monday_greens', 'elegant_black', 'japan', 'clean'] as const
 
 export async function loadTemplates(): Promise<Template[]> {
   const supabase = createClient()
