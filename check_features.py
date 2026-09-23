@@ -319,6 +319,49 @@ def main() -> int:
                  'class="qty-inc"', 'class="qty-num"']:
         check(f"the stepper has its {part.split('=')[1]}", part in html)
 
+    # ── 3a2. an all-3D menu is listed once ───────────────────────────────────────────
+    #
+    # Every 3D dish is in the block at the top AND in its own category, deliberately. On a
+    # menu where EVERY dish is 3D those are the same list, so the page showed each dish
+    # twice - Temo, on JAPAN: "only 3d models show up no added categories because rn 3d
+    # models are duplicated". Four dishes read as eight.
+    #
+    # Rendered from the same MENU, filtered to its 3D dishes, so this cannot drift from the
+    # fixture. The mixed case is checked right after, because the duplication is correct
+    # there and removing it would hide 3D dishes from anyone browsing by category.
+    print()
+    print("-- a menu where every dish is 3D --")
+    only3d = {**MENU, "items": [i for i in MENU["items"]
+                                if i["is_3d"] and (i["model"] or i["model_usdz"])]}
+    src = LIB.joinpath("markup.js").resolve().as_uri()
+    all3d = node_eval(f"""
+    import {{ menuList, catBar }} from {json.dumps(src)};
+    const menu = {json.dumps(only3d, ensure_ascii=False)};
+    process.stdout.write(JSON.stringify({{
+      html: menuList(menu, "en"), bar: catBar(menu, "en") }}));
+    """)
+    h = all3d["html"]
+    check("every dish is 3D in this fixture", len(only3d["items"]) >= 3,
+          f"{len(only3d['items'])} dishes")
+    # Cards, not `data-idx`: that attribute is on the name and the description too, so
+    # counting it says 15 where there are 3 dishes.
+    cards3d = h.count('<div class="menu-item')
+    check("each dish is rendered exactly once", cards3d == len(only3d["items"]),
+          f"{cards3d} cards for {len(only3d['items'])} dishes")
+    check("...in the 3D block", 'data-cat="__ar3d"' in h)
+    check("...with no category sections under it", h.count('class="cat-section"') == 1,
+          f"{h.count('class=' + chr(34) + 'cat-section' + chr(34))} sections")
+    check("...and no category headings", 'class="category-header"' not in h)
+    check("the category bar is gone too - every pill would select the same dishes",
+          all3d["bar"] == "", all3d["bar"][:60])
+
+    # The mixed menu must keep the duplication. It is not an accident: the platform's first
+    # version moved 3D dishes out of their categories and diners stopped finding them.
+    mixed3d = [i for i in MENU["items"] if i["is_3d"] and (i["model"] or i["model_usdz"])]
+    copies = html.count(f'data-id="{mixed3d[0]["id"]}"')
+    check("a MIXED menu still lists a 3D dish twice", copies == 2, f"{copies} copies")
+    check("...and still has its category bar", bool(bar))
+
     # ── 3b. what a card draws when there is no photo ─────────────────────────────────
     print()
     print("-- the thumbnail slot, when the model IS the picture --")

@@ -112,6 +112,9 @@ export function catBar(menu, lang) {
     menu.items.some((i) => i.category_id === c.id));
   const has3d = menu.items.some(offers3d);
   if (!cats.length && !has3d) return "";
+  // Same rule as `menuList`: when every dish is 3D there is exactly one section and it
+  // holds all of them, so "All", "3D" and every category pill select the same thing.
+  if (menu.items.length > 0 && menu.items.every(offers3d)) return "";
   const pill = (cat, en, ka, ru, active) =>
     `<button type="button" class="cat-pill${active ? " active" : ""}" ` +
     `data-cat="${e(cat)}" data-cat-en="${e(en)}"` +
@@ -386,6 +389,19 @@ export function menuList(menu, lang) {
     (bucket || loose).push([it, i]);
   });
 
+  // **An all-3D menu is listed ONCE.**
+  //
+  // Every 3D dish appears in the block at the top AND in its own category, on purpose:
+  // the platform's first version moved 3D dishes out of their categories and diners
+  // stopped finding them. That trade only makes sense while a menu is mixed. When every
+  // dish is 3D the two lists are the same list, so the page shows each dish twice, the
+  // categories add nothing, and a demo of four dishes reads as eight.
+  //
+  // Temo, on JAPAN: "in japan only 3d models show up no added categories because rn 3d
+  // models are duplicated". Nothing is hidden by this - the 3D block already holds every
+  // dish - and a menu with one photo dish in it goes back to the mixed layout by itself.
+  const allThreeD = items.length > 0 && threeD.length === items.length;
+
   const sections = [];
   if (threeD.length) {
     const t = lang === "ka"
@@ -400,6 +416,7 @@ export function menuList(menu, lang) {
       `</div>`);
   }
   for (const cat of menu.categories) {
+    if (allThreeD) break;              // the block above already listed every dish
     const entries = byCat.get(cat.id) || [];
     if (!entries.length) continue;
     sections.push(
@@ -418,7 +435,7 @@ export function menuList(menu, lang) {
   // A dish whose category was deleted still has to appear somewhere. Its own section with
   // no heading, at the end - never dropped, because a dish missing from a menu is a dish
   // nobody can order.
-  if (loose.length) {
+  if (loose.length && !allThreeD) {
     sections.push(`<div class="cat-section" data-cat="">` +
       loose.map(([it, i]) => menuItem(it, i, lang)).join("") + `</div>`);
   }
