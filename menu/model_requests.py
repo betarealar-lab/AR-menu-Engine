@@ -78,6 +78,36 @@ def _conn():
     return psycopg.connect(url, connect_timeout=25)
 
 
+def _beat(detail: str) -> None:
+    """Say that a pass WORKED, which is a different claim from "the process exists".
+
+    `keepalive.py` writes `engine_heartbeat` from `p.poll() is None` - has this child
+    exited. On 2026-09-18 that was green while four approved requests sat untouched for
+    forty minutes: the bridge was up and simply not converting any of them, and the one
+    screen that could have said so was reporting liveness instead. Two rows, two
+    questions: `engine` is "is it running", `bridge` is "when did it last manage to do
+    anything".
+
+    Best effort and swallowed, like the other one. A heartbeat that could stop the engine
+    would be worse than no heartbeat.
+    """
+    url = os.environ.get("SUPABASE_DB_URL", "")
+    if not url:
+        return
+    try:
+        import psycopg
+        with psycopg.connect(url, connect_timeout=10) as conn, conn.cursor() as cur:
+            cur.execute(
+                "insert into engine_heartbeat (id, seen_utc, host, detail) "
+                "values ('bridge', now(), %s, %s) "
+                "on conflict (id) do update set seen_utc = now(), "
+                "host = excluded.host, detail = excluded.detail",
+                (os.environ.get("COMPUTERNAME") or "", detail[:200]))
+            conn.commit()
+    except Exception:                                         # noqa: BLE001
+        pass
+
+
 def _slot_of(key: str, fallback: int) -> int:
     """Which of the four angles this photo is.
 
@@ -464,6 +494,11 @@ def main() -> int:
                 print("collecting")
                 finished = collect()
                 print(f"{predicted} predicted, {started} started, {finished} finished")
+                # After the pass, not before: this row means the whole pass got through
+                # multiview, pull and collect without raising. A pass that fails is
+                # caught below and writes nothing, so the row goes stale - which is
+                # exactly the signal that was missing.
+                _beat(f"{predicted} predicted, {started} started, {finished} finished")
             except Exception as e:                            # noqa: BLE001
                 if a.once:
                     raise

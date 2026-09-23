@@ -66,8 +66,24 @@ LEASE_SECONDS = 600
 # arrives - a disabled webhook, a deploy landing in the wrong second, a network eating
 # one - the lease simply expires and the job is claimed again. A re-claimed generate with
 # a task id already on the record COLLECTS rather than resubmits, so the recovery costs
-# nothing. 240 s is one generation plus margin.
-PENDING_SECONDS = int(os.environ.get("JOBS_PENDING_SECONDS", "240"))
+# nothing.
+#
+# **45 s, not the 240 it was.** 240 was "one generation plus margin" on the assumption
+# that the webhook is the fast path and this clock only a safety net. Measured on
+# 2026-09-22 it is the other way round: the webhook points at the Render free tier, which
+# is asleep, so every dish is collected by this clock expiring. A dish Meshy finished at
+# 12:50:33 sat untouched until its lease ran out at 12:53:10 - up to four minutes of dead
+# time per dish, the largest single delay after Meshy itself. At 45 s the re-claim asks
+# Meshy one cheap GET and either collects or holds on again, so a finished dish waits at
+# most ~45 s plus a poll.
+#
+# It also keeps the worker awake: each re-claim counts as work done, so the idle back-off
+# to 60 s polls never kicks in while a generation is outstanding.
+#
+# The cost is a brief gap each time a lease lapses, in which the job does not count
+# against MESHY_CONCURRENT until it is re-claimed (one worker poll, <=10 s). That ceiling
+# is already set one below Meshy's real limit for exactly this kind of slack.
+PENDING_SECONDS = int(os.environ.get("JOBS_PENDING_SECONDS", "45"))
 
 # Meshy refuses the 11th concurrent task per ACCOUNT, on the Pro plan. Sending more does
 # not make it faster, it makes it fail - so the queue holds the line instead of letting

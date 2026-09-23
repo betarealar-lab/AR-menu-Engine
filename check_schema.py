@@ -286,6 +286,56 @@ def main() -> int:
             cur.execute("rollback to savepoint sh3")
             check("and a borrower still cannot edit it", got != "hijacked", got)
 
+            # The Studio entitlement, 0029. Hiding the screen is not the control: a
+            # restaurant without the Studio can still POST to `model_requests` under its
+            # own RLS, and every one of those is 30 credits of ours.
+            # `as_user` leaves its JWT claim set for the rest of the TRANSACTION, so
+            # without this the setup below runs as owner A and `tenants_studio_guard`
+            # refuses it - the guard working, reading as a broken test.
+            cur.execute("select set_config('request.jwt.claims', '', true)")
+            cur.execute("update tenants set studio = false where id = %s", (ta,))
+            conn.commit()
+            cur.execute("savepoint st")
+            refused = ""
+            try:
+                as_user(a_id,
+                        """insert into model_requests (tenant_id, dish, variant, title)
+                           values (%s, %s, 'default', 'sneaky') returning id""",
+                        (ta, uuid.uuid4().hex[:8]))
+            except Exception as e:                            # noqa: BLE001
+                refused = str(e)
+            cur.execute("rollback to savepoint st")
+            check("a restaurant without the Studio cannot ask for a model",
+                  bool(refused), "the insert SUCCEEDED")
+            check("and is told it is their plan, not a failure",
+                  "plan" in refused.lower(),
+                  refused.splitlines()[0][:90] if refused else "no error at all")
+
+            # ...and with it back on, the same insert is fine. Without this the check
+            # above would pass on a table nobody can write to for any reason.
+            cur.execute("select set_config('request.jwt.claims', '', true)")
+            cur.execute("update tenants set studio = true where id = %s", (ta,))
+            conn.commit()
+            ok = as_user(a_id,
+                         """insert into model_requests (tenant_id, dish, variant, title)
+                            values (%s, %s, 'default', 'fine') returning id""",
+                         (ta, uuid.uuid4().hex[:8]))
+            check("...and can again once the plan includes it", len(ok) == 1)
+            conn.rollback()
+
+            # An owner must not be able to grant it to themselves.
+            cur.execute("select set_config('request.jwt.claims', '', true)")
+            cur.execute("savepoint st2")
+            refused = ""
+            try:
+                as_user(a_id, "update tenants set studio = true where id = %s returning id",
+                        (ta,))
+            except Exception as e:                            # noqa: BLE001
+                refused = str(e)
+            cur.execute("rollback to savepoint st2")
+            check("an owner cannot change their own plan", bool(refused),
+                  "the update SUCCEEDED")
+
             # ...which is only meaningful if the grant really is there. Otherwise the
             # check above could be satisfied by a table nobody can touch for any reason.
             cur.execute("""

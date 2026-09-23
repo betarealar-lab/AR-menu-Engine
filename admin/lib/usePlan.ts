@@ -39,7 +39,8 @@ export type PlanId = 'creator' | 'basic300' | 'full450' | 'premium900'
 export type PlatformPlanId = 'ar_menu' | 'full' | 'premium'
 export type RoleId = 'super_admin' | 'brand_owner' | 'branch_manager' | 'branch_staff'
 
-export type Tenant = { id: string; slug: string; name: string; settings?: Record<string, string> }
+export type Tenant = { id: string; slug: string; name: string; studio?: boolean;
+                       settings?: Record<string, string> }
 
 export type PlanAccess = {
   role: RoleId
@@ -51,6 +52,10 @@ export type PlanAccess = {
   canUseTheme: boolean
   canUseDeveloperAnalytics: boolean
   canUploadModels: boolean
+  /** Does THIS restaurant have the 3D Studio (tenants.studio, 0029)? An entitlement, not
+   *  a role: a Premium client's owner is still an owner, and their models are made by us.
+   *  The database refuses the request either way - this only decides what is shown. */
+  canUseStudio: boolean
   canManageTenants: boolean
   canManageBranches: boolean
   canCreateBranches: boolean
@@ -83,6 +88,7 @@ const EMPTY: PlanAccess = {
   // What the server enforces: models and hero videos are ours to upload (api/asset).
   // A flag that said otherwise would put a control in front of an owner that refuses them.
   canUploadModels: false,
+  canUseStudio: false,
   canManageTenants: false,
   canManageBranches: false,
   canCreateBranches: false,
@@ -131,7 +137,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         // Unfiltered on purpose. `is_member_of` in the database decides what comes back,
         // so a super admin sees every restaurant and an owner sees theirs, with no branch
         // here that could disagree with the policy.
-        supabase.from('tenants').select('id, slug, name, settings').order('name'),
+        supabase.from('tenants').select('id, slug, name, settings, studio').order('name'),
         // `limit(1)`, not a bare maybeSingle: a super admin can SEE every row in this
         // table, so with two of us maybeSingle would error on "multiple rows".
         supabase.from('super_admins').select('user_id').limit(1).maybeSingle(),
@@ -170,6 +176,10 @@ export function usePlan(): PlanAccess {
       canManageTenants: account.isSuper,
       canUseDeveloperAnalytics: account.isSuper,
       canUploadModels: account.isSuper,
+      // Default true when the column has not loaded, so a slow read never flashes the
+      // Studio away from a restaurant that has it. A super admin always keeps it: the
+      // Premium product IS us making models inside a restaurant that cannot.
+      canUseStudio: account.isSuper || current?.studio !== false,
       restaurantId: current?.id ?? null,
       restaurantSlug: current?.slug ?? '',
       restaurantName: current?.name ?? '',

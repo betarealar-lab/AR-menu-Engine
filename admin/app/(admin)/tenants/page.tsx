@@ -21,6 +21,7 @@ type Row = {
   slug: string
   name: string
   template_id: string | null
+  studio: boolean
   items: number
   models: number
 }
@@ -50,7 +51,7 @@ export default function TenantsPage() {
     // Unfiltered: RLS decides what comes back, so a super admin sees everything and an
     // owner sees theirs, with no branch here that could disagree with the policy.
     const [{ data: tenants }, { data: tpl }] = await Promise.all([
-      supabase.from('tenants').select('id, slug, name, template_id').order('name'),
+      supabase.from('tenants').select('id, slug, name, template_id, studio').order('name'),
       supabase.from('templates').select('id, name').eq('listed', true).order('name'),
     ])
 
@@ -139,6 +140,7 @@ export default function TenantsPage() {
                     {r.template_id ? ` · ${r.template_id.replace(/_/g, ' ')}` : ''}
                   </div>
                 </div>
+                <StudioToggle row={r} onSaved={load} onSay={say} />
                 <Link href={`/menu?tenant=${r.slug}`} className="btn btn-sm">Menu</Link>
                 <Link href={`/theme?tenant=${r.slug}`} className="btn btn-sm">Look</Link>
                 <button className="btn btn-sm btn-ghost"
@@ -264,6 +266,35 @@ function Invites({ onSay }: { onSay: (m: string, bad?: boolean) => void }) {
 }
 
 // ── who can get in ───────────────────────────────────────────────────────────
+
+/** Whether this restaurant has the 3D Studio (0029).
+ *
+ *  The two products in one control: ON is self-serve, where the restaurant asks for its
+ *  own models; OFF is Premium, where we scan and they never see the screen. Off also
+ *  refuses the request in the database, so this is a plan, not a preference.
+ */
+function StudioToggle({ row, onSaved, onSay }: {
+  row: Row; onSaved: () => void; onSay: (m: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  async function flip() {
+    setBusy(true)
+    const { error } = await createClient().from('tenants')
+      .update({ studio: !row.studio }).eq('id', row.id)
+    setBusy(false)
+    if (error) return onSay(`Could not change it: ${error.message}`)
+    onSay(row.studio
+      ? `${row.name}: 3D Studio off - we make their models (Premium).`
+      : `${row.name}: 3D Studio on - they can ask for their own models.`)
+    onSaved()
+  }
+  return (
+    <button className="btn btn-sm btn-ghost" disabled={busy} onClick={flip}
+            title="Self-serve restaurants ask for their own models. Premium ones do not.">
+      {busy ? '…' : row.studio ? 'Studio: on' : 'Studio: OFF'}
+    </button>
+  )
+}
 
 function Members({ tenantId, onSay }: {
   tenantId: string

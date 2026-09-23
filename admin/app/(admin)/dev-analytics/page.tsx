@@ -73,9 +73,19 @@ function lateness(q: { state: string; minutes_waiting: number }): string | null 
 }
 
 
-function EngineHealth({ beat }: { beat: Beat | null }) {
+function EngineHealth({ beat, work }: { beat: Beat | null; work: Beat | null }) {
   const age = beat ? Math.max(0, (Date.now() - Date.parse(beat.seen_utc)) / 1000) : null
   const up = age !== null && age < BEAT_STALE_SECONDS
+  // **Up is not the same as working**, and that difference cost an afternoon. The bridge
+  // writes its row only after a pass that got through multiview, pull and collect without
+  // raising, so a stale one means it is running and achieving nothing - the exact state
+  // that looked healthy while four requests sat in `approved`.
+  //
+  // Three minutes: the bridge passes every 30 s, so this is six missed passes. Wide
+  // enough that a blip is not an alarm, narrow enough to catch it long before a person
+  // would ask why their dish never arrived.
+  const workAge = work ? Math.max(0, (Date.now() - Date.parse(work.seen_utc)) / 1000) : null
+  const working = workAge !== null && workAge < 180
 
   const howLong = (s: number) =>
     s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)}m`
@@ -92,6 +102,16 @@ function EngineHealth({ beat }: { beat: Beat | null }) {
           ? <>{beat.detail || '—'} · {howLong(age!)} ago · {beat.host}</>
           : <>never reported</>}
       </span>
+      <span className={`pill ${working ? 'pill-on' : 'pill-off'}`}>
+        {working ? 'passing' : 'NOT PASSING'}
+      </span>
+      {work && !working && (
+        <span className="text-xs" style={{ color: 'var(--danger)' }}>
+          Alive but its last successful pass was {howLong(workAge!)} ago
+          {work.detail ? ` (${work.detail})` : ''} - requests will sit in
+          &ldquo;approved&rdquo; until it recovers.
+        </span>
+      )}
       {!up && (
         // The fix, on the screen, because the person reading this is the person who runs
         // that command - and at 3am nobody remembers the path.
@@ -111,6 +131,7 @@ export default function DevAnalyticsPage() {
   const [rows, setRows] = useState<Row[]>([])
   const [queue, setQueue] = useState<QueueRow[]>([])
   const [beat, setBeat] = useState<Beat | null>(null)
+  const [work, setWork] = useState<Beat | null>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
   const say = useCallback((m: string) => {
@@ -127,12 +148,17 @@ export default function DevAnalyticsPage() {
       supabase.rpc('admin_queue'),
       // Straight off the table: `engine_heartbeat_read` is is_super_admin(), which is
       // already what this whole screen is.
-      supabase.from('engine_heartbeat').select('seen_utc, host, detail')
-        .eq('id', 'engine').maybeSingle(),
+      // BOTH reporters. `engine` is keepalive saying the processes exist; `bridge` is
+      // the bridge saying its last pass actually did something. The pair is the alarm
+      // that was missing on 2026-09-18, when "engine up" was true and correct for forty
+      // minutes while four approved requests sat untouched.
+      supabase.from('engine_heartbeat').select('id, seen_utc, host, detail'),
     ])
     setRows((o.data as Row[]) || [])
     setQueue((q.data as QueueRow[]) || [])
-    setBeat((h.data as Beat | null) ?? null)
+    const beats = (h.data as (Beat & { id: string })[] | null) || []
+    setBeat(beats.find(b => b.id === 'engine') ?? null)
+    setWork(beats.find(b => b.id === 'bridge') ?? null)
     setLoading(false)
   }, [plan.loading, minutes])
 
@@ -199,7 +225,7 @@ export default function DevAnalyticsPage() {
           one nobody could answer without opening a terminal on the machine the engine
           runs on. On 2026-09-10 a request sat at `approved` while the bridge was dead;
           the screen said "queued" and nothing anywhere said why. */}
-      <EngineHealth beat={beat} />
+      <EngineHealth beat={beat} work={work} />
 
       {/* The queue. What is stuck, oldest first - a request waiting on us for two days is
           the thing this screen exists to make impossible to miss. */}

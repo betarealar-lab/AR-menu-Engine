@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlan } from '@/lib/usePlan'
 import Plate from '@/components/Plate'
+import LockedCard from '@/components/LockedCard'
 import {
   loadLibrary, setVerdict, renameModel, setOrbit, attachModel, cancelRequest,
   loadSharedModels, setShared, createDishWithModel,
@@ -138,6 +139,12 @@ export default function StudioPage() {
 
   if (!plan.loading && !plan.restaurantId) {
     return <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</div>
+  }
+  // Hiding the link is not a permission - this URL is typed, bookmarked and linked to.
+  // The real lock is `model_request_gate` (0029), which refuses the insert; this is so a
+  // Premium owner who lands here reads a sentence instead of a screen that half works.
+  if (!plan.loading && !plan.canUseStudio) {
+    return <LockedCard title={T.studioTitle} description={T.studioLockedHint} />
   }
 
   return (

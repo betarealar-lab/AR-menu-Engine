@@ -94,8 +94,12 @@ export default function Sidebar({ open, onClose }: Props) {
     { href: tenantHref('/home'), match: '/home', label: 'Home', icon: 'home' },
     plan.canUseMenu ? { href: tenantHref('/menu'), match: '/menu', label: T.navMenu, icon: 'menu' } : null,
     // Not gated on canUploadModels: an owner does not upload models, they ask for one and
-    // approve it, and this is where they see what they have.
-    { href: tenantHref('/models'), match: '/models', label: '3D Studio', icon: 'cube' },
+    // approve it, and this is where they see what they have. It IS gated on the
+    // restaurant's plan (0029) - a Premium client's models are made by us, so the screen
+    // would offer them a thing they cannot use and the database would refuse anyway.
+    plan.canUseStudio
+      ? { href: tenantHref('/models'), match: '/models', label: '3D Studio', icon: 'cube' }
+      : null,
     plan.canUseTheme ? { href: tenantHref('/theme'), match: '/theme', label: T.navTheme, icon: 'palette' } : null,
     plan.canUseAnalytics ? { href: tenantHref('/dashboard'), match: '/dashboard', label: T.navAnalytics, icon: 'chart' } : null,
     { href: tenantHref('/share'), match: '/share', label: 'QR & share', icon: 'qr' },
