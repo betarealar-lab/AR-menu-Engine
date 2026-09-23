@@ -820,7 +820,7 @@ def main() -> int:
     # registry has no such engine, so `python studio.py` with no flag built a Studio
     # whose fallback engine could not be constructed. It never bit only because the
     # page always sends an engine explicitly.
-    ap.add_argument("--engine", default="meshy-7")
+    ap.add_argument("--engine", default="meshy-7.1")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8765)))
     ap.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     a = ap.parse_args()

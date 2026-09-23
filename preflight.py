@@ -43,18 +43,36 @@ def check_key(key: str) -> bool:
     return True
 
 
+# Four real (tiny) JPEGs, because `_payload` opens and downscales what it is given. They
+# are written once, next to this file's other temporaries, and never sent anywhere.
+def _sample_job():
+    import tempfile
+    from PIL import Image
+    from engines.base import Job
+    d = Path(tempfile.mkdtemp(prefix="betareal-preflight-"))
+    shots = []
+    for i in range(4):
+        f = d / f"{i}.jpg"
+        Image.new("RGB", (64, 64), (200, 120, 60)).save(f, "JPEG")
+        shots.append(f)
+    return Job(dish="preflight", images=shots)
+
+
+_SAMPLE_JOB = None
+
+
 def show_request(engine: MeshyEngine) -> None:
     """Print exactly what goes on the wire, minus the image payload."""
-    body = {
-        "image_urls": ["<data:image/jpeg;base64,...>"] * 4,
-        "ai_model": engine.ai_model,
-        "topology": engine.topology,
-        "target_polycount": engine.target_polycount,
-        "should_texture": engine.should_texture,
-    }
-    if engine.should_texture:
-        body["texture_resolution"] = engine.texture_resolution
-        body["enable_pbr"] = engine.enable_pbr
+    # Built by the ENGINE, not retyped here. This screen exists so somebody can see the
+    # literal request before 30 credits are spent, and a hand-copied version of it stopped
+    # being that the moment the two drifted: it was missing `should_remesh`, which on
+    # meshy-7.1 is the difference between the raw master this pipeline is built on and a
+    # mesh Meshy decimated for us.
+    global _SAMPLE_JOB
+    if _SAMPLE_JOB is None:
+        _SAMPLE_JOB = _sample_job()
+    body = dict(engine._payload(_SAMPLE_JOB))
+    body["image_urls"] = ["<data:image/jpeg;base64,...>"] * len(body["image_urls"])
     print(f"\n  POST {BASE}")
     for line in json.dumps(body, indent=2).splitlines():
         print("  " + line)
@@ -263,7 +281,7 @@ def check_storage() -> bool:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--engine", default="meshy-7")
+    ap.add_argument("--engine", default="meshy-7.1")
     ap.add_argument("--spend", action="store_true", help="run one real generation")
     ap.add_argument("--storage-only", action="store_true", help="only check R2, skip Meshy")
     ap.add_argument("--supabase", action="store_true",

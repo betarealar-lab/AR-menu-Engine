@@ -176,7 +176,7 @@ def main() -> int:
                     help="seconds between claims while there is work")
     ap.add_argument("--idle", type=int, default=IDLE_SECONDS,
                     help=f"seconds between claims after {IDLE_AFTER} empty passes")
-    ap.add_argument("--engine", default="meshy-7",
+    ap.add_argument("--engine", default="meshy-7.1",
                     help="engine to collect with when a job does not name one")
     ap.add_argument("--generate", action="store_true",
                     help="also claim generation. Off by default: without a reachable "

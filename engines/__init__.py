@@ -18,6 +18,30 @@ REGISTRY: dict[str, callable] = {
     # result can be inspected and tuned. Texture resolution is the only generation knob
     # worth a person's attention, because it is the one that changes what the engine
     # actually produces rather than how we cut it up afterwards.
+    # **7.1 is the default, and `should_remesh=False` is not optional on it.**
+    #
+    # Meshy deprecated `meshy-7` on 2026-09-10 in favour of `meshy-7.1` ("Attention to the
+    # Closest Detail"), and the API docs say to use 7.1 or `latest` instead. Same price:
+    # 30 credits for a textured multi-image task on both.
+    #
+    # But the default for `should_remesh` FLIPPED. On meshy-7 it was off, so sending
+    # nothing returned the raw ~1.9M-triangle master - which is the whole basis of this
+    # pipeline: we decimate ourselves, where it can be inspected and tuned, and Temo
+    # judged Meshy's own reduction in Blender as "raw always looks better and lean is
+    # subpar". On 7.1 the default is TRUE, so sending nothing would quietly hand the
+    # reduction back to Meshy and every new dish would arrive pre-decimated. Hence the
+    # explicit false.
+    "meshy-7.1":       lambda: MeshyEngine("meshy-7.1", texture_resolution="4k",
+                                           should_remesh=False),
+    "meshy-7.1-2k":    lambda: MeshyEngine("meshy-7.1", texture_resolution="2k",
+                                           should_remesh=False, variant="meshy-7.1-2k"),
+    "meshy-7.1-8k":    lambda: MeshyEngine("meshy-7.1", texture_resolution="8k",
+                                           should_remesh=False, variant="meshy-7.1-8k"),
+
+    # Kept, deprecated by Meshy and not offered as a default: every model row already in
+    # the dataset names `meshy-7`, and `engines.build()` is called with THAT name when a
+    # dish is resumed or re-optimised. Removing it would break exactly the in-flight work
+    # a version bump is most likely to interrupt.
     "meshy-7":         lambda: MeshyEngine("meshy-7", texture_resolution="4k"),
     "meshy-7-2k":      lambda: MeshyEngine("meshy-7", texture_resolution="2k",
                                            variant="meshy-7-2k"),

@@ -57,15 +57,23 @@ GIVE_UP_AFTER = 900
 # quietly present a guess as a fact.
 _MEASURED = {                       # (model, textured) -> credits, confirmed on the account
     ("meshy-7", True): 30,
+    # Meshy's own table, 2026-09-23: multi-image-to-3d on meshy-7 AND meshy-7.1 is
+    # "20 credits (without texture), 30 credits (with texture), 35 credits (with 8K
+    # texture), plus 5 credits for geometry_resolution 2k". 7.1 is therefore the same
+    # price as the 7 we measured at 30 - the version bump costs nothing.
+    ("meshy-7.1", True): 30,
+    ("meshy-7.1", False): 20,
 }
-_LISTED = {"meshy-6", "meshy-5", "meshy-7"}   # models we can price with confidence
-_EXPENSIVE = {"meshy-6", "meshy-7"}           # billed at the 20/30 rate
+_LISTED = {"meshy-6", "meshy-5", "meshy-7", "meshy-7.1"}   # priced with confidence
+_EXPENSIVE = {"meshy-6", "meshy-7", "meshy-7.1"}           # billed at the 20/30 rate
+# 8k texture is 35, not 30, on the models above. Kept beside the table it corrects.
+_EIGHT_K_SURCHARGE = 5
 
 
-def _cost(ai_model: str, textured: bool) -> int:
+def _cost(ai_model: str, textured: bool, texture_resolution: str = "4k") -> int:
     hit = _MEASURED.get((ai_model, textured))
     if hit is not None:
-        return hit
+        return hit + (_EIGHT_K_SURCHARGE if textured and texture_resolution == "8k" else 0)
     if ai_model in _EXPENSIVE:
         return 30 if textured else 20
     return 15 if textured else 5
@@ -133,7 +141,7 @@ class MeshyEngine(Engine):
 
     def __init__(
         self,
-        ai_model: str = "meshy-7",
+        ai_model: str = "meshy-7.1",
         *,
         should_texture: bool = True,
         texture_resolution: str = "4k",
@@ -178,7 +186,7 @@ class MeshyEngine(Engine):
         self.image_enhancement = image_enhancement
         self.remove_lighting = remove_lighting
         self.variant = variant or f"{ai_model}-{texture_resolution if should_texture else 'notex'}"
-        self.cost_per_job = _cost(ai_model, should_texture)
+        self.cost_per_job = _cost(ai_model, should_texture, texture_resolution)
         # Measured on real returns: a raw meshy-7 master came back at 1.9M triangles,
         # and a remesh request is honoured closely (150k asked, 156,397 returned). Three
         # maps at the requested resolution, so megapixels follow from that.

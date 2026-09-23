@@ -42,7 +42,13 @@ class _Stub(_E):
         r.task_id = "stub-task-0001"
         return r
 
-    def collect(self, task_id, dish, out_dir):
+    # `on_stage` is part of the interface (engines/base.py): `pipeline.resume` passes a
+    # callback so a dish can say "downloading the model" instead of sitting on the last
+    # generation percentage for the whole transfer. A stub that does not accept it makes
+    # every collect raise TypeError - which is what happened here, unnoticed from
+    # 2026-09-18, because this file needs a real master GLB and so is the one suite that
+    # does not run by default. Accepted and called, so the stub exercises the real path.
+    def collect(self, task_id, dish, out_dir, on_stage=None):
         r = _R(engine="stub", variant="stub", dish=dish, ok=False)
         r.task_id = task_id
         started = _STATE["submitted_at"] or 0
@@ -50,6 +56,10 @@ class _Stub(_E):
             r.pending = True
             r.progress = 42
             return r
+        # A real engine reports the phase change here: generation is over, and what
+        # follows is a 120-300 MB download.
+        if on_stage:
+            on_stage("downloading the model")
         out_dir.mkdir(parents=True, exist_ok=True)
         dst = out_dir / (dish + ".glb")
         _sh.copyfile(r"MASTER_PATH", dst)
