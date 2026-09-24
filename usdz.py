@@ -110,17 +110,26 @@ def from_glb(src: Path, dst: Path) -> dict:
 
         written: dict[int, str] = {}          # glTF image index -> filename in the package
 
+        # Quick Look decodes PNG and JPEG. Nothing else - not WebP, which the web payload
+        # now uses for base colours, and not KTX2. Anything else is transcoded on the way
+        # into the package.
+        QUICK_LOOK_READS = ("image/png", "image/jpeg")
+
         def texture_file(image_index: int) -> str:
             if image_index not in written:
-                data, ext = glb.image_bytes(gltf, binary, image_index)
+                data, ext = glb.image_bytes(gltf, binary, image_index,
+                                            readable=QUICK_LOOK_READS)
                 name = f"texture_{image_index}{ext}"
                 (work / name).write_bytes(data)
                 written[image_index] = name
             return written[image_index]
 
         def image_of(texture_index: int) -> int | None:
+            # Not `["source"]`: a WebP texture keeps its image under EXT_texture_webp and
+            # has no `source` at all, so the direct read returns None and the dish arrives
+            # in AR untextured.
             try:
-                return gltf["textures"][texture_index]["source"]
+                return glb.texture_source(gltf["textures"][texture_index])
             except (KeyError, IndexError, TypeError):
                 return None
 

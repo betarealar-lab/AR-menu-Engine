@@ -248,6 +248,14 @@ def run(master: Path, out_dir: Path, *, triangles: int | None = TARGET_TRIANGLES
 
         # 2. Textures, in Python. This is where the weight actually is: after decimation
         #    the salad was still 47 MB, of which 45 MB was three JPEGs.
+        #
+        #    `texture` is the ceiling for the BASE COLOUR only. Measured over every engine
+        #    dish in the bucket, one number spent on all three maps spends it on two that
+        #    cannot use it: the metallic channel is a constant (p99 <= 7 of 255) stored as
+        #    a megapixel image, and the normal map's detail does not reach past 512. Those
+        #    budgets, and the WebP base colour, live in glb.TEXTURE_BUDGET - which took the
+        #    same four shipped dishes from 4.15/3.24/2.56 MB to 1.32/1.07/0.94 MB with the
+        #    base colour untouched at full resolution.
         try:
             say("textures")
             tex_stats = glb.resize_textures(geom, opt, max_edge=texture)

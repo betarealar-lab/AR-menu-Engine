@@ -104,9 +104,90 @@ def _write(path: Path, gltf: dict, binary) -> None:
 MAX_TEXTURE_BYTES = 2_500_000
 
 
+# Per-map budgets, not one number for everything. Measured on four shipped engine dishes
+# by downscaling each map and blowing it back up to compare against the original:
+#
+#   baseColor  2048 -> 1024   mean error 4.1-8.3, p99 up to 64/255   the dish itself
+#   normal     2048 ->  512   mean error 1.6-3.6, and 256 is no worse - its detail
+#                             simply does not live above 512
+#   MR         2048 -> 1024   mean error 0.6-1.8
+#
+# So one `--tex 2048` spends the same on all three, and two of them cannot use it. The
+# base colour is the only map that earns full resolution.
+TEXTURE_BUDGET = {"baseColor": 2048, "normal": 1024, "metallicRoughness": 1024,
+                  "emissive": 1024, "occlusion": 1024, "other": 1024}
+
+# metallic is zero on a plate of food, and not approximately: measured across every engine
+# dish in the bucket the blue channel runs mean 0.6-1.4 with p99 <= 7 out of 255. That is a
+# constant being stored as a megapixel image. Below this it becomes `metallicFactor`, which
+# renders identically because a constant map and a constant factor ARE the same maths.
+#
+# Roughness is NOT constant - it spans 23 to 111 of 255 on the same dishes, which is wet
+# fish against dry rice - so it is kept, and only the dead channels around it are dropped.
+FLAT_CHANNEL_P99 = 12
+
+
+def texture_source(tex: dict) -> int | None:
+    """The image a texture points at, whether it is core glTF or EXT_texture_webp.
+
+    A WebP texture has no `source` at all - the extension carries it - so anything that
+    reads `tex["source"]` directly sees a texture with no image and silently drops it.
+    """
+    if "source" in tex:
+        return tex["source"]
+    return tex.get("extensions", {}).get("EXT_texture_webp", {}).get("source")
+
+
+def _roles(gltf: dict) -> dict[int, str]:
+    """Which map is which, by image index. Unreferenced images come back as 'other'."""
+    by_texture: dict[int, str] = {}
+    for mat in gltf.get("materials", []):
+        pbr = mat.get("pbrMetallicRoughness", {})
+        for key, role in (("baseColorTexture", "baseColor"),
+                          ("metallicRoughnessTexture", "metallicRoughness")):
+            if key in pbr:
+                by_texture[pbr[key]["index"]] = role
+        for key, role in (("normalTexture", "normal"), ("emissiveTexture", "emissive"),
+                          ("occlusionTexture", "occlusion")):
+            if key in mat:
+                by_texture[mat[key]["index"]] = role
+    out: dict[int, str] = {}
+    for ti, tex in enumerate(gltf.get("textures", [])):
+        src = texture_source(tex)
+        if src is not None:
+            out[src] = by_texture.get(ti, "other")
+    return out
+
+
+def _flat_metal(im) -> tuple[bool, float]:
+    """Is the metallic channel constant, and what is its value? See FLAT_CHANNEL_P99."""
+    try:
+        import numpy as np
+    except ImportError:
+        return False, 0.0
+    blue = np.asarray(im.convert("RGB"))[:, :, 2]
+    spread = float(np.percentile(blue, 99)) - float(np.percentile(blue, 1))
+    return spread <= FLAT_CHANNEL_P99, float(blue.mean()) / 255.0
+
+
 def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
-                    quality: int = 90, max_bytes: int = MAX_TEXTURE_BYTES) -> dict:
-    """Shrink every embedded texture to `max_edge` AND `max_bytes`, then repack.
+                    quality: int = 90, max_bytes: int = MAX_TEXTURE_BYTES,
+                    webp: bool = True) -> dict:
+    """Shrink every embedded texture to the budget for the map it actually is, then repack.
+
+    `max_edge` is the ceiling for the base colour; every other map gets TEXTURE_BUDGET,
+    which is lower because measurement says their detail does not reach 2048 anyway.
+
+    Three things happen that a plain resize does not:
+
+      * the base colour is written as WebP, ~25% smaller than JPEG at matching quality. It
+        needs EXT_texture_webp, declared below - three.js and model-viewer both read it,
+        and a hand-optimised dish already shipping on JAPAN proves the path.
+      * a metallicRoughness map whose metallic channel is constant - every food scan
+        measured - loses its chroma entirely and is stored as greyscale roughness, with
+        `metallicFactor` carrying the constant. Identical render, no chroma planes.
+      * nothing is ever replaced by something larger, so running this twice, or over a file
+        somebody already optimised by hand, costs nothing and degrades nothing.
 
     Every bufferView is rewritten in order, because changing one image's length shifts
     every offset after it. Rebuilding the whole buffer is simpler than patching offsets
@@ -115,52 +196,76 @@ def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
     gltf, binary = _read(src)
     views = gltf.get("bufferViews", [])
     images = gltf.get("images", [])
+    roles = _roles(gltf)
 
     replacement: dict[int, bytes] = {}
+    metallic_of: dict[int, float] = {}       # image index -> the constant it collapsed to
     before = after = 0
     resized = skipped = 0
+    wrote_webp = False
 
-    for img in images:
+    for ii, img in enumerate(images):
         vi = img.get("bufferView")
         if vi is None:                       # external URI texture - nothing to do here
             skipped += 1
             continue
         bv = views[vi]
         start = bv.get("byteOffset", 0)
-        data = binary[start:start + bv["byteLength"]]
+        data = bytes(binary[start:start + bv["byteLength"]])
         before += len(data)
+        role = roles.get(ii, "other")
+        edge = max_edge if role == "baseColor" else min(max_edge, TEXTURE_BUDGET[role])
         try:
             with Image.open(io.BytesIO(data)) as im:
-                too_wide = max(im.size) > max_edge
-                too_heavy = len(data) > max_bytes
-                if not too_wide and not too_heavy:
+                im.load()
+                # Alpha is load-bearing where it exists - a cut-out leaf, a glass. It
+                # survives as WebP or PNG; only JPEG cannot carry it.
+                has_alpha = im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info
+                flat = False
+                if role == "metallicRoughness" and not has_alpha:
+                    flat, value = _flat_metal(im)
+                    if flat:
+                        metallic_of[ii] = value
+                        im = im.convert("RGB").getchannel("G")   # roughness, alone
+                too_wide = max(im.size) > edge
+                # What this image SHOULD be, decided before the skip so that a base colour
+                # already at 2048 and already small still gets converted. Without this the
+                # "it is fine as it is" test fires first and WebP is never reached - the
+                # exact bug that made the first run of this leave every baseColor as JPEG.
+                want = "image/webp" if webp and (role == "baseColor" or has_alpha) else (
+                    "image/png" if has_alpha else "image/jpeg")
+                if (not too_wide and not flat and len(data) <= max_bytes
+                        and img.get("mimeType") == want):
                     after += len(data)
                     skipped += 1
                     continue
-                # Alpha is load-bearing where it exists - a cut-out leaf, a glass. JPEG
-                # has none, so a texture that uses it is only ever resized, never
-                # re-encoded, even if that leaves it large.
-                has_alpha = im.mode in ("RGBA", "LA", "PA") or "transparency" in im.info
                 if too_wide:
-                    im.thumbnail((max_edge, max_edge), Image.LANCZOS)
-                if has_alpha:
-                    if not too_wide:
-                        after += len(data)
-                        skipped += 1
-                        continue
-                    buf = io.BytesIO()
+                    im.thumbnail((edge, edge), Image.LANCZOS)
+                buf = io.BytesIO()
+                if has_alpha and webp:
+                    im.convert("RGBA").save(buf, "WEBP", quality=quality, method=6)
+                    mime = "image/webp"
+                elif has_alpha:
                     im.convert("RGBA").save(buf, "PNG", optimize=True)
-                    new, mime = buf.getvalue(), "image/png"
+                    mime = "image/png"
+                elif role == "baseColor" and webp:
+                    im.convert("RGB").save(buf, "WEBP", quality=min(quality, 85), method=6)
+                    mime = "image/webp"
                 else:
-                    buf = io.BytesIO()
-                    im.convert("RGB").save(buf, "JPEG", quality=quality, optimize=True)
-                    new, mime = buf.getvalue(), "image/jpeg"
-                # Re-encoding is only ever an improvement if it actually shrinks.
-                if len(new) >= len(data) and not too_wide:
+                    im.convert("L" if flat else "RGB").save(
+                        buf, "JPEG", quality=quality, optimize=True)
+                    mime = "image/jpeg"
+                new = buf.getvalue()
+                # Re-encoding is only ever an improvement if it actually shrinks. This is
+                # what keeps the pass idempotent over an already-optimised file, and what
+                # stops a format change from making a texture bigger than it was.
+                if len(new) >= len(data) and not too_wide and not flat:
+                    metallic_of.pop(ii, None)
                     after += len(data)
                     skipped += 1
                     continue
         except Exception:                    # unreadable - keep the original untouched
+            metallic_of.pop(ii, None)
             after += len(data)
             skipped += 1
             continue
@@ -168,6 +273,37 @@ def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
         img["mimeType"] = mime
         after += len(new)
         resized += 1
+
+    # A greyscale roughness map only renders correctly once the constant it gave up comes
+    # back as the factor. Done per MATERIAL, because that is where the factor lives.
+    collapsed = 0
+    for mat in gltf.get("materials", []):
+        pbr = mat.get("pbrMetallicRoughness", {})
+        mr = pbr.get("metallicRoughnessTexture")
+        if not mr:
+            continue
+        source = texture_source(gltf["textures"][mr["index"]])
+        if source in metallic_of:
+            pbr["metallicFactor"] = round(metallic_of[source], 4)
+            collapsed += 1
+
+    # WebP is an extension, and a REQUIRED one: a texture carrying its image there has no
+    # `source`, so a loader that skips the extension draws an untextured grey dish instead
+    # of failing. Better to fail loudly than to serve a grey dish.
+    #
+    # Asked of the FINAL images, not only of the ones this pass rewrote. A file that
+    # arrived already carrying WebP - a dish optimised by hand before it reached us - may
+    # declare no extension at all and still load, because three.js sniffs the bytes. That
+    # is luck, not a contract, so it gets declared properly on the way out either way.
+    wrote_webp = any(im.get("mimeType") == "image/webp" for im in images)
+    if wrote_webp:
+        for tex in gltf.get("textures", []):
+            src_i = texture_source(tex)
+            if src_i is not None and images[src_i].get("mimeType") == "image/webp":
+                tex.pop("source", None)
+                tex.setdefault("extensions", {})["EXT_texture_webp"] = {"source": src_i}
+        for key in ("extensionsUsed", "extensionsRequired"):
+            gltf[key] = sorted(set(gltf.get(key, [])) | {"EXT_texture_webp"})
 
     # Repack: walk every view in order, substituting the new image bytes.
     packed = bytearray()
@@ -192,6 +328,7 @@ def resize_textures(src: Path, dst: Path, max_edge: int = 2048,
         "textures_skipped": skipped,
         "texture_bytes_before": before,
         "texture_bytes_after": after,
+        "metallic_collapsed": collapsed,
         "max_edge": max_edge,
         "max_texture_bytes": max_bytes,
     }
@@ -458,13 +595,32 @@ def read_accessor(gltf: dict, binary, index: int) -> list[tuple]:
     return out
 
 
-def image_bytes(gltf: dict, binary, index: int) -> tuple[bytes, str]:
-    """An embedded image and its file extension."""
+def image_bytes(gltf: dict, binary, index: int, *,
+                readable: tuple[str, ...] = ()) -> tuple[bytes, str]:
+    """An embedded image and its file extension.
+
+    `readable` names the mime types the CALLER can actually open, and anything else is
+    transcoded rather than handed over with a `.bin` extension. USDZ is the reason: Quick
+    Look reads PNG and JPEG only, so once the web payload started carrying WebP base
+    colours, the iOS package would have shipped an image no Apple device can decode -
+    silently, because a texture that fails to load renders as untextured grey rather than
+    as an error.
+    """
     img = gltf["images"][index]
     bv = gltf["bufferViews"][img["bufferView"]]
     off = bv.get("byteOffset", 0)
     data = bytes(binary[off: off + bv["byteLength"]])
-    ext = {"image/png": ".png", "image/jpeg": ".jpg"}.get(img.get("mimeType", ""), ".bin")
+    mime = img.get("mimeType", "")
+    if readable and mime not in readable:
+        with Image.open(io.BytesIO(data)) as im:
+            im.load()
+            buf = io.BytesIO()
+            if im.mode in ("RGBA", "LA", "PA") and "image/png" in readable:
+                im.convert("RGBA").save(buf, "PNG", optimize=True)
+                return buf.getvalue(), ".png"
+            im.convert("RGB").save(buf, "JPEG", quality=90, optimize=True)
+            return buf.getvalue(), ".jpg"
+    ext = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}.get(mime, ".bin")
     return data, ext
 
 
