@@ -238,6 +238,36 @@ export async function requestUploadOptimise(args: {
   return error
 }
 
+/** A model shipped EXACTLY as uploaded - no decimation, no texture budget, no size baked
+ *  in, no USDZ made. For a file that is already right: hand-finished in Blender, already
+ *  optimised elsewhere, or a test of what the raw thing looks like on a phone.
+ *
+ *  No engine is involved, so this is a `models` row and not a request: it is on the menu
+ *  the moment it is attached. Approved in both places, the rule `saveUploadedModel`
+ *  follows - the developer uploading a finished file has judged it. A library row must
+ *  be shared (0030); a restaurant row is that restaurant's.
+ *
+ *  Without a USDZ there is no iPhone AR for this model; the page says so before upload. */
+export async function createAsIsModel(args: {
+  glbKey: string
+  usdzKey: string | null
+  title: string
+  tenantId: string | null
+}) {
+  const supabase = createClient()
+  const { data, error } = await supabase.from('models').insert({
+    tenant_id: args.tenantId,
+    shared: args.tenantId === null,
+    title: args.title.trim() || 'Uploaded model',
+    dish: crypto.randomUUID(),
+    variant: 'default',
+    draco_key: args.glbKey,
+    usdz_key: args.usdzKey,
+    tenant_state: 'approved',
+  }).select('id').single()
+  return { id: (data as { id: string } | null)?.id ?? null, error }
+}
+
 export async function setLibraryState(id: string, state: 'approved' | 'rejected' | 'draft') {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -281,14 +311,34 @@ async function post(body: unknown) {
   return out
 }
 
-export async function uploadRawModel(file: File, onProgress: (fraction: number) => void) {
-  if (!/\.glb$/i.test(file.name)) throw new Error('Only .glb files')
-  // Checked here as well as by the bridge: a GLB starts with the ASCII "glTF". Finding
-  // out after a 200 MB upload that somebody picked a .gltf renamed to .glb wastes minutes.
-  const magic = new TextDecoder().decode(await file.slice(0, 4).arrayBuffer())
-  if (magic !== 'glTF') throw new Error('That is not a binary glTF file')
+/** A GLB for the optimiser - the bridge adopts it as a master (kind 'upload'). */
+export function uploadRawModel(file: File, onProgress: (fraction: number) => void) {
+  return uploadModelFile(file, 'raw', onProgress)
+}
 
-  const { key, uploadId } = await post({ action: 'create', filename: file.name, size: file.size })
+/** Magic bytes, checked before a byte is sent: finding out after a 200 MB upload that
+ *  somebody picked a .gltf renamed to .glb wastes minutes. A GLB starts with "glTF"; a
+ *  USDZ is a zip and starts with "PK". */
+async function checkMagic(file: File) {
+  const head = new TextDecoder().decode(await file.slice(0, 4).arrayBuffer())
+  if (/\.glb$/i.test(file.name)) {
+    if (head !== 'glTF') throw new Error(`${file.name} is not a binary glTF file`)
+  } else if (/\.usdz$/i.test(file.name)) {
+    if (!head.startsWith('PK')) throw new Error(`${file.name} is not a USDZ package`)
+  } else {
+    throw new Error('Only .glb or .usdz files')
+  }
+}
+
+export async function uploadModelFile(file: File, purpose: 'raw' | 'asis',
+                                      onProgress: (fraction: number) => void) {
+  if (purpose === 'raw' && !/\.glb$/i.test(file.name)) throw new Error('Only .glb files')
+  await checkMagic(file)
+
+  const { key, uploadId } = await post({
+    action: 'create', filename: file.name, size: file.size,
+    purpose: purpose === 'asis' ? 'asis' : 'optimise',
+  })
   const parts: { partNumber: number; etag: string }[] = []
   const total = Math.max(1, Math.ceil(file.size / PART))
   try {

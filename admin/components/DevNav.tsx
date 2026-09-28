@@ -10,7 +10,7 @@ import { usePathname } from 'next/navigation'
 const TABS: [string, string][] = [
   ['/dev', 'Restaurants'],
   ['/dev/library', 'Library Studio'],
-  ['/dev/upload', 'Upload & optimise'],
+  ['/dev/upload', 'Upload model'],
   ['/dev/engines', 'Engines'],
   ['/dev-analytics', 'Queue & analytics'],
 ]

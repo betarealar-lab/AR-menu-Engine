@@ -1,9 +1,10 @@
-// A raw model, in parts. Developers only.
+// A model file, in parts. Developers only.
 //
 // **Why this exists next to /api/asset.** A Meshy master is 60-290 MB. The one-shot route
 // reads the whole file into the Worker (`formData()`, then `arrayBuffer()`), and a Worker
-// has 128 MB of memory and a 100 MB request body limit - so the files a developer most
-// needs to optimise are exactly the ones that route cannot take.
+// has 128 MB of memory - and before that, Next's proxy buffers only the first 10 MB of any
+// request body. So the files a developer most needs to move are exactly the ones that
+// route cannot take.
 //
 // So the browser cuts the file into parts and this route hands each one to an R2
 // MULTIPART upload through the binding. No part is ever bigger than PART_MAX, nothing is
@@ -11,15 +12,19 @@
 // access key, no presigned URL and no bucket CORS to configure. R2 requires every part
 // but the last to be at least 5 MiB; the client sends 8 MiB.
 //
-// Three actions, one route:
-//   POST { action: 'create', filename }             -> { key, uploadId }
-//   POST form: action=part, key, uploadId, n, file  -> { partNumber, etag }
-//   POST { action: 'complete', key, uploadId, parts } -> { key }
+// Actions, one route:
+//   POST { action: 'create', filename, size, purpose } -> { key, uploadId }
+//   POST form: action=part, key, uploadId, n, file     -> { partNumber, etag }
+//   POST { action: 'complete', key, uploadId, parts }  -> { key }
+//   POST { action: 'abort', key, uploadId }
 //
-// Where it lands: `lib/raw/<uuid>.glb` in the PHOTOS bucket, the same bucket every other
-// upload uses (see /api/asset for why there is one). It is an INPUT, not something a
-// diner ever loads: the bridge (0030, kind = 'upload') adopts it as a master and the
-// optimiser makes the files that ship.
+// Where it lands, in the PHOTOS bucket (see /api/asset for why there is one):
+//   purpose 'optimise' -> lib/raw/<uuid>.glb    an INPUT: the bridge (0030, kind 'upload')
+//                                               adopts it as a master and the optimiser
+//                                               makes the files that ship
+//   purpose 'asis'     -> lib/asis/<uuid>.glb|.usdz   SHIPPED exactly as uploaded
+//                                               (2026-09-28: "upload model with no
+//                                               optimization option")
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCloudflareContext } from '@opennextjs/cloudflare'
@@ -27,7 +32,8 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 // Just under the 10 MB Next's proxy buffers (see lib/data/dev.ts, PART).
 const PART_MAX = 9 * 1024 * 1024
 const TOTAL_MAX = 400 * 1024 * 1024
-const CONTENT_TYPE = 'model/gltf-binary'
+const TYPES: Record<string, string> = { glb: 'model/gltf-binary', usdz: 'model/vnd.usdz+zip' }
+const PREFIXES = ['lib/raw/', 'lib/asis/']
 
 type Part = { partNumber: number; etag: string }
 type Upload = {
@@ -76,10 +82,11 @@ async function isSuper() {
   return !!data
 }
 
+const ours = (key: string) => PREFIXES.some(p => key.startsWith(p))
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 
 export async function POST(req: NextRequest) {
-  if (!(await isSuper())) return bad('Only BetaReal uploads raw models', 403)
+  if (!(await isSuper())) return bad('Only BetaReal uploads model files', 403)
 
   const isForm = (req.headers.get('content-type') || '').includes('multipart/form-data')
   if (isForm) {
@@ -89,9 +96,7 @@ export async function POST(req: NextRequest) {
     const uploadId = String(form.get('uploadId') || '')
     const n = Number(form.get('n'))
     const file = form.get('file')
-    if (!key.startsWith('lib/raw/') || !uploadId || !(n >= 1 && n <= 10000)) {
-      return bad('Bad part')
-    }
+    if (!ours(key) || !uploadId || !(n >= 1 && n <= 10000)) return bad('Bad part')
     if (!(file instanceof File)) return bad('No bytes')
     if (file.size > PART_MAX) return bad('Part too large', 413)
     const bytes = new Uint8Array(await file.arrayBuffer())
@@ -109,29 +114,34 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({})) as {
-    action?: string; filename?: string; size?: number
+    action?: string; filename?: string; size?: number; purpose?: string
     key?: string; uploadId?: string; parts?: Part[]
   }
 
   if (body.action === 'create') {
-    if (!/\.glb$/i.test(body.filename || '')) return bad('Only .glb files')
+    const ext = (body.filename || '').split('.').pop()?.toLowerCase() || ''
+    const purpose = body.purpose === 'asis' ? 'asis' : 'raw'
+    // The optimiser reads GLB only; a USDZ is only ever shipped as it is.
+    if (!(ext === 'glb' || (ext === 'usdz' && purpose === 'asis'))) {
+      return bad(purpose === 'asis' ? 'Only .glb or .usdz files' : 'Only .glb files')
+    }
     if ((body.size || 0) > TOTAL_MAX) return bad('That file is over 400 MB', 413)
-    const key = `lib/raw/${crypto.randomUUID()}.glb`
+    const key = `lib/${purpose}/${crypto.randomUUID()}.${ext}`
     const b = binding()
     if (b) {
-      const up = await b.createMultipartUpload(key, { httpMetadata: { contentType: CONTENT_TYPE } })
+      const up = await b.createMultipartUpload(key, { httpMetadata: { contentType: TYPES[ext] } })
       return NextResponse.json({ key: up.key, uploadId: up.uploadId })
     }
     const { sdk, client } = await s3()
     const out = await client.send(new sdk.CreateMultipartUploadCommand({
-      Bucket: bucketName(), Key: key, ContentType: CONTENT_TYPE,
+      Bucket: bucketName(), Key: key, ContentType: TYPES[ext],
     }))
     return NextResponse.json({ key, uploadId: out.UploadId })
   }
 
   if (body.action === 'complete') {
     const { key = '', uploadId = '', parts = [] } = body
-    if (!key.startsWith('lib/raw/') || !uploadId || !parts.length) return bad('Bad completion')
+    if (!ours(key) || !uploadId || !parts.length) return bad('Bad completion')
     const sorted = [...parts].sort((a, b) => a.partNumber - b.partNumber)
     const b = binding()
     if (b) {
@@ -148,7 +158,7 @@ export async function POST(req: NextRequest) {
 
   if (body.action === 'abort') {
     const { key = '', uploadId = '' } = body
-    if (!key.startsWith('lib/raw/') || !uploadId) return bad('Bad abort')
+    if (!ours(key) || !uploadId) return bad('Bad abort')
     const b = binding()
     if (b) await b.resumeMultipartUpload(key, uploadId).abort()
     return NextResponse.json({ ok: true })

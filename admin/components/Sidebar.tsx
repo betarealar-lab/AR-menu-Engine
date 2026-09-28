@@ -119,7 +119,7 @@ export default function Sidebar({ open, onClose }: Props) {
     // Studio, and the optimiser as a button rather than a script on somebody's laptop.
     plan.role === 'super_admin' ? { href: '/dev', match: '/dev$', label: 'Restaurants', icon: 'grid' } : null,
     plan.role === 'super_admin' ? { href: '/dev/library', match: '/dev/library', label: 'Library Studio', icon: 'cube' } : null,
-    plan.role === 'super_admin' ? { href: '/dev/upload', match: '/dev/upload', label: 'Upload & optimise', icon: 'upload' } : null,
+    plan.role === 'super_admin' ? { href: '/dev/upload', match: '/dev/upload', label: 'Upload model', icon: 'upload' } : null,
     plan.canManageTenants ? { href: '/tenants', label: T.navTenants, icon: 'user' } : null,
     // Not tenant-scoped: a template belongs to every restaurant or to none, so it
     // takes no ?tenant= and does not change when the picker does.

@@ -42,6 +42,12 @@
   --radius-sm: 8px;
   --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
   --ring:     0 0 0 3px rgba(245,181,68,0.22);
+  /* Chart series. Two, in a fixed order, checked with the dataviz validator against
+     --card in each mode rather than eyeballed: 1 = visitors (blue), 2 = 3D opens (gold,
+     the brand, because 3D is the product). Text never wears these - they colour marks. */
+  --viz-1:    #3987e5;
+  --viz-2:    #c98500;   /* not the brand #f5b544: too light for a mark on --card (validator, L 0.81 > 0.77) */
+  --viz-grid: rgba(255,255,255,0.07);
 }
 
 html.light {
@@ -58,6 +64,9 @@ html.light {
   --success:  #17794c;
   --shadow:   0 1px 2px rgba(16,24,40,.06), 0 8px 24px -12px rgba(16,24,40,.18);
   --ring:     0 0 0 3px rgba(167,106,5,0.16);
+  --viz-1:    #2a78d6;
+  --viz-2:    #c98500;
+  --viz-grid: rgba(14,20,28,0.08);
 }
 
 html, body {
