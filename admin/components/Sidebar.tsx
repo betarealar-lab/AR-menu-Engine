@@ -111,6 +111,9 @@ export default function Sidebar({ open, onClose }: Props) {
     plan.canUseTheme ? { href: tenantHref('/theme'), match: '/theme', label: T.navTheme, icon: 'palette' } : null,
     plan.canUseAnalytics ? { href: tenantHref('/dashboard'), match: '/dashboard', label: T.navAnalytics, icon: 'chart' } : null,
     { href: tenantHref('/share'), match: '/share', label: 'QR & share', icon: 'qr' },
+    // Real since 0036: every change recorded by triggers, with who made it and an undo.
+    // An owner's own changes are theirs to see and undo, so it lives with their screens.
+    plan.canUseMenu ? { href: tenantHref('/history'), match: '/history', label: T.navHistory, icon: 'history' } : null,
   ].filter(Boolean) as Row[])
 
   // Ours, not an owner's. Kept in their own group so the two are never confused.
@@ -128,9 +131,6 @@ export default function Sidebar({ open, onClose }: Props) {
     // takes no ?tenant= and does not change when the picker does.
     plan.canManageTenants ? { href: '/templates', label: T.navTemplates, icon: 'palette' } : null,
     plan.role === 'super_admin' ? { href: '/dev-analytics', label: T.navDeveloperAnalytics, icon: 'pulse' } : null,
-    // History reads a change log that does not exist yet. Hidden rather than shown empty:
-    // a screen that is always empty teaches people not to look at it.
-    plan.role === 'super_admin' ? { href: tenantHref('/history'), match: '/history', label: T.navHistory, icon: 'history' } : null,
   ].filter(Boolean) as Row[])
 
   function broadcast(newLang: Lang, newDark: boolean) {

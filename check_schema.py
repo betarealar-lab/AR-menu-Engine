@@ -488,6 +488,40 @@ def main() -> int:
             check("...and so does every page of a restaurant switched off", not resolves(tok))
             conn.rollback()
 
+            # Change history (0036): recorded by triggers, visible to the restaurant, undoable
+            # by the restaurant through its own table rules, and invisible to anyone else.
+            print("\n== change history records, and undoes ==")
+            cur.execute("select set_config('request.jwt.claims', '', true)")
+            cur.execute("insert into items (tenant_id, name, price_minor) values (%s, 'history dish', 1000) returning id", (ta,))
+            hd = cur.fetchone()[0]
+            as_user(a_id, "update items set price_minor = 1500 where id = %s returning id", (hd,))
+            cur.execute("reset role")
+            rows = as_user(a_id, "select id, field from change_history_list(%s) where record_id = %s",
+                           (ta, str(hd)))
+            cur.execute("reset role")
+            fields = {r[1] for r in rows}
+            check("an edit is recorded, field by field", "price_minor" in fields, str(fields))
+            check("...and so is the dish being created", "__created__" in fields, str(fields))
+            pid = next((r[0] for r in rows if r[1] == "price_minor"), None)
+            if pid:
+                as_user(a_id, "select revert_change(%s)", (pid,))
+                cur.execute("reset role")
+                cur.execute("select price_minor from items where id = %s", (hd,))
+                check("the restaurant can undo its own change", cur.fetchone()[0] == 1000)
+            n = as_user(b_id, "select count(*) from change_history_list(%s)", (ta,))[0][0]
+            cur.execute("reset role")
+            check("another restaurant sees none of it", n == 0, str(n))
+            cur.execute("savepoint ch")
+            why = ""
+            try:
+                as_user(a_id, "update change_history set new_value = '1' where tenant_id = %s returning id", (ta,))
+            except Exception as e:                            # noqa: BLE001
+                why = type(e).__name__
+            cur.execute("rollback to savepoint ch")
+            cur.execute("reset role")
+            check("nobody can edit the log itself", bool(why), why or "it SUCCEEDED")
+            conn.rollback()
+
             print("\n== a diner, who is nobody ==")
             # A savepoint per table. A denied query aborts the whole transaction, and
             # "denied" is the PASS here - without a savepoint the first denial poisons

@@ -35,9 +35,15 @@ export type ModelUse = {
   pagesActive: boolean
 }
 
+/** A model's own page (0037): /m/<token>, the model alone - no menu, no close button. */
+export const modelPageUrl = (token: string) =>
+  `${(process.env.NEXT_PUBLIC_MENU_ORIGIN || '').replace(/\/$/, '')}/m/${token}`
+
 export type LibModel = {
   id: string
   title: string
+  description: string
+  page: { token: string; url: string; active: boolean } | null
   ownerId: string | null
   ownerName: string
   state: 'draft' | 'approved' | 'rejected'
@@ -68,7 +74,7 @@ export async function loadAllModels(): Promise<{ models: LibModel[]; tenants: Te
   const supabase = createClient()
   const [m, t, e] = await Promise.all([
     supabase.from('models')
-      .select('id, tenant_id, title, dish, tenant_state, archived, draco_key, usdz_key, poster_key, ' +
+      .select('id, tenant_id, title, description, dish, tenant_state, archived, draco_key, usdz_key, poster_key, ' +
               'external_glb, external_usdz, scale_cm, scale_axis, created_utc')
       .order('created_utc', { ascending: false }),
     supabase.from('tenants').select('id, name, slug').order('name'),
@@ -76,7 +82,7 @@ export async function loadAllModels(): Promise<{ models: LibModel[]; tenants: Te
   ])
   if (m.error) return { models: [], tenants: [], error: m.error.message }
 
-  type M = { id: string; tenant_id: string | null; title: string | null; dish: string
+  type M = { id: string; tenant_id: string | null; title: string | null; description: string | null; dish: string
              tenant_state: LibModel['state']; archived: boolean; draco_key: string | null
              usdz_key: string | null; poster_key: string | null; external_glb: string | null
              external_usdz: string | null; scale_cm: number | null; scale_axis: string | null
@@ -95,6 +101,9 @@ export async function loadAllModels(): Promise<{ models: LibModel[]; tenants: Te
   const links = await inChunks<L>(items.map(i => i.id), c =>
     supabase.from('dish_links').select('item_id, token, active').in('item_id', c))
   const linkBy = new Map(links.map(l => [l.item_id, l]))
+  const pages = await inChunks<{ model_id: string; token: string; active: boolean }>(rows.map(r => r.id), c =>
+    supabase.from('model_links').select('model_id, token, active').in('model_id', c))
+  const pageBy = new Map(pages.map(p => [p.model_id, p]))
   const approved = new Set(rows.filter(r => r.tenant_state === 'approved').map(r => r.id))
 
   const usesBy = new Map<string, ModelUse[]>()
@@ -112,7 +121,12 @@ export async function loadAllModels(): Promise<{ models: LibModel[]; tenants: Te
 
   const models = rows.map(r => ({
     id: r.id,
-    title: r.title || r.dish,
+    // A model with no title of its own is named after the dish it is on, not its uuid.
+    title: r.title || (usesBy.get(r.id) || [])[0]?.dishName || r.dish,
+    description: r.description || '',
+    page: pageBy.has(r.id)
+      ? { token: pageBy.get(r.id)!.token, url: modelPageUrl(pageBy.get(r.id)!.token), active: pageBy.get(r.id)!.active }
+      : null,
     ownerId: r.tenant_id,
     ownerName: r.tenant_id ? tName.get(r.tenant_id) || 'a restaurant' : 'BetaReal',
     state: r.tenant_state,
@@ -145,4 +159,19 @@ export async function loadDishesOf(tenantId: string) {
   const { data } = await createClient().from('items')
     .select('id, name, model_id').eq('tenant_id', tenantId).order('name')
   return (data || []) as { id: string; name: string; model_id: string | null }[]
+}
+
+export async function setModelPageActive(modelId: string, active: boolean) {
+  const { error } = await createClient().rpc('set_model_link_active', { p_model: modelId, p_active: active })
+  return error?.message || ''
+}
+
+export async function rerollModelPage(modelId: string) {
+  const { error } = await createClient().rpc('reroll_model_link', { p_model: modelId })
+  return error?.message || ''
+}
+
+export async function saveModelDescription(modelId: string, description: string) {
+  const { error } = await createClient().from('models').update({ description: description.trim() }).eq('id', modelId)
+  return error?.message || ''
 }

@@ -1,0 +1,40 @@
+---
+// One MODEL, on its own page (0037) - no restaurant, no menu, no close button.
+//
+// The sibling of /p/<token> (a dish page). A dish page has a menu behind it, so its 3D
+// view keeps the X that goes back to it. A BetaReal model - a demo, a stock plate, one
+// made for a pitch - is on no menu, so this page is the model and nothing else: Temo,
+// 2026-09-28, "if model is betareal's so no menu then remove the X."
+//
+// Rendered by the menu route in model mode, for the same reason dish pages are: the 3D
+// viewer, its camera limits, WebXR on Android and Quick Look on iPhone must be the menu's
+// own code, not a copy. The model is handed over on `Astro.locals`, never in the URL.
+import { envFrom } from "../../lib/env.js";
+import { dishUnavailable, menuUnavailable } from "../../lib/nomenu.js";
+
+export const prerender = false;
+
+const token = String(Astro.params.token || "").toLowerCase();
+if (!/^[a-hj-km-np-z2-9]{10}$/.test(token)) return dishUnavailable();
+
+const env = envFrom(Astro.locals);
+const url = env("SUPABASE_URL");
+const key = env("SUPABASE_ANON_KEY");
+
+let hit = null;
+try {
+  const res = await fetch(`${url.replace(/\/$/, "")}/rest/v1/rpc/resolve_model_link`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_token: token }),
+  });
+  if (!res.ok) throw new Error(`resolve ${res.status}`);
+  hit = ((await res.json()) || [])[0] || null;
+} catch (err) {
+  return menuUnavailable(`m/${token}`, err);
+}
+if (!hit) return dishUnavailable();
+
+Astro.locals.soloModel = hit;
+return Astro.rewrite("/_model");
+---

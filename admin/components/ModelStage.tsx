@@ -94,7 +94,9 @@ export default function ModelStage({ src, poster, orbit, title, caption, onClose
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex flex-col"
+      // Above everything else an admin screen can open - the Library Studio's model panel
+      // is a drawer at z-900, and at z-60 "Expand" drew the model BEHIND it (2026-09-28).
+      className="fixed inset-0 z-[1100] flex flex-col"
       style={{ background: 'rgba(8,8,10,0.94)', backdropFilter: 'blur(6px)' }}
       role="dialog" aria-modal="true" aria-label={`${title} in 3D`}
       // The backdrop closes; the model does not. Dragging to turn a dish must never be

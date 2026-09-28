@@ -20,7 +20,8 @@ import QR from 'qrcode'
 import LiveThumb from '@/components/LiveThumb'
 import ModelStage from '@/components/ModelStage'
 import {
-  loadAllModels, assignModel, loadDishesOf, type LibModel, type ModelUse, type TenantLite,
+  loadAllModels, assignModel, loadDishesOf, setModelPageActive, rerollModelPage, saveModelDescription,
+  type LibModel, type ModelUse, type TenantLite,
 } from '@/lib/data/libraryAll'
 import { setLibraryState, renameLibraryModel, archiveLibraryModel } from '@/lib/data/dev'
 import { attachModel, createDishWithModel } from '@/lib/data/models'
@@ -197,12 +198,18 @@ function ModelPanel({ model: m, tenants, onClose, onChanged }: {
         </div>
 
         <div className="p-4 grid gap-5">
-          <button className="aspect-video w-full rounded-xl overflow-hidden flex items-center justify-center"
-                  style={{ background: 'var(--card2)' }} onClick={() => m.glb && setStage(true)} disabled={!m.glb}>
-            {m.glb ? <LiveThumb src={m.glb} />
+          {/* A viewer you can turn right here, and Expand for the full screen - opening
+              full screen on a click took the interactive model away (2026-09-28). */}
+          <div className="relative aspect-video w-full rounded-xl overflow-hidden flex items-center justify-center"
+               style={{ background: 'var(--card2)' }}>
+            {m.glb ? <LiveThumb key={m.id} src={m.glb} interactive />
               // eslint-disable-next-line @next/next/no-img-element
               : m.poster ? <img src={m.poster} alt="" className="h-full object-contain" /> : 'No file'}
-          </button>
+            {m.glb && (
+              <button className="btn btn-sm absolute top-2 right-2" style={{ background: 'var(--card)' }}
+                      onClick={() => setStage(true)}>⤢ Expand</button>
+            )}
+          </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
             <span className={`pill ${STATE_PILL[m.state]}`}>{m.state}</span>
@@ -219,6 +226,21 @@ function ModelPanel({ model: m, tenants, onClose, onChanged }: {
             {m.glb && <a className="btn btn-sm btn-ghost" href={m.glb} download>GLB</a>}
             {m.usdz && <a className="btn btn-sm btn-ghost" href={m.usdz} download>USDZ</a>}
           </div>
+
+          {/* ── Description: what the model's own page says under it (0037) ── */}
+          <section className="grid gap-2">
+            <h3 className="eyebrow">Description</h3>
+            <textarea key={`d-${m.id}`} defaultValue={m.description} rows={2}
+                      placeholder="What this dish is - shown on the model's own page"
+                      onBlur={e => { if (e.target.value.trim() !== m.description) void step(() => saveModelDescription(m.id, e.target.value), 'Description saved') }} />
+          </section>
+
+          {/* ── The model's own page: no menu, no close button (0037) ── */}
+          <ModelPage model={m} busy={busy} copied={copied === `m-${m.id}`}
+                     onCopy={() => m.page && copy(m.page.url, `m-${m.id}`)}
+                     onToggle={() => step(() => setModelPageActive(m.id, !m.page!.active),
+                       m.page!.active ? 'Model page switched off.' : 'Model page is live.')}
+                     onReroll={() => step(() => rerollModelPage(m.id), 'New model page address. The old QR no longer works.')} />
 
           {/* ── Owner ── */}
           <section className="grid gap-2">
@@ -340,5 +362,52 @@ function UseRow({ use: u, title, busy, copied, onCopy, onToggle, onDetach }: {
       </div>
       <button className="btn btn-sm btn-ghost shrink-0" disabled={busy} onClick={onDetach} title="Take the model off this dish">Take off</button>
     </div>
+  )
+}
+
+/** The model's own page: the model alone, no menu behind it and so no X to close to.
+ *  Dish pages (below, per dish) keep theirs because they have a menu to go back to. */
+function ModelPage({ model: m, busy, copied, onCopy, onToggle, onReroll }: {
+  model: LibModel; busy: boolean; copied: boolean
+  onCopy: () => void; onToggle: () => void; onReroll: () => void
+}) {
+  const [confirm, setConfirm] = useState(false)
+  if (!m.page) return null
+  const live = m.page.active && m.state === 'approved' && !m.archived
+  const name = `betareal-${safeName(m.title)}`
+  return (
+    <section className="grid gap-2">
+      <h3 className="eyebrow">Model page · no menu</h3>
+      <div className="card-flat p-3 flex gap-3 items-start">
+        <Qr value={m.page.url} size={56} />
+        <div className="min-w-0 flex-1 grid gap-1">
+          <button className="text-xs font-mono truncate text-left underline decoration-dotted" onClick={onCopy}
+                  title="Copy the address">
+            {copied ? 'Copied ✓' : m.page.url.replace(/^https?:\/\//, '')}
+          </button>
+          <div className="flex flex-wrap gap-1 items-center">
+            <span className={`pill ${live ? 'pill-on' : 'pill-off'}`}>
+              {!m.page.active ? 'off' : m.state !== 'approved' ? 'not approved' : m.archived ? 'retired' : 'live'}
+            </span>
+            <a className="btn btn-sm btn-ghost" href={m.page.url} target="_blank" rel="noreferrer">Open ↗</a>
+            <button className="btn btn-sm btn-ghost" onClick={() => downloadQrPng(m.page!.url, name)}>PNG</button>
+            <button className="btn btn-sm btn-ghost" onClick={() => downloadQrSvg(m.page!.url, name)}>SVG</button>
+            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={onToggle}>
+              {m.page.active ? 'Switch off' : 'Switch on'}
+            </button>
+            {confirm ? (
+              <>
+                <button className="btn btn-sm btn-danger" disabled={busy} onClick={() => { setConfirm(false); onReroll() }}>Reroll</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => setConfirm(false)}>Cancel</button>
+              </>
+            ) : (
+              <button className="btn btn-sm btn-ghost" onClick={() => setConfirm(true)}>Reroll…</button>
+            )}
+          </div>
+          {confirm && <div className="text-[11px]" style={{ color: 'var(--danger)' }}>The old address and every QR printed with it stop working.</div>}
+          {m.state !== 'approved' && <div className="text-[11px]" style={{ color: 'var(--dim)' }}>Opens once the model is approved.</div>}
+        </div>
+      </div>
+    </section>
   )
 }

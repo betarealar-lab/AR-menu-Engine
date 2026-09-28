@@ -157,8 +157,8 @@
             // Reset desktop drawer state
             document.getElementById('modal-drawer').classList.remove('expanded');
             modal.classList.remove('drawer-expanded');
-            modalArBtn.textContent  = _arButtonLabel(_viewItem);
-            modalArBtn.style.display = (_isAREnabledMenuItem(_viewItem) || _canLikelyAR(_viewItem)) ? 'block' : 'none';
+            modalArBtn.textContent  = UI[window.__lang].viewAR;
+            modalArBtn.style.display = _modalCanAR(_viewItem) ? 'block' : 'none';
             modal.style.display = 'flex';
             // Only now is the title measurable — updateModal() ran while #modal was
             // still display:none, where every height reads as 0.
@@ -471,6 +471,20 @@
             return false;
         }
 
+        // The 3D modal's button, which is ONLY ever an AR button (2026-09-28, Temo: "for
+        // already opened models in 3D with no AR ability get rid of view in 3D button").
+        // Inside the modal the dish is already in 3D, so a "View in 3D" there did nothing
+        // but print "AR is not available on this device". Shown when this device can start
+        // AR for this dish: WebXR with a model, or iPhone with a USDZ - or with only a GLB,
+        // because `_launchIOSAR` builds the USDZ on the phone (the on-device fallback).
+        function _modalCanAR(item) {
+            if (item?.text_only === true || item?.is_3d === false) return false;
+            const cap = window.__arCap;
+            if (cap === 'webxr') return _hasModel(item);
+            if (cap === 'arkit') return !!_usdzUrl(item) || _hasModel(item);
+            return false;
+        }
+
         function _arButtonLabel(item) {
             const u = UI[window.__lang];
             return _canLikelyAR(item) ? u.viewAR : u.view3D;
@@ -485,9 +499,9 @@
             });
             if (modalArBtn) {
                 const item = modalItems[modalIndex];
-                modalArBtn.textContent = loading ? u.loading : _arButtonLabel(item);
+                modalArBtn.textContent = loading ? u.loading : u.viewAR;
                 modalArBtn.disabled = loading;
-                modalArBtn.style.display = (_isAREnabledMenuItem(item) || _canLikelyAR(item)) ? 'block' : 'none';
+                modalArBtn.style.display = _modalCanAR(item) ? 'block' : 'none';
             }
         }
 

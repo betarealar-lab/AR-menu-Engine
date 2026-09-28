@@ -19,7 +19,7 @@
 // but looks wrong" bugs; trimming the generic remainder waits for a computed-style diff
 // against the live page to prove each further cut.
 import { envFrom } from "../lib/env.js";
-import { loadMenu, themeMode } from "../lib/menu.js";
+import { loadMenu, themeMode, assetUrl } from "../lib/menu.js";
 import { noMenu, menuUnavailable, dishUnavailable } from "../lib/nomenu.js";
 import { paletteCss, settingsCss, fontLinks } from "../lib/theme.js";
 import { hero, header, catBar, menuList, toggles, itemsJson } from "../lib/markup.js";
@@ -72,10 +72,34 @@ const started = Date.now();
 
 let menu = null;
 let error = null;
-try {
-  menu = await loadMenu(slug, { assetBase: "/a", locals: Astro.locals });
-} catch (err) {
-  error = err.message;
+// ── one model (0037) ─────────────────────────────────────────────────────────────────
+//
+// Set ONLY by `/m/<token>` after `resolve_model_link` said the page is live. There is no
+// restaurant: the model becomes a one-dish "menu" of its own, in the CLEAN template, so
+// the same markup, viewer and AR run - and there is no menu behind it, so no close button.
+const soloModel = Astro.locals.soloModel || null;
+if (soloModel) {
+  const m = soloModel;
+  menu = {
+    tenant: { id: m.tenant_id ? String(m.tenant_id) : "", slug: "", name: "BetaReal",
+              languages: ["en", "ka"], template: "clean" },
+    config: { default_theme: "day", site_name: m.title },
+    categories: [{ id: "model", name: "", name_ka: "", name_ru: "", position: 0 }],
+    items: [{
+      id: String(m.model_id), name_en: m.title, name_ka: "", name_ru: "",
+      description_en: m.description || "", description_ka: "", description_ru: "",
+      price: "", price_old: null, category_id: "model", category_name: "", category_name_ka: "",
+      model: assetUrl(m.draco_key || m.external_glb), model_usdz: assetUrl(m.usdz_key || m.external_usdz),
+      view_orbit: m.view_orbit || "", thumbnail_url: assetUrl(m.poster_key), thumb_3d: true,
+      is_3d: true, text_only: false, featured: false, ar_scale: 1, variants: [], addons: [], sort_order: 0,
+    }],
+  };
+} else {
+  try {
+    menu = await loadMenu(slug, { assetBase: "/a", locals: Astro.locals });
+  } catch (err) {
+    error = err.message;
+  }
 }
 
 if (!menu && !error) return noMenu();
@@ -88,8 +112,11 @@ if (error) return menuUnavailable(slug, error);
 // printing this address instead. Same page, same viewer, same AR; one card, no hero, no
 // category bar, no basket, and the dish's 3D opens on arrival.
 const soloId = String(Astro.locals.soloDish || "");
-let soloItem = null;
-if (soloId) {
+let soloItem = soloModel ? menu.items[0] : null;
+if (soloModel) {
+  Astro.response.headers.set("Cache-Control", "no-store");
+  Astro.response.headers.set("X-Robots-Tag", "noindex");
+} else if (soloId) {
   soloItem = menu.items.find((i) => i.id === soloId) || null;
   if (!soloItem) return dishUnavailable();
   menu = { ...menu, items: [soloItem],
@@ -108,9 +135,10 @@ const cfg = menu.config;
 const mode = themeMode(cfg);
 const lang = (menu.tenant.languages || ["en"])[0];
 const template = SHEETS[menu.tenant.template] ? menu.tenant.template : DEFAULT_TEMPLATE;
+// Model mode has no restaurant to count visits for unless the model belongs to one.
 const sheet = SHEETS[template];
 const title = cfg.site_name || menu.tenant.name;
-const pageTitle = soloItem ? `${soloItem.name_en} · ${title}` : `${title} · Menu`;
+const pageTitle = soloModel ? `${soloItem.name_en} · 3D` : soloItem ? `${soloItem.name_en} · ${title}` : `${title} · Menu`;
 // Both palettes, each scoped to its own `data-theme`, plus the settings that reach CSS.
 // Scoped rather than flat so the restaurant's colours beat the template's defaults AND so
 // the day/night button has something to switch between - see `paletteCss`.
@@ -139,6 +167,7 @@ runtimeCfg.tenant_id = menu.tenant.id;
 // the "flyer / poster" source, so a restaurant can see what its printed codes bring in.
 if (soloItem) {
   runtimeCfg.solo = true;
+  if (soloModel) runtimeCfg.solo_model = true;
   runtimeCfg.solo_token = String(Astro.locals.soloToken || "");
 }
 
@@ -193,6 +222,7 @@ const buildMs = Date.now() - started;
       html[data-solo] #modal-prev, html[data-solo] #modal-next, html[data-solo] #xr-add-btn,
       html[data-solo] .cat-bar { display: none !important; }
       html[data-solo] .menu-list { max-width: 640px; margin: 0 auto; }
+      ${soloModel ? `html[data-solo] #close-btn, html[data-solo] .header { display: none !important; }` : ""}
       .solo-more { display: block; text-align: center; margin: 22px auto 40px; padding: 12px 20px;
                    max-width: 320px; border-radius: 999px; text-decoration: none; font-weight: 600;
                    color: var(--text, inherit); border: 1px solid currentColor; opacity: .85; }
@@ -204,7 +234,7 @@ const buildMs = Date.now() - started;
     <Fragment set:html={header(menu, cfg, lang)} />
     {!soloItem && <Fragment set:html={catBar(menu, lang)} />}
     <Fragment set:html={menuList(menu, lang)} />
-    {soloItem && (
+    {soloItem && !soloModel && (
       <a class="solo-more" href={`/${menu.tenant.slug}`}>
         {lang === "ka" ? "სრული მენიუ →" : "See the full menu →"}
       </a>
