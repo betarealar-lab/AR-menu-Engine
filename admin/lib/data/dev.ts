@@ -117,63 +117,6 @@ export const DEFAULT_ENGINE = 'meshy-7.1'
 
 // ── The library ─────────────────────────────────────────────────────
 
-export type LibraryItem = {
-  id: string
-  title: string
-  dish: string
-  state: 'draft' | 'approved' | 'rejected'
-  archived: boolean
-  glb: string
-  usdz: string
-  poster: string
-  scale_cm: number | null
-  scale_axis: string | null
-  created_utc: string
-  /** How many dishes, in how many restaurants, are using it right now. */
-  usedBy: number
-}
-
-/** BetaReal's own models: tenant_id NULL (0030). Restaurant models that are borrowable
- *  are a different list - the "Shared" tab of a restaurant's 3D Studio - because they are
- *  still that restaurant's dish. */
-export async function loadLibraryModels(): Promise<LibraryItem[]> {
-  const supabase = createClient()
-  const { data: rows } = await supabase.from('models')
-    .select('id, title, dish, tenant_state, archived, draco_key, usdz_key, poster_key, ' +
-            'external_glb, external_usdz, scale_cm, scale_axis, created_utc')
-    .is('tenant_id', null)
-    .order('created_utc', { ascending: false })
-  type Row = {
-    id: string; title: string | null; dish: string; tenant_state: LibraryItem['state']
-    archived: boolean; draco_key: string | null; usdz_key: string | null
-    poster_key: string | null; external_glb: string | null; external_usdz: string | null
-    scale_cm: number | null; scale_axis: string | null; created_utc: string
-  }
-  const list = (rows || []) as unknown as Row[]
-  const uses = new Map<string, number>()
-  if (list.length) {
-    const { data: items } = await supabase.from('items').select('model_id')
-      .in('model_id', list.map(r => r.id))
-    for (const i of (items || []) as { model_id: string }[]) {
-      uses.set(i.model_id, (uses.get(i.model_id) || 0) + 1)
-    }
-  }
-  return list.map(r => ({
-    id: r.id,
-    title: r.title || r.dish,
-    dish: r.dish,
-    state: r.tenant_state,
-    archived: !!r.archived,
-    glb: assetUrl(r.draco_key || r.external_glb),
-    usdz: assetUrl(r.usdz_key || r.external_usdz),
-    poster: assetUrl(r.poster_key),
-    scale_cm: r.scale_cm,
-    scale_axis: r.scale_axis,
-    created_utc: r.created_utc,
-    usedBy: uses.get(r.id) || 0,
-  }))
-}
-
 export type LibraryRequest = {
   id: string
   title: string

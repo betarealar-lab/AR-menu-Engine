@@ -7,27 +7,24 @@
 // their Studio, their counts and their analytics.
 //
 // Three views:
-//   Models   - everything the library owns (tenant_id NULL): look, approve, rename, retire
+//   Library  - EVERY model, whoever owns it (components/LibraryModels): owner, dishes,
+//              dish pages and QR codes (2026-09-28)
 //   Build    - four photos -> a model, with the engine chosen here and nowhere else
 //   Queue    - what is on its way
 //
 // A library model is borrowable by any restaurant from its 3D Studio's Shared tab, the
 // same pointer mechanism as before (0024): one fix fixes every menu using it.
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { usePlan } from '@/lib/usePlan'
 import { uploadAsset } from '@/lib/upload'
 import SizeInput from '@/components/SizeInput'
-import ModelStage from '@/components/ModelStage'
-import LiveThumb from '@/components/LiveThumb'
+import LibraryModels from '@/components/LibraryModels'
 import DevNav from '@/components/DevNav'
 import EngineBanner from '@/components/EngineBanner'
 import DevRequests from '@/components/DevRequests'
 import { EMPTY_DIMS, hasDims, type Dims } from '@/lib/data/studio'
-import {
-  loadLibraryModels, requestLibraryBuild, setLibraryState, renameLibraryModel,
-  archiveLibraryModel, ENGINES, DEFAULT_ENGINE, type LibraryItem,
-} from '@/lib/data/dev'
+import { requestLibraryBuild, ENGINES, DEFAULT_ENGINE } from '@/lib/data/dev'
 
 type View = 'models' | 'build' | 'queue'
 const SLOT_NAMES = ['Front', 'Right', 'Back', 'Left'] as const
@@ -45,16 +42,10 @@ async function shrink(file: File): Promise<Blob> {
     canvas.toBlob(b => (b ? res(b) : rej(new Error('Could not read that photo'))), 'image/jpeg', 0.92))
 }
 
-const STATE_PILL = { approved: 'pill-on', draft: 'pill-wait', rejected: 'pill-off' } as const
 
 export default function LibraryStudio() {
   const plan = usePlan()
   const [view, setView] = useState<View>('models')
-  const [models, setModels] = useState<LibraryItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [query, setQuery] = useState('')
-  const [showArchived, setShowArchived] = useState(false)
-  const [stage, setStage] = useState<LibraryItem | null>(null)
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null)
   const [bump, setBump] = useState(0)
 
@@ -65,27 +56,6 @@ export default function LibraryStudio() {
   const [dims, setDims] = useState<Dims>(EMPTY_DIMS)
   const [engine, setEngine] = useState(DEFAULT_ENGINE)
   const [sending, setSending] = useState(false)
-
-  const [version, setVersion] = useState(0)
-  const reload = useCallback(() => setVersion(v => v + 1), [])
-  useEffect(() => {
-    if (plan.loading || plan.role !== 'super_admin') return
-    let dead = false
-    loadLibraryModels().then(m => { if (!dead) { setModels(m); setLoading(false) } })
-    return () => { dead = true }
-  }, [plan.loading, plan.role, version])
-
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return models.filter(m => (showArchived || !m.archived)
-      && (!q || `${m.title} ${m.dish}`.toLowerCase().includes(q)))
-  }, [models, query, showArchived])
-
-  async function act(p: Promise<{ message: string } | null>, ok: string) {
-    const err = await p
-    setMsg(err ? { text: err.message, bad: true } : { text: ok })
-    reload()
-  }
 
   async function putFrame(slot: number, file: File | undefined) {
     if (!file) return
@@ -127,11 +97,12 @@ export default function LibraryStudio() {
           <p className="eyebrow">Developer</p>
           <h1 className="text-2xl font-bold">Library Studio</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--dim)' }}>
-            BetaReal&rsquo;s own models. Any restaurant can use one from its 3D Studio&rsquo;s Shared tab.
+            Every model BetaReal has. New ones are BetaReal&rsquo;s until assigned; ones made in a
+            restaurant&rsquo;s 3D Studio are that restaurant&rsquo;s. Open a model for its dishes, pages and QR codes.
           </p>
         </div>
         <div className="flex gap-1">
-          {([['models', `Models (${models.filter(m => !m.archived).length})`], ['build', 'Build from photos'], ['queue', 'Queue']] as [View, string][])
+          {([['models', 'Library'], ['build', 'Build from photos'], ['queue', 'Queue']] as [View, string][])
             .map(([id, label]) => (
               <button key={id} onClick={() => setView(id)}
                       className={`btn btn-sm ${view === id ? 'btn-primary' : 'btn-ghost'}`}>{label}</button>
@@ -141,61 +112,7 @@ export default function LibraryStudio() {
       <EngineBanner />
       {msg && <p className="text-sm mb-4" style={{ color: msg.bad ? 'var(--danger)' : 'var(--success)' }}>{msg.text}</p>}
 
-      {view === 'models' && (
-        <>
-          <div className="flex flex-col md:flex-row gap-2 mb-4">
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search the library" style={{ flex: 1, minWidth: 0 }} />
-            <label className="text-xs flex items-center gap-2 shrink-0" style={{ color: 'var(--dim)' }}>
-              <input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} style={{ width: 'auto' }} />
-              Show retired
-            </label>
-          </div>
-          {loading && <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>Loading…</div>}
-          {!loading && shown.length === 0 && (
-            <div className="card p-6 text-sm text-center" style={{ color: 'var(--dim)' }}>
-              The library is empty. Build one from photos, or use Upload &amp; optimise.
-            </div>
-          )}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {shown.map(m => (
-              <div key={m.id} className="card overflow-hidden flex flex-col" style={{ opacity: m.archived ? 0.55 : 1 }}>
-                <button className="aspect-square flex items-center justify-center text-xs"
-                        style={{ background: 'var(--card2)', color: 'var(--dim)' }}
-                        onClick={() => m.glb && setStage(m)} disabled={!m.glb}
-                        title={m.glb ? 'Turn it around' : 'No file yet'}>
-                  {m.poster
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={m.poster} alt="" className="w-full h-full object-cover" />
-                    : m.glb ? <LiveThumb src={m.glb} /> : 'No file'}
-                </button>
-                <div className="p-3 grid gap-2 flex-1">
-                  <input defaultValue={m.title} className="text-sm font-semibold"
-                         onBlur={e => { if (e.target.value.trim() && e.target.value !== m.title) void act(renameLibraryModel(m.id, e.target.value), 'Renamed') }} />
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]" style={{ color: 'var(--dim)' }}>
-                    <span className={`pill ${STATE_PILL[m.state]}`}>{m.state}</span>
-                    {m.scale_cm && <span>{m.scale_cm} cm {m.scale_axis}</span>}
-                    <span>{m.usedBy ? `on ${m.usedBy} dish${m.usedBy > 1 ? 'es' : ''}` : 'unused'}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1 mt-auto">
-                    {m.state !== 'approved' && (
-                      <button className="btn btn-sm btn-primary" onClick={() => act(setLibraryState(m.id, 'approved'), 'Approved')}>Approve</button>
-                    )}
-                    {m.state !== 'rejected' && (
-                      <button className="btn btn-sm btn-ghost" onClick={() => act(setLibraryState(m.id, 'rejected'), 'Rejected')}>Reject</button>
-                    )}
-                    <button className="btn btn-sm btn-ghost"
-                            onClick={() => act(archiveLibraryModel(m.id, !m.archived), m.archived ? 'Restored' : 'Retired')}>
-                      {m.archived ? 'Restore' : 'Retire'}
-                    </button>
-                    {m.glb && <a className="btn btn-sm btn-ghost" href={m.glb} download>GLB</a>}
-                    {m.usdz && <a className="btn btn-sm btn-ghost" href={m.usdz} download>USDZ</a>}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+      {view === 'models' && <LibraryModels onMsg={setMsg} />}
 
       {view === 'build' && (
         <div className="card p-4 md:p-5 grid gap-5">
@@ -261,11 +178,6 @@ export default function LibraryStudio() {
         </div>
       )}
 
-      {stage && (
-        <ModelStage src={stage.glb} poster={stage.poster} title={stage.title}
-                    caption={stage.scale_cm ? `${stage.scale_cm} cm ${stage.scale_axis}` : undefined}
-                    onClose={() => setStage(null)} />
-      )}
     </div>
   )
 }

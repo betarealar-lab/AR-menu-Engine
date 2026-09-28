@@ -420,7 +420,15 @@ def main() -> int:
             # The switches must hold against the restaurant itself, not only strangers.
             print("\n== dish pages can be switched off, and only by BetaReal ==")
             cur.execute("select set_config('request.jwt.claims', '', true)")
-            cur.execute("insert into items (tenant_id, name) values (%s, 'flyer dish') returning id", (ta,))
+            # A photo dish has a link row (0033 makes one for every dish) but no page (0035):
+            # only a dish that is really 3D resolves.
+            cur.execute("insert into items (tenant_id, name) values (%s, 'photo dish') returning id", (ta,))
+            photo = cur.fetchone()[0]
+            cur.execute("select token from dish_links where item_id = %s", (photo,))
+            photo_tok = cur.fetchone()[0]
+            cur.execute("update models set tenant_state = 'approved' where id = %s", (a_model,))
+            cur.execute("insert into items (tenant_id, name, model_id, is_3d) "
+                        "values (%s, 'flyer dish', %s, true) returning id", (ta, a_model))
             fly = cur.fetchone()[0]
             cur.execute("select token from dish_links where item_id = %s", (fly,))
             row = cur.fetchone()
@@ -435,6 +443,7 @@ def main() -> int:
                 cur.execute("rollback to savepoint dl")
                 return n == 1
             check("a diner's phone can open it", resolves(tok))
+            check("...but a photo-only dish has no page", not resolves(photo_tok))
 
             for label, sql in [
                 ("an owner cannot switch their own dish page back on",

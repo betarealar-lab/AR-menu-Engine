@@ -19,30 +19,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import QR from 'qrcode'
 import { usePlan } from '@/lib/usePlan'
+import { downloadQrPng as downloadPng, downloadQrSvg as downloadSvg, safeName as safe } from '@/lib/qrDownload'
 import { createClient } from '@/lib/supabase/client'
 import {
   loadDishLinks, setDishLinkActive, rerollDishLink, setDishPagesActive, dishPageUrl,
   type DishLink,
 } from '@/lib/data/dishLinks'
 
-type Filter = 'all' | '3d' | 'on' | 'off'
+type Filter = 'all' | 'on' | 'off'
 /** `dish_stats` (0034) for the last 30 days, per dish. People, not taps. */
 type Stat = { id: string; opens: number; ar: number; placed: number; scans: number }
-const safe = (s: string) => s.replace(/[^a-z0-9ა-ჿ]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'dish'
-
-async function downloadPng(url: string, name: string) {
-  // 2048 px with a 4-module quiet zone: sharp on an A3 poster, and the white border the
-  // scanner needs survives a designer cropping close.
-  const data = await QR.toDataURL(url, { width: 2048, margin: 4, errorCorrectionLevel: 'M' })
-  const a = document.createElement('a'); a.href = data; a.download = `${name}-qr.png`; a.click()
-}
-async function downloadSvg(url: string, name: string) {
-  const svg = await QR.toString(url, { type: 'svg', margin: 4, errorCorrectionLevel: 'M' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
-  a.download = `${name}-qr.svg`; a.click(); URL.revokeObjectURL(a.href)
-}
-
 function Qr({ value, size }: { value: string; size: number }) {
   const [svg, setSvg] = useState('')
   useEffect(() => {
@@ -114,7 +100,7 @@ export default function DishPages() {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
     return links.filter(l =>
-      (filter === 'all' || (filter === '3d' && l.has3d) || (filter === 'on' && l.active) || (filter === 'off' && !l.active))
+      (filter === 'all' || (filter === 'on' && l.active) || (filter === 'off' && !l.active))
       && (!q || `${l.name} ${l.category} ${l.token}`.toLowerCase().includes(q)))
   }, [links, query, filter])
 
@@ -153,8 +139,9 @@ export default function DishPages() {
           </button>
         </div>
         <p className="text-sm mb-5" style={{ color: 'var(--dim)' }}>
-          Every dish of {plan.restaurantName} has its own page: the same 3D and AR as the menu, one dish,
+          Every 3D dish of {plan.restaurantName} has its own page: the same 3D and AR as the menu, one dish,
           opened straight into 3D. For flyers and posters. Addresses never change unless you reroll them.
+          Photo-only dishes have no page; one appears the moment a dish gets an approved model.
         </p>
 
         {/* ── The restaurant-wide switch: the one to reach for when they stop paying ── */}
@@ -192,7 +179,7 @@ export default function DishPages() {
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search dishes, categories or codes" />
           </div>
           <div className="flex gap-1.5 flex-wrap">
-            {([['all', 'All'], ['3d', 'In 3D'], ['on', 'Live'], ['off', 'Off']] as [Filter, string][]).map(([id, label]) => (
+            {([['all', 'All'], ['on', 'Live'], ['off', 'Off']] as [Filter, string][]).map(([id, label]) => (
               <button key={id} onClick={() => setFilter(id)} className="text-xs px-3 py-1.5 rounded-full"
                       style={{ background: filter === id ? 'var(--gold-dim)' : 'var(--card2)',
                                color: filter === id ? 'var(--gold)' : 'var(--dim)',

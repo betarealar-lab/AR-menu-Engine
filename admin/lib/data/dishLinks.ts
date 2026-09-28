@@ -43,9 +43,17 @@ export async function loadDishLinks(tenantId: string): Promise<{
   type C = { id: string; name: string; position: number | null }
   const items = new Map(((i.data || []) as I[]).map(x => [x.id, x]))
   const cats = new Map(((c.data || []) as C[]).map(x => [x.id, x]))
+  // Only 3D dishes have a page (0035): `is_3d` on and an APPROVED model - the same rule
+  // `resolve_dish_link` applies, so this list never offers a QR that would not open.
+  const modelIds = [...new Set([...items.values()].map(x => x.model_id).filter((x): x is string => !!x))]
+  const { data: models } = modelIds.length
+    ? await supabase.from('models').select('id, tenant_state').in('id', modelIds)
+    : { data: [] }
+  const approved = new Set(((models || []) as { id: string; tenant_state: string }[])
+    .filter(m => m.tenant_state === 'approved').map(m => m.id))
   const links = ((l.data || []) as L[]).flatMap(r => {
     const it = items.get(r.item_id)
-    if (!it) return []
+    if (!it || !it.is_3d || !it.model_id || !approved.has(it.model_id)) return []
     const cat = it.category_id ? cats.get(it.category_id) : undefined
     return [{
       itemId: r.item_id, token: r.token, url: dishPageUrl(r.token), active: r.active,
