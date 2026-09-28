@@ -12,6 +12,29 @@ positioning or pricing comes up).
 
 ---
 
+# STATE — 2026-09-28 (later, main = 4ba4b05)
+
+Shipped after the developer console, all deployed (menu + admin), migrations 0031-0038 applied:
+- **Analytics** redesigned: Today/Yesterday/7/30/90/custom (`analytics()` 0032, any window, owner tz),
+  time on menu (`leave` event, visible ms), time in 3D (`item_close`), basket, 3D->basket, busiest hours,
+  device / source / phone language (on `view` meta), per-dish table (`dish_stats` 0034).
+- **Dish pages** /p/<token> (0033/0035): the MENU in one-dish mode via Astro.rewrite + Astro.locals (never a
+  query param). 3D dishes only. Off / all-off / reroll are super-admin functions. Admin: "Dish pages & QR".
+- **Model pages** /m/<token> (0037/0038): model alone, clean template, NO X (no menu behind it). models.description.
+- **Library Studio** = every model (owner filter, assign / give back, dishes with QRs, put on a dish).
+- **Change history** real (0036): triggers, `revert_change` (security invoker), owner sidebar.
+- Upload model: optimise OR as-is (lib/asis/), 8 MiB multipart parts (Next proxy buffers 10 MB).
+- 3D modal button = AR only (`_modalCanAR`), hidden when the device cannot do AR.
+
+**Open / not done:** engine still on Temo's PC (down most of 09-27/28); hero videos >10 MB fail on
+/api/asset (should use multipart); printed QRs point at workers.dev (decide betareal.ge first);
+BetaReal-owned model pages record no analytics (events need a tenant); fal adapter written, off;
+menu import unbuilt (parked); MIGRATION.md questions §9 unanswered.
+
+**Checks:** check_admin 301 · check_features 203 · check_render 116 · check_schema 86 · check_publish 29.
+
+---
+
 # STATE — 2026-09-28
 
 ## The developer console, and a library that belongs to nobody
