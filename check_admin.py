@@ -655,6 +655,15 @@ ENGLISH_ONLY_SCREENS = {
     "app/(admin)/tenants/page.tsx": "super admin: creating restaurants and invites",
     "app/(admin)/dev-analytics/page.tsx": "super admin: the queue across every restaurant",
     "app/(admin)/templates/page.tsx": "super admin: stylesheets and starting palettes",
+    # The developer console (2026-09-28). Every one of these refuses anybody who is not a
+    # super admin, in the page and in the database behind it.
+    "app/(admin)/dev/page.tsx": "super admin: every restaurant, searchable",
+    "app/(admin)/dev/library/page.tsx": "super admin: BetaReal's own models",
+    "app/(admin)/dev/upload/page.tsx": "super admin: a GLB through the optimiser",
+    "app/(admin)/dev/engines/page.tsx": "super admin: which engines exist and cost what",
+    "components/DevNav.tsx": "super admin: the developer console's tabs",
+    "components/DevRequests.tsx": "super admin: library and upload requests",
+    "components/EngineBanner.tsx": "super admin: is the engine processing work",
 }
 
 #: Not language. A brand name, a worked example, and the shape of a code.

@@ -347,6 +347,75 @@ def main() -> int:
                   cur.fetchone()[0] == 1)
             conn.rollback()
 
+            # The library is BetaReal's (0030). Everything an owner could try against it,
+            # each in its own savepoint, because a refusal aborts the transaction and a
+            # refusal is the PASS.
+            print("\n== the library belongs to BetaReal ==")
+
+            def refused_as_owner(label: str, sql: str, args=()):
+                cur.execute("select set_config('request.jwt.claims', '', true)")
+                cur.execute("savepoint lib")
+                why = ""
+                try:
+                    as_user(a_id, sql, args)
+                except Exception as e:                        # noqa: BLE001
+                    why = str(e).splitlines()[0]
+                cur.execute("rollback to savepoint lib")
+                check(label, bool(why), why[:90] or "it SUCCEEDED")
+                return why
+
+            why = refused_as_owner(
+                "an owner cannot ask for a model into the library",
+                """insert into model_requests (tenant_id, dish, variant, title)
+                   values (null, %s, 'default', 'x') returning id""", (uuid.uuid4().hex[:8],))
+            check("...and is told it is BetaReal's", "betareal" in why.lower(), why[:90])
+            why = refused_as_owner(
+                "an owner cannot queue an upload, even into their own restaurant",
+                """insert into model_requests (tenant_id, dish, variant, title, kind, photo_keys)
+                   values (%s, %s, 'default', 'x', 'upload', '{lib/raw/x.glb}') returning id""",
+                (ta, uuid.uuid4().hex[:8]))
+            refused_as_owner(
+                "an owner cannot write a library model",
+                """insert into models (tenant_id, shared, title, dish, variant)
+                   values (null, true, 'x', %s, 'default') returning id""", (uuid.uuid4().hex[:8],))
+
+            cur.execute("select set_config('request.jwt.claims', '', true)")
+            got = as_user(a_id, """insert into model_requests (tenant_id, dish, variant, title,
+                                    engine_requested) values (%s, %s, 'default', 'x',
+                                    'meshy-7.1-8k') returning engine_requested""",
+                          (ta, uuid.uuid4().hex[:8]))
+            check("an owner's engine choice is cleared, not obeyed",
+                  got and got[0][0] is None, str(got))
+            conn.rollback()
+
+            n = as_user(a_id, "select count(*) from admin_directory()")[0][0]
+            check("an owner gets no rows from the developer directory", n == 0, str(n))
+            conn.rollback()
+
+            cur.execute("savepoint lib2")
+            try:
+                cur.execute("""insert into models (tenant_id, shared, title, dish, variant)
+                               values (null, false, 'x', %s, 'default')""", (uuid.uuid4().hex[:8],))
+                unshared = "accepted"
+            except Exception as e:                            # noqa: BLE001
+                unshared = type(e).__name__
+            cur.execute("rollback to savepoint lib2")
+            check("a library model is always shared", unshared == "CheckViolation", unshared)
+
+            dish = uuid.uuid4().hex[:8]
+            cur.execute("""insert into models (tenant_id, shared, title, dish, variant)
+                           values (null, true, 'x', %s, 'default')""", (dish,))
+            cur.execute("savepoint lib3")
+            try:
+                cur.execute("""insert into models (tenant_id, shared, title, dish, variant)
+                               values (null, true, 'y', %s, 'default')""", (dish,))
+                dup = "accepted"
+            except Exception as e:                            # noqa: BLE001
+                dup = type(e).__name__
+            cur.execute("rollback to savepoint lib3")
+            check("one library row per dish", dup == "UniqueViolation", dup)
+            conn.rollback()
+
             print("\n== a diner, who is nobody ==")
             # A savepoint per table. A denied query aborts the whole transaction, and
             # "denied" is the PASS here - without a savepoint the first denial poisons

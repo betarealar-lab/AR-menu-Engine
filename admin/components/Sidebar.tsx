@@ -51,6 +51,14 @@ row: Row; active: boolean; onClose: () => void
 }
 
 
+/** A row is active when the path starts with its `match` - or, when `match` ends in `$`,
+ *  equals it. `/dev` needs the exact form: as a prefix it would also light up for
+ *  `/dev/library` and `/dev-analytics`, which have rows of their own. */
+function isActive(pathname: string, row: Row) {
+  const m = row.match ?? row.href.split('?')[0]
+  return m.endsWith('$') ? pathname === m.slice(0, -1) : pathname.startsWith(m)
+}
+
 interface Props {
   open: boolean
   onClose: () => void
@@ -107,7 +115,12 @@ export default function Sidebar({ open, onClose }: Props) {
 
   // Ours, not an owner's. Kept in their own group so the two are never confused.
   const STAFF: Row[] = ([
-    plan.canManageTenants ? { href: '/tenants', label: T.navTenants, icon: 'grid' } : null,
+    // The developer console (2026-09-28): every restaurant searchable, the library's own
+    // Studio, and the optimiser as a button rather than a script on somebody's laptop.
+    plan.role === 'super_admin' ? { href: '/dev', match: '/dev$', label: 'Restaurants', icon: 'grid' } : null,
+    plan.role === 'super_admin' ? { href: '/dev/library', match: '/dev/library', label: 'Library Studio', icon: 'cube' } : null,
+    plan.role === 'super_admin' ? { href: '/dev/upload', match: '/dev/upload', label: 'Upload & optimise', icon: 'upload' } : null,
+    plan.canManageTenants ? { href: '/tenants', label: T.navTenants, icon: 'user' } : null,
     // Not tenant-scoped: a template belongs to every restaurant or to none, so it
     // takes no ?tenant= and does not change when the picker does.
     plan.canManageTenants ? { href: '/templates', label: T.navTemplates, icon: 'palette' } : null,
@@ -165,7 +178,7 @@ export default function Sidebar({ open, onClose }: Props) {
       <nav className="flex-1 min-h-0 px-3 py-3 overflow-y-auto">
         <div className="grid gap-0.5">
           {NAV.map(row => <NavLink key={row.href} row={row} onClose={onClose}
-                                 active={pathname.startsWith(row.match ?? row.href.split('?')[0])} />)}
+                                 active={isActive(pathname, row)} />)}
         </div>
 
         {STAFF.length > 0 && (
@@ -173,7 +186,7 @@ export default function Sidebar({ open, onClose }: Props) {
             <div className="eyebrow px-3 pt-5 pb-2">BetaReal</div>
             <div className="grid gap-0.5">
               {STAFF.map(row => <NavLink key={row.href} row={row} onClose={onClose}
-                                 active={pathname.startsWith(row.match ?? row.href.split('?')[0])} />)}
+                                 active={isActive(pathname, row)} />)}
             </div>
           </>
         )}

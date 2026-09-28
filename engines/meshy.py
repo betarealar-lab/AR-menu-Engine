@@ -68,15 +68,21 @@ _LISTED = {"meshy-6", "meshy-5", "meshy-7", "meshy-7.1"}   # priced with confide
 _EXPENSIVE = {"meshy-6", "meshy-7", "meshy-7.1"}           # billed at the 20/30 rate
 # 8k texture is 35, not 30, on the models above. Kept beside the table it corrects.
 _EIGHT_K_SURCHARGE = 5
+# `geometry_resolution` (changelog 2026-09-18, replaces the deprecated `ultra_mode`):
+# "plus 5 credits for geometry_resolution 2k". 4k is published without a price here, so
+# it is not offered - an entry whose cost we would be guessing does not go in a picker.
+_GEOMETRY_SURCHARGE = {"standard": 0, "2k": 5}
 
 
-def _cost(ai_model: str, textured: bool, texture_resolution: str = "4k") -> int:
+def _cost(ai_model: str, textured: bool, texture_resolution: str = "4k",
+          geometry_resolution: str | None = None) -> int:
+    extra = _GEOMETRY_SURCHARGE.get(geometry_resolution or "standard", 0)
     hit = _MEASURED.get((ai_model, textured))
     if hit is not None:
-        return hit + (_EIGHT_K_SURCHARGE if textured and texture_resolution == "8k" else 0)
+        return hit + extra + (_EIGHT_K_SURCHARGE if textured and texture_resolution == "8k" else 0)
     if ai_model in _EXPENSIVE:
-        return 30 if textured else 20
-    return 15 if textured else 5
+        return (30 if textured else 20) + extra
+    return (15 if textured else 5) + extra
 
 
 def balance() -> int | None:
@@ -151,6 +157,7 @@ class MeshyEngine(Engine):
         should_remesh: bool | None = None,
         image_enhancement: bool = True,
         remove_lighting: bool = True,
+        geometry_resolution: str | None = None,
         variant: str | None = None,
     ):
         # Ask for the most detail the API will give and decimate ourselves.
@@ -185,8 +192,14 @@ class MeshyEngine(Engine):
         # Object masking is NOT here because the API has none - see engines/mask.py.
         self.image_enhancement = image_enhancement
         self.remove_lighting = remove_lighting
+        # None = not sent, which is Meshy's `standard`. Sent only by a registry entry that
+        # asks for more, so the default request body is byte-for-byte what it was.
+        if geometry_resolution not in (None, *_GEOMETRY_SURCHARGE):
+            raise ValueError(f"geometry_resolution must be one of {list(_GEOMETRY_SURCHARGE)}")
+        self.geometry_resolution = geometry_resolution
         self.variant = variant or f"{ai_model}-{texture_resolution if should_texture else 'notex'}"
-        self.cost_per_job = _cost(ai_model, should_texture, texture_resolution)
+        self.cost_per_job = _cost(ai_model, should_texture, texture_resolution,
+                                  geometry_resolution)
         # Measured on real returns: a raw meshy-7 master came back at 1.9M triangles,
         # and a remesh request is honoured closely (150k asked, 156,397 returned). Three
         # maps at the requested resolution, so megapixels follow from that.
@@ -219,6 +232,8 @@ class MeshyEngine(Engine):
         if self.should_texture:
             body["texture_resolution"] = self.texture_resolution
             body["enable_pbr"] = self.enable_pbr
+        if self.geometry_resolution:
+            body["geometry_resolution"] = self.geometry_resolution
         return body
 
     def _blank(self, dish: str) -> Result:

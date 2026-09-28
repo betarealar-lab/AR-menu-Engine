@@ -137,7 +137,8 @@ export async function loadSharedModels(): Promise<LibraryModel[]> {
     .neq('tenant_state', 'rejected')
     .order('created_utc', { ascending: false })
 
-  const owned = (rows || []) as unknown as (ModelRow & { tenant_id: string })[]
+  // `tenant_id` is null for BetaReal's own models (0030) - the Library Studio's.
+  const owned = (rows || []) as unknown as (ModelRow & { tenant_id: string | null })[]
   if (!owned.length) return []
 
   // One query for the names, not one per card. A super admin reading `tenants` gets
@@ -145,14 +146,15 @@ export async function loadSharedModels(): Promise<LibraryModel[]> {
   // none - in which case the cards say the model is shared and simply do not name a
   // restaurant, rather than failing to render.
   const { data: tenants } = await supabase.from('tenants')
-    .select('id, name').in('id', [...new Set(owned.map(r => r.tenant_id))])
+    .select('id, name')
+    .in('id', [...new Set(owned.map(r => r.tenant_id).filter((t): t is string => !!t))])
   const names = new Map(((tenants || []) as { id: string; name: string }[])
     .map(t => [t.id, t.name]))
 
   return owned.map(r => ({
     ...toModel(r, null),
-    tenantId: r.tenant_id,
-    tenantName: names.get(r.tenant_id) || '',
+    tenantId: r.tenant_id || '',
+    tenantName: r.tenant_id ? names.get(r.tenant_id) || '' : 'BetaReal library',
   }))
 }
 

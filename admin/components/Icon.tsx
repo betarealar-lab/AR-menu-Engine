@@ -9,7 +9,7 @@
 
 export type IconName =
   | 'home' | 'menu' | 'chart' | 'palette' | 'cube' | 'qr' | 'grid' | 'history'
-  | 'external' | 'signout' | 'sun' | 'moon' | 'pulse' | 'user'
+  | 'external' | 'signout' | 'sun' | 'moon' | 'pulse' | 'user' | 'upload' | 'engine'
 
 const PATHS: Record<IconName, string> = {
   home:     'M3 10.5 12 3l9 7.5M5.5 9.5V20h13V9.5M9.5 20v-5.5h5V20',
@@ -26,6 +26,8 @@ const PATHS: Record<IconName, string> = {
   moon:     'M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z',
   pulse:    'M2 12h4l3-8 6 16 3-8h4',
   user:     'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20a7.5 7.5 0 0 1 15 0',
+  upload:   'M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3',
+  engine:   'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1',
 }
 
 export default function Icon({ name, size = 18, className = '' }: {

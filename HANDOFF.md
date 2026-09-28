@@ -12,6 +12,51 @@ positioning or pricing comes up).
 
 ---
 
+# STATE — 2026-09-28
+
+## The developer console, and a library that belongs to nobody
+
+Temo: "dropdown list is shit ... devs should have independent 3D studio that adds to
+library not tenants model list ... add upload and optimization functions to dev options."
+
+- **Restaurant switcher** (sidebar, or Ctrl/Cmd+K anywhere): searches name, /slug and
+  template, keyboard-driven, and for a super admin shows each restaurant's numbers.
+- **/dev**: every restaurant, searchable, filtered (needs attention, Premium, no visits,
+  setup unfinished), sorted, with Menu / 3D / Theme / Stats / Live on every row. One call:
+  `admin_directory()` (0030).
+- **/dev/library, the Library Studio.** 0030 lets `models.tenant_id` be NULL: NULL means
+  BetaReal's own, always `shared`, one row per dish (partial unique index). Build from four
+  photos with a chosen engine, approve, rename, retire. Restaurants borrow from the Shared
+  tab as before.
+- **/dev/upload, Upload & optimise.** A GLB of any size up to 400 MB goes up in 8 MiB parts
+  (`/api/asset/multipart`, R2 multipart through the binding, no keys, no CORS) and a
+  `model_requests` row of kind `upload` makes the bridge adopt it as a master and run the
+  normal optimiser. Into the library (approved) or into a restaurant (draft). No credits.
+  **Measured:** a 5.0 MB GLB came out 1.18 MB Draco + 3.0 MB USDZ at 24 cm, served 200.
+- **Why 8 MiB parts:** Next's proxy buffers only 10 MB of a request body. 20 MiB parts
+  arrived cut off ("Failed to parse body as FormData"). The same limit means the existing
+  one-shot `/api/asset` **cannot take a hero video over 10 MB** although its rule says 60.
+  Not fixed yet: videos should go through the multipart route too.
+- **/dev/engines** and `engines/fal.py`: fal.ai adapter (Hunyuan 3D 3.1 Pro with up to 8
+  views, Tripo, Trellis, Meshy-via-fal) **written and switched off**. It joins the registry
+  only with `FAL_KEY` + `BETAREAL_ENABLE_FAL=1`; asking for it otherwise fails in words,
+  never falls back to Meshy. Meshy Pro stays the default (Temo).
+- **Meshy 7.1 `geometry_resolution`** (changelog 09-18): `meshy-7.1-geo2k`, +5 credits,
+  offered to developers, not a default.
+- The gate (0030) clears `engine_requested` for non-super admins and refuses library
+  requests and uploads from them. `check_schema` 72 (+8).
+
+**MIGRATION.md**: how production restaurants move here one at a time, with the parity
+inventory and the questions still open. Nothing migrated.
+
+**Engine down since 2026-09-26 20:33 UTC** (41 h at time of writing). EngineBanner now
+says so on the pages that queue work.
+
+**Checks:** `check_admin` **299** · `check_features` 201 · `check_schema` **72** ·
+`check_jobs` 70 · `check_publish` 29 · admin unit all green.
+
+---
+
 # STATE — 2026-09-18 (later)
 
 ## A 3D model has now been seen rendering, in a card, by a person

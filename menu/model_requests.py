@@ -129,7 +129,8 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
     with _conn() as conn, conn.cursor() as cur:
         cur.execute("""
             select id, tenant_id, dish, variant, title, photo_keys,
-                   kind, scale_cm, scale_axis, width_cm, length_cm, height_cm
+                   kind, scale_cm, scale_axis, width_cm, length_cm, height_cm,
+                   engine_requested
               from model_requests
              where state = 'approved'
              order by requested_utc
@@ -138,7 +139,8 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
         rows = cur.fetchall()
 
         for (req_id, tenant_id, dish, variant, title, photo_keys,
-             kind, scale_cm, scale_axis, width_cm, length_cm, height_cm) in rows:
+             kind, scale_cm, scale_axis, width_cm, length_cm, height_cm,
+             engine_requested) in rows:
             if verbose:
                 print(f"  {title or dish} ({kind})")
 
@@ -180,6 +182,26 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
                 started += 1
                 continue
 
+            if kind == "upload":
+                # A GLB a developer already has (0030). It becomes the master exactly as
+                # a generated one would, so everything after this - optimise, the
+                # catalogue, collect - cannot tell the difference. That is the point: an
+                # upload used to go onto the menu exactly as uploaded, never optimised.
+                note = _adopt_upload(dish, variant, title, (photo_keys or [None])[0])
+                if note:
+                    cur.execute("""update model_requests
+                                      set state = 'failed', note = %s, finished_utc = now()
+                                    where id = %s""", (note, req_id))
+                    conn.commit()
+                    continue
+                cur.execute("update model_requests set state = 'running', engine = 'upload' "
+                            "where id = %s", (req_id,))
+                conn.commit()
+                started += 1
+                if verbose:
+                    print("    upload adopted as master - optimising")
+                continue
+
             # Idempotent by construction. A crash after enqueue and before the update
             # leaves the request `approved`, and this is what stops the next pass paying
             # for the same dish twice.
@@ -195,7 +217,7 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
             # The admin's studio keeps frames in `captures` and sends the request with the
             # keys copied in; older requests carried keys only. Either is fine, and the
             # library is consulted when the request itself is empty.
-            if not photo_keys:
+            if not photo_keys and tenant_id is not None:
                 cur.execute("""select key from captures
                                 where tenant_id = %s and dish = %s and variant = %s
                                 order by slot""", (tenant_id, dish, variant))
@@ -225,8 +247,12 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
             if title:
                 dataset.rename(dish, title)
 
+            # `engine` only when a developer chose one (0030); absent, the worker's
+            # default decides, exactly as before.
+            extra = {"engine": engine_requested} if engine_requested else {}
             jobs.enqueue("generate", dish, variant, requested_by=WHO,
-                         tenant_id=str(tenant_id), request_id=str(req_id))
+                         tenant_id=str(tenant_id or "library"), request_id=str(req_id),
+                         **extra)
             cur.execute("update model_requests set state = 'running' where id = %s",
                         (req_id,))
             conn.commit()
@@ -235,6 +261,83 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
                 print(f"    queued with {saved} photo(s)")
 
     return started
+
+
+def _adopt_upload(dish: str, variant: str, title: str, key: str | None) -> str:
+    """An uploaded GLB -> the dish's master -> an optimise job.
+
+    Returns '' on success, else the note the request is failed with. Mirrors
+    `pipeline.store_result` for the one file an upload has, so the optimiser, the
+    reconciler and `collect` treat it exactly like a generated master.
+    """
+    import tempfile
+
+    import glb
+    import pipeline
+
+    if not key:
+        return "There was no file on this request."
+    data = storage.backend().get(dataset.PHOTOS, key)
+    if not data:
+        return "The uploaded file could not be read back from storage."
+    if data[:4] != b"glTF":
+        return "That file is not a binary glTF (.glb)."
+    rec = dataset.record(dish, variant)
+    rec["engine"] = "upload"
+    master = dataset.save_model(dish, variant, "upload", "glb", data)
+    rec["master_keys"] = {"glb": master}
+    rec["model_key"] = master
+    rec["master_bytes"] = len(data)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "upload.glb"
+        path.write_bytes(data)
+        try:
+            rec["master_triangles"] = glb.count_triangles(path)
+        except Exception:      # noqa: BLE001 - a count failing must not lose the upload
+            rec["master_triangles"] = 0
+    if title:
+        rec["title"] = title
+    rec.update(status="optimising", stage="queued", optimising_since=dataset._now(),
+               error="", export_error="")
+    dataset.write(rec)
+    if not jobs.exists("optimise", dish, variant):
+        pipeline.enqueue_optimise(dish, variant, WHO)
+    return ""
+
+
+def _collect_library(cur, dish, variant, title, catalog, rec, scale, dims, kind):
+    """A library request's result -> a library `models` row (tenant_id NULL, shared).
+
+    Its own statement because the conflict target differs: `unique (tenant_id, dish,
+    variant)` never matches a NULL tenant, so the library upserts against the partial
+    index 0030 made for it. An UPLOAD lands approved - the developer who uploaded it has
+    already judged it, the rule `saveUploadedModel` follows. A GENERATED model lands
+    draft, because nobody has looked yet at what the engine invented.
+    """
+    state = "approved" if kind == "upload" else "draft"
+    cur.execute("""
+        insert into models (tenant_id, shared, title, dish, variant,
+                            draco_key, usdz_key, poster_key,
+                            scale_cm, scale_axis, width_cm, length_cm, height_cm,
+                            tenant_state)
+        values (null, true, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        on conflict (dish, variant) where tenant_id is null do update
+           set draco_key = excluded.draco_key,
+               usdz_key = excluded.usdz_key,
+               poster_key = excluded.poster_key,
+               scale_cm = excluded.scale_cm,
+               scale_axis = excluded.scale_axis,
+               width_cm = excluded.width_cm,
+               length_cm = excluded.length_cm,
+               height_cm = excluded.height_cm,
+               tenant_state = excluded.tenant_state,
+               decided_utc = null, decided_by = null
+        returning id
+    """, (title, dish, variant, catalog.get("draco"), catalog.get("usdz"),
+          (rec.get("master_keys") or {}).get("png"),
+          scale.get("cm"), scale.get("axis"),
+          dims.get("width"), dims.get("length"), dims.get("height"), state))
+    return cur.fetchone()[0]
 
 
 def collect(verbose: bool = True) -> int:
@@ -257,7 +360,7 @@ def collect(verbose: bool = True) -> int:
 
             # A rescale is still optimising until its status says otherwise; a fresh
             # catalogue from BEFORE it ran would otherwise be mistaken for the result.
-            if kind == "rescale" and status == "optimising":
+            if kind in ("rescale", "upload") and status == "optimising":
                 continue
 
             if status in ("failed", "cancelled"):
@@ -277,6 +380,20 @@ def collect(verbose: bool = True) -> int:
 
             scale = rec.get("scale") or {}
             dims = rec.get("dims") or {}
+            if tenant_id is None:
+                model_id = _collect_library(cur, dish, variant,
+                                            title or rec.get("title") or "",
+                                            catalog, rec, scale, dims, kind)
+                cur.execute("""update model_requests
+                                  set state = 'done', model_id = %s, engine = %s,
+                                      note = '', finished_utc = now()
+                                where id = %s""",
+                            (model_id, rec.get("engine") or "", req_id))
+                conn.commit()
+                done += 1
+                if verbose:
+                    print(f"  {title or dish}: in the library")
+                continue
             cur.execute("""
                 insert into models (tenant_id, title, dish, variant,
                                     draco_key, usdz_key, poster_key,

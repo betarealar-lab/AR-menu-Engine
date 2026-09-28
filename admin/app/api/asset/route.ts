@@ -118,14 +118,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `That file is over ${rule.max} MB` }, { status: 413 })
   }
 
+  // `library` is BetaReal's own space (0030): photos for a model no restaurant asked for.
+  // Only a super admin may write there - checked below with the same query `rule.ours`
+  // uses, so there is one definition of "one of us" in this file.
+  const library = tenantId === 'library'
+
   // Membership is checked by asking for the restaurant AS the user. RLS answers, so an id
   // somebody else owns simply comes back empty and there is no second rule here that could
   // disagree with the policy.
-  const { data: tenant } = await supabase
-    .from('tenants').select('id').eq('id', tenantId).maybeSingle()
-  if (!tenant) return NextResponse.json({ error: 'Restaurant not found' }, { status: 403 })
+  if (!library) {
+    const { data: tenant } = await supabase
+      .from('tenants').select('id').eq('id', tenantId).maybeSingle()
+    if (!tenant) return NextResponse.json({ error: 'Restaurant not found' }, { status: 403 })
+  }
 
-  if (rule.ours) {
+  if (rule.ours || library) {
     // `limit(1)`, not a bare maybeSingle: a super admin can SEE every row in this table
     // (that is what the policy says), so with two of us maybeSingle would error on
     // "multiple rows" and every super admin would silently lose the ability to upload.
@@ -133,7 +140,8 @@ export async function POST(req: NextRequest) {
       .from('super_admins').select('user_id').limit(1).maybeSingle()
     if (!isSuper) {
       return NextResponse.json(
-        { error: kind === 'video'
+        { error: library ? 'Only BetaReal adds to the library'
+            : kind === 'video'
             ? 'Hero videos are uploaded by BetaReal - send us the file'
             : 'BetaReal builds the 3D models. Use "Make a 3D model" instead.' },
         { status: 403 },
@@ -147,7 +155,7 @@ export async function POST(req: NextRequest) {
   // and a prefix carrying it spreads a restaurant's files over two places after a rename.
   const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
     .slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('')
-  const key = `t/${tenantId}/${kind}/${hash}.${rule.ext}`
+  const key = library ? `lib/${kind}/${hash}.${rule.ext}` : `t/${tenantId}/${kind}/${hash}.${rule.ext}`
 
   await put(key, bytes, rule.type)
 

@@ -37,6 +37,12 @@ REGISTRY: dict[str, callable] = {
                                            should_remesh=False, variant="meshy-7.1-2k"),
     "meshy-7.1-8k":    lambda: MeshyEngine("meshy-7.1", texture_resolution="8k",
                                            should_remesh=False, variant="meshy-7.1-8k"),
+    # `geometry_resolution` (Meshy changelog 2026-09-18, replacing `ultra_mode`): more
+    # geometry detail in the raw master, +5 credits. Offered to developers to compare on
+    # food; not the default until somebody has judged it in Blender beside 7.1 standard.
+    "meshy-7.1-geo2k": lambda: MeshyEngine("meshy-7.1", texture_resolution="4k",
+                                           should_remesh=False, geometry_resolution="2k",
+                                           variant="meshy-7.1-geo2k"),
 
     # Kept, deprecated by Meshy and not offered as a default: every model row already in
     # the dataset names `meshy-7`, and `engines.build()` is called with THAT name when a
@@ -65,10 +71,38 @@ REGISTRY: dict[str, callable] = {
 DEFAULT = ["meshy-7", "meshy-7-2k"]
 
 
+# ── Providers that exist and are switched OFF ───────────────────────
+#
+# fal.ai (engines/fal.py): Hunyuan 3D 3.1 Pro, Tripo, Trellis, and Meshy-through-fal.
+# Written and ready; not wired (Temo, 2026-09-28: keep the Meshy Pro plan, don't wire
+# fal yet). They join REGISTRY only when BOTH `FAL_KEY` is set and
+# `BETAREAL_ENABLE_FAL=1`, so switching fal on is two environment variables on the engine
+# host and nothing else - no code change, no deploy of the admin, which already lists
+# them (admin/lib/data/dev.ts ENGINES, `wired: false`).
+from .fal import FAL_ENGINES  # noqa: E402
+
+OPTIONAL: dict[str, callable] = dict(FAL_ENGINES)
+
+
+def fal_enabled() -> bool:
+    import os
+    return bool(os.environ.get("FAL_KEY", "").strip()) and         os.environ.get("BETAREAL_ENABLE_FAL", "") == "1"
+
+
+if fal_enabled():
+    REGISTRY.update(OPTIONAL)
+
+
 def build(name: str) -> Engine:
     if name not in REGISTRY:
+        if name in OPTIONAL:
+            # Said in words, and never a fallback to Meshy: an engine nobody asked for is
+            # worse than a failed job, because it spends somebody else's credits quietly.
+            raise KeyError(f"engine '{name}' exists but fal is not switched on "
+                           "(set FAL_KEY and BETAREAL_ENABLE_FAL=1 on the engine host)")
         raise KeyError(f"unknown engine '{name}'. known: {', '.join(REGISTRY)}")
     return REGISTRY[name]()
 
 
-__all__ = ["Engine", "Job", "Result", "REGISTRY", "DEFAULT", "build"]
+__all__ = ["Engine", "Job", "Result", "REGISTRY", "OPTIONAL", "DEFAULT", "build",
+           "fal_enabled"]
