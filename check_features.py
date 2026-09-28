@@ -757,8 +757,10 @@ def main() -> int:
         check(name + " answers a load failure with a real page",
               "return menuUnavailable(slug, error)" in src
               and "Menu unavailable:" not in src)
-    check("both answers are HTML, not text/plain",
-          oops.count('content-type": "text/html') == 2)
+    # Every answer, not "both": 0033 added a third, for a dish page that is switched off.
+    check("every answer is HTML, not text/plain",
+          oops.count("new Response(") >= 3
+          and oops.count('content-type": "text/html') == oops.count("new Response("))
     check("they speak Georgian first", 'lang="ka"' in oops and "\u10db\u10d4\u10dc\u10d8\u10e3" in oops)
     check("and English too", "ask a member of staff" in oops)
     check("the 503 never prints what went wrong to the diner",

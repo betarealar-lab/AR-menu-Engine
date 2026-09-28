@@ -45,7 +45,10 @@
       var d = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
         ? "ios" : /Android/.test(ua) ? "android" : "desktop";
       var src = "direct";
-      if (/[?&]t=\d/.test(location.search)) src = "table";
+      // A dish page (/p/<token>, 0033) is only ever reached from a printed flyer or poster
+      // - or a copy of one - so it says so, and a restaurant can see what its prints bring.
+      if (cfg.solo) src = "poster";
+      else if (/[?&]t=\d/.test(location.search)) src = "table";
       else if (/[?&]q=1(&|$)/.test(location.search)) src = "qr";
       else if (document.referrer) {
         var h = "";
@@ -55,7 +58,9 @@
           : h && h !== location.hostname ? "web" : "direct";
       }
       var pl = String((navigator.language || "").slice(0, 2)).toLowerCase();
-      window.track("view", null, { d: d, src: src, pl: /^[a-z]{2}$/.test(pl) ? pl : "" });
+      // On a dish page the view carries the dish (card index 0 is the only card), so each
+      // dish's flyer scans can be counted on their own (0034).
+      window.track("view", cfg.solo ? 0 : null, { d: d, src: src, pl: /^[a-z]{2}$/.test(pl) ? pl : "" });
     } catch (e) { /* never let a count break a menu */ }
     // hero.js and viewer.js both read the global config the platform sets.
     window._themeConfig = Object.assign(window._themeConfig || {}, cfg);
@@ -114,7 +119,17 @@
     // Deferred to idle: it touches 175 cards and can wait until after the first paint,
     // which is the whole reason the menu is in the HTML.
     try {
-      window.idle(function () { window.__bootViewer(); });
+      window.idle(function () {
+        window.__bootViewer();
+        // One-dish mode (0033): the page exists to show this dish in 3D, so it opens
+        // straight into the same modal the menu uses - same camera limits, same angle,
+        // same AR button, the description in the drawer. A photo-only dish stays on its
+        // card, which already shows everything it has.
+        if (cfg.solo && window.menuItems && window.menuItems[0] && window.menuItems[0].is_3d
+            && typeof window.openModal === "function") {
+          window.openModal(0, window.menuItems);
+        }
+      });
     } catch (e) {
       console.error("[betareal] the 3D viewer failed to boot", e);
     }

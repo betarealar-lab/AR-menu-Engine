@@ -1,0 +1,48 @@
+---
+// One dish, on its own page, at an address that can be switched off (0033).
+//
+// Printed on flyers and posters - a product BetaReal sells - so the address is an opaque
+// token rather than the dish id, and the token is what dies when a restaurant stops paying
+// or a copy turns up somewhere it should not: `resolve_dish_link` answers nothing for an
+// unknown, rerolled, switched-off or hidden dish, and the page cannot tell which.
+//
+// **The page is the menu, showing one dish.** Temo: the 3D viewer and AR "must be the same
+// as normal current menus". The only way to guarantee that is not to write a second viewer:
+// this route resolves the token and then renders the menu route itself in one-dish mode -
+// the restaurant's template and palette, the same `viewer.js`, the same 3D modal with its
+// camera limits and per-dish angle, the same WebXR placement on Android and the same Quick
+// Look on iPhone, and the dish's description in the modal's drawer.
+//
+// One-dish mode is a server-side flag on `Astro.locals`, set only here, after a live
+// token. It is deliberately NOT a query parameter: if `/<slug>?dish=<id>` produced the
+// same page, a copier could print that and route around a dead token.
+import { envFrom } from "../../lib/env.js";
+import { dishUnavailable, menuUnavailable } from "../../lib/nomenu.js";
+
+export const prerender = false;
+
+const token = String(Astro.params.token || "").toLowerCase();
+if (!/^[a-hj-km-np-z2-9]{10}$/.test(token)) return dishUnavailable();
+
+const env = envFrom(Astro.locals);
+const url = env("SUPABASE_URL");
+const key = env("SUPABASE_ANON_KEY");
+
+let hit = null;
+try {
+  const res = await fetch(`${url.replace(/\/$/, "")}/rest/v1/rpc/resolve_dish_link`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_token: token }),
+  });
+  if (!res.ok) throw new Error(`resolve ${res.status}`);
+  hit = ((await res.json()) || [])[0] || null;
+} catch (err) {
+  return menuUnavailable(`p/${token}`, err);
+}
+if (!hit) return dishUnavailable();
+
+Astro.locals.soloDish = String(hit.item_id);
+Astro.locals.soloToken = token;
+return Astro.rewrite(`/${hit.slug}`);
+---

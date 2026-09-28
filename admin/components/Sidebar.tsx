@@ -120,6 +120,9 @@ export default function Sidebar({ open, onClose }: Props) {
     plan.role === 'super_admin' ? { href: '/dev', match: '/dev$', label: 'Restaurants', icon: 'grid' } : null,
     plan.role === 'super_admin' ? { href: '/dev/library', match: '/dev/library', label: 'Library Studio', icon: 'cube' } : null,
     plan.role === 'super_admin' ? { href: '/dev/upload', match: '/dev/upload', label: 'Upload model', icon: 'upload' } : null,
+    // One page and QR per dish, for flyers and posters (0033). Restaurant-scoped, so it
+    // follows the switcher like Menu and Theme do.
+    plan.role === 'super_admin' ? { href: tenantHref('/dish-pages'), match: '/dish-pages', label: 'Dish pages & QR', icon: 'qr' } : null,
     plan.canManageTenants ? { href: '/tenants', label: T.navTenants, icon: 'user' } : null,
     // Not tenant-scoped: a template belongs to every restaurant or to none, so it
     // takes no ?tenant= and does not change when the picker does.

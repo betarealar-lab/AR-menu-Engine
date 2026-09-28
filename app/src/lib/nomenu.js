@@ -65,6 +65,19 @@ export function noMenu() {
     { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
+/** A dish page (/p/<token>) that is not live - unknown, rerolled away, switched off, or
+ *  the dish hidden. One page for all of them on purpose: "this flyer was revoked" is
+ *  exactly what somebody printing copies would like to learn. `no-store`, so switching a
+ *  page back on is immediate and no cache keeps a dead answer. */
+export function dishUnavailable() {
+  return new Response(
+    SHELL("კერძი მიუწვდომელია", `
+    <p>ეს კერძი ამ ბმულზე აღარ არის ხელმისაწვდომი.</p>
+    <p class="en">This dish is no longer available at this link.</p>`),
+    { status: 404, headers: { "content-type": "text/html; charset=utf-8",
+                              "cache-control": "no-store", "x-robots-tag": "noindex" } });
+}
+
 /** The restaurant exists and we could not load it. Their problem to wait out, ours to
  *  fix - so the diner is pointed at a person, and the reason goes to the log. */
 export function menuUnavailable(slug, err) {

@@ -416,6 +416,69 @@ def main() -> int:
             check("one library row per dish", dup == "UniqueViolation", dup)
             conn.rollback()
 
+            # Dish pages (0033): printed flyers, switched off when a restaurant stops paying.
+            # The switches must hold against the restaurant itself, not only strangers.
+            print("\n== dish pages can be switched off, and only by BetaReal ==")
+            cur.execute("select set_config('request.jwt.claims', '', true)")
+            cur.execute("insert into items (tenant_id, name) values (%s, 'flyer dish') returning id", (ta,))
+            fly = cur.fetchone()[0]
+            cur.execute("select token from dish_links where item_id = %s", (fly,))
+            row = cur.fetchone()
+            check("a new dish gets its page automatically", row is not None)
+            tok = row[0] if row else ""
+
+            def resolves(t):
+                cur.execute("savepoint dl")
+                cur.execute("set local role anon")
+                cur.execute("select count(*) from resolve_dish_link(%s)", (t,))
+                n = cur.fetchone()[0]
+                cur.execute("rollback to savepoint dl")
+                return n == 1
+            check("a diner's phone can open it", resolves(tok))
+
+            for label, sql in [
+                ("an owner cannot switch their own dish page back on",
+                 "select set_dish_link_active(%s, true)"),
+                ("an owner cannot reroll their dish page", "select reroll_dish_link(%s)"),
+            ]:
+                cur.execute("savepoint dl2")
+                why = ""
+                try:
+                    as_user(a_id, sql, (fly,))
+                except Exception as e:                        # noqa: BLE001
+                    why = str(e).splitlines()[0]
+                cur.execute("rollback to savepoint dl2")
+                cur.execute("reset role")
+                check(label, bool(why), why[:80] or "it SUCCEEDED")
+            cur.execute("savepoint dl3")
+            why = ""
+            try:
+                as_user(a_id, "select set_dish_pages_active(%s, true)", (ta,))
+            except Exception as e:                            # noqa: BLE001
+                why = str(e).splitlines()[0]
+            cur.execute("rollback to savepoint dl3")
+            cur.execute("reset role")
+            check("an owner cannot switch their restaurant's pages back on", bool(why),
+                  why[:80] or "it SUCCEEDED")
+            cur.execute("savepoint dl4")
+            why = ""
+            try:
+                as_user(a_id, "update dish_links set active = true where item_id = %s returning 1", (fly,))
+            except Exception as e:                            # noqa: BLE001
+                why = type(e).__name__
+            cur.execute("rollback to savepoint dl4")
+            cur.execute("reset role")
+            check("...nor by writing the table directly", bool(why), why or "it SUCCEEDED")
+
+            cur.execute("select set_config('request.jwt.claims', '', true)")
+            cur.execute("update dish_links set active = false where item_id = %s", (fly,))
+            check("a page switched off stops resolving", not resolves(tok))
+            cur.execute("update dish_links set active = true where item_id = %s", (fly,))
+            cur.execute("insert into tenant_embed (tenant_id, pages_active) values (%s, false) "
+                        "on conflict (tenant_id) do update set pages_active = false", (ta,))
+            check("...and so does every page of a restaurant switched off", not resolves(tok))
+            conn.rollback()
+
             print("\n== a diner, who is nobody ==")
             # A savepoint per table. A denied query aborts the whole transaction, and
             # "denied" is the PASS here - without a savepoint the first denial poisons

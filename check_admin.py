@@ -664,6 +664,7 @@ ENGLISH_ONLY_SCREENS = {
     "components/DevNav.tsx": "super admin: the developer console's tabs",
     "components/DevRequests.tsx": "super admin: library and upload requests",
     "components/EngineBanner.tsx": "super admin: is the engine processing work",
+    "app/(admin)/dish-pages/page.tsx": "super admin: flyer pages, their QR codes and off switches",
 }
 
 #: Not language. A brand name, a worked example, and the shape of a code.

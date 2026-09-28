@@ -28,6 +28,10 @@ import { text } from '@/lib/i18n'
 
 type KV = { k: string; v: number }
 type Item = { id: string; name: string; opens: number; ar: number; adds: number; avg_3d_s: number | null }
+/** One dish, from `dish_stats` (0034). Counts are people, `adds` is basket additions. */
+type DishStat = { id: string; name: string; has_3d: boolean; opens: number; ar: number; placed: number
+                  adds: number; scans: number; avg_3d_s: number | null }
+type Dishes = { visitors: number; items: DishStat[] }
 type Report = {
   unit: 'minute' | 'hour' | 'day'
   funnel: Record<string, number>
@@ -82,7 +86,8 @@ export default function DashboardPage() {
   const [preset, setPreset] = useState<Preset>('30d')
   const [custom, setCustom] = useState({ from: '', to: '' })
   const [customOpen, setCustomOpen] = useState(false)
-  const [data, setData] = useState<{ cur: Report | null; prev: Report | null; key: string; win: Win } | null>(null)
+  const [data, setData] = useState<{ cur: Report | null; prev: Report | null; dishes: Dishes | null
+                                     key: string; win: Win } | null>(null)
   const tz = useMemo(() => {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tbilisi' } catch { return 'Asia/Tbilisi' }
   }, [])
@@ -98,10 +103,13 @@ export default function DashboardPage() {
     const call = (w: Win) => supabase.rpc('analytics', {
       p_tenant: plan.restaurantId, p_from: w.from.toISOString(), p_to: w.to.toISOString(), p_tz: tz,
     })
-    const [a, b] = await Promise.all([call(win), call(before)])
+    const [a, b, d] = await Promise.all([call(win), call(before), supabase.rpc('dish_stats', {
+      p_tenant: plan.restaurantId, p_from: win.from.toISOString(), p_to: win.to.toISOString(),
+    })])
     return {
       cur: (a.data as Report | null) ?? null,
       prev: (b.data as Report | null) ?? null,
+      dishes: (d.data as Dishes | null) ?? null,
       key: `${plan.restaurantId}:${preset}:${custom.from}:${custom.to}`,
       win,
     }
@@ -263,7 +271,7 @@ export default function DashboardPage() {
                      label={k => ({ ios: 'iPhone', android: 'Android', desktop: T.dashComputer } as Record<string, string>)[k] ?? k} />
           <Breakdown title={T.dashSources} rows={r?.sources ?? []} T={T}
                      label={k => ({
-                       table: T.dashSrcTable, qr: T.dashSrcQr, direct: T.dashSrcDirect, instagram: 'Instagram',
+                       table: T.dashSrcTable, qr: T.dashSrcQr, poster: T.dashSrcPoster, direct: T.dashSrcDirect, instagram: 'Instagram',
                        facebook: 'Facebook', google: 'Google', tiktok: 'TikTok', web: T.dashSrcWeb,
                      } as Record<string, string>)[k] ?? k} />
           <Breakdown title={T.dashPhoneLang} rows={r?.langs ?? []} T={T}
@@ -288,13 +296,16 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-5">
-          <div className="card p-5 lg:col-span-3 min-w-0">
-            <h2 className="text-sm font-semibold mb-4">{T.dashMostOpened}</h2>
-            <DishTable items={r?.items ?? []} T={T} secs={secs} />
-            <p className="text-xs mt-4" style={{ color: 'var(--dim)' }}>{T.dashWorthBuilding}</p>
-          </div>
-          <div className="card p-5 lg:col-span-2 min-w-0">
+        {/* ── Every dish (0034): people who opened it in 3D, took it to AR, placed it ── */}
+        <div className="card p-5 min-w-0">
+          <h2 className="text-sm font-semibold mb-1">{T.dashPerDish}</h2>
+          <p className="text-xs mb-4" style={{ color: 'var(--dim)' }}>{T.dashPerDishNote}</p>
+          <DishTable dishes={data?.dishes ?? null} T={T} secs={secs} />
+          <p className="text-xs mt-4" style={{ color: 'var(--dim)' }}>{T.dashWorthBuilding}</p>
+        </div>
+
+        <div className="grid gap-4">
+          <div className="card p-5 min-w-0">
             <div className="flex items-baseline gap-2 mb-4">
               <h2 className="text-sm font-semibold">{T.dashByTable}</h2>
               <span className="text-xs ml-auto" style={{ color: 'var(--dim)' }}>{T.dashDiners}</span>
@@ -714,42 +725,76 @@ function Breakdown({ title, rows, label, T }: { title: string; rows: KV[]; label
   )
 }
 
-/** The dishes, with everything that says whether each one earns its 3D: how many people
- *  opened it, how long they looked, how many took it to AR, how many added it. */
-function DishTable({ items, T, secs }: { items: Item[]; T: Dict; secs: (s: number | null) => string }) {
-  if (!items.length) return <RankBars rows={[]} empty={['—', '—', '—']} />
-  const top = Math.max(1, ...items.map(i => Number(i.opens)))
+/** Every visible dish, with the two percentages that say whether its 3D earns its keep:
+ *  of everyone who opened the menu, how many opened THIS dish in 3D; and of those, how
+ *  many took it on to AR. Dishes nobody opened are listed too - that is information. */
+function DishTable({ dishes, T, secs }: { dishes: Dishes | null; T: Dict; secs: (s: number | null) => string }) {
+  const [all, setAll] = useState(false)
+  const [only3d, setOnly3d] = useState(false)
+  if (!dishes || !dishes.items.length) return <RankBars rows={[]} empty={['—', '—', '—']} />
+  const visitors = Number(dishes.visitors) || 0
+  const list = dishes.items.filter(d => !only3d || d.has_3d)
+  const shown = all ? list : list.slice(0, 12)
+  const top = Math.max(1, ...list.map(d => Number(d.opens)))
+  const pct = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : '')
+  const anyScans = list.some(d => Number(d.scans) > 0)
   return (
-    <div className="table-scroll">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs" style={{ color: 'var(--dim)' }}>
-            <th className="text-left py-1.5 font-normal">#</th>
-            <th className="text-left py-1.5 font-normal">{T.dashDish}</th>
-            <th className="text-right py-1.5 font-normal">{T.dashOpens3d}</th>
-            <th className="text-right py-1.5 font-normal hidden sm:table-cell">{T.dashLooked}</th>
-            <th className="text-right py-1.5 font-normal">AR</th>
-            <th className="text-right py-1.5 font-normal hidden sm:table-cell">{T.dashAdds}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((it, i) => (
-            <tr key={it.id ?? i} style={{ borderTop: '1px solid var(--border)' }}>
-              <td className="py-2 pr-2 text-xs" style={{ color: 'var(--dim)' }}>{i + 1}</td>
-              <td className="py-2 pr-3 min-w-[9rem]">
-                <div className="truncate max-w-[16rem]">{it.name}</div>
-                <div className="h-1 mt-1 rounded-full overflow-hidden" style={{ background: 'var(--card2)' }}>
-                  <div className="h-full rounded-full" style={{ width: `${(Number(it.opens) / top) * 100}%`, background: 'var(--viz-2)' }} />
-                </div>
-              </td>
-              <td className="py-2 text-right font-semibold">{it.opens}</td>
-              <td className="py-2 pl-3 text-right hidden sm:table-cell">{secs(it.avg_3d_s)}</td>
-              <td className="py-2 pl-3 text-right">{it.ar || ''}</td>
-              <td className="py-2 pl-3 text-right hidden sm:table-cell">{it.adds || ''}</td>
+    <div>
+      <div className="flex gap-1.5 mb-3">
+        {([[false, T.dashAllDishes], [true, T.dash3dDishes]] as [boolean, string][]).map(([v, label]) => (
+          <button key={String(v)} onClick={() => setOnly3d(v)} className="text-xs px-3 py-1 rounded-full"
+                  style={{ background: only3d === v ? 'var(--gold-dim)' : 'var(--card2)',
+                           color: only3d === v ? 'var(--gold)' : 'var(--dim)',
+                           border: `1px solid ${only3d === v ? 'var(--gold)' : 'var(--border)'}` }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="table-scroll">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs align-bottom" style={{ color: 'var(--dim)' }}>
+              <th className="text-left py-1.5 font-normal">{T.dashDish}</th>
+              <th className="text-right py-1.5 pl-3 font-normal">{T.dashOpened3d}<br /><span className="opacity-70">{T.dashOfVisitorsShort}</span></th>
+              <th className="text-right py-1.5 pl-3 font-normal">{T.dashReachedAr}<br /><span className="opacity-70">{T.dashOfOpenersShort}</span></th>
+              <th className="text-right py-1.5 pl-3 font-normal hidden sm:table-cell">{T.dashPlaced}</th>
+              <th className="text-right py-1.5 pl-3 font-normal hidden md:table-cell">{T.dashLooked}</th>
+              <th className="text-right py-1.5 pl-3 font-normal hidden md:table-cell">{T.dashAdds}</th>
+              {anyScans && <th className="text-right py-1.5 pl-3 font-normal hidden sm:table-cell">{T.dashScans}</th>}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {shown.map(d => (
+              <tr key={d.id} style={{ borderTop: '1px solid var(--border)' }}>
+                <td className="py-2 pr-3 min-w-[9rem]">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate max-w-[15rem]">{d.name}</span>
+                    {d.has_3d && <span className="pill pill-wait" style={{ padding: '0 6px' }}>3D</span>}
+                  </div>
+                  <div className="h-1 mt-1 rounded-full overflow-hidden" style={{ background: 'var(--card2)', maxWidth: 220 }}>
+                    <div className="h-full rounded-full" style={{ width: `${(Number(d.opens) / top) * 100}%`, background: 'var(--viz-2)' }} />
+                  </div>
+                </td>
+                <td className="py-2 pl-3 text-right whitespace-nowrap">
+                  <b>{d.opens}</b> <span className="text-xs" style={{ color: 'var(--dim)' }}>{d.opens ? pct(d.opens, visitors) : ''}</span>
+                </td>
+                <td className="py-2 pl-3 text-right whitespace-nowrap">
+                  <b>{d.has_3d || d.ar ? d.ar : ''}</b> <span className="text-xs" style={{ color: 'var(--dim)' }}>{d.ar ? pct(d.ar, d.opens) : ''}</span>
+                </td>
+                <td className="py-2 pl-3 text-right hidden sm:table-cell">{d.placed || ''}</td>
+                <td className="py-2 pl-3 text-right hidden md:table-cell">{d.avg_3d_s != null ? secs(d.avg_3d_s) : ''}</td>
+                <td className="py-2 pl-3 text-right hidden md:table-cell">{d.adds || ''}</td>
+                {anyScans && <td className="py-2 pl-3 text-right hidden sm:table-cell">{d.scans || ''}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {list.length > 12 && (
+        <button className="text-xs underline mt-3" style={{ color: 'var(--dim)' }} onClick={() => setAll(a => !a)}>
+          {all ? T.dashShowFewer : text(T.dashShowAll, { n: list.length })}
+        </button>
+      )}
     </div>
   )
 }

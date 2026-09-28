@@ -20,7 +20,7 @@
 // against the live page to prove each further cut.
 import { envFrom } from "../lib/env.js";
 import { loadMenu, themeMode } from "../lib/menu.js";
-import { noMenu, menuUnavailable } from "../lib/nomenu.js";
+import { noMenu, menuUnavailable, dishUnavailable } from "../lib/nomenu.js";
 import { paletteCss, settingsCss, fontLinks } from "../lib/theme.js";
 import { hero, header, catBar, menuList, toggles, itemsJson } from "../lib/markup.js";
 // The platform's overlay markup, extracted verbatim (menu/render/extract_chrome.py):
@@ -81,6 +81,24 @@ try {
 if (!menu && !error) return noMenu();
 if (error) return menuUnavailable(slug, error);
 
+// ── one dish (0033) ───────────────────────────────────────────────────────────────────
+//
+// Set ONLY by `/p/<token>` after `resolve_dish_link` said the token is live - a
+// server-side flag, never a query parameter, so a dead flyer cannot be routed around by
+// printing this address instead. Same page, same viewer, same AR; one card, no hero, no
+// category bar, no basket, and the dish's 3D opens on arrival.
+const soloId = String(Astro.locals.soloDish || "");
+let soloItem = null;
+if (soloId) {
+  soloItem = menu.items.find((i) => i.id === soloId) || null;
+  if (!soloItem) return dishUnavailable();
+  menu = { ...menu, items: [soloItem],
+           categories: menu.categories.filter((c) => c.id === soloItem.category_id) };
+  // Switching a dish page off must take effect on the next scan, not after a cache expires.
+  Astro.response.headers.set("Cache-Control", "no-store");
+  Astro.response.headers.set("X-Robots-Tag", "noindex");
+}
+
 // Is this the theme editor looking at itself? The listener below is emitted ONLY then,
 // so a diner's page never contains a way to repaint it from another window - not gated at
 // runtime, absent from the bytes.
@@ -92,6 +110,7 @@ const lang = (menu.tenant.languages || ["en"])[0];
 const template = SHEETS[menu.tenant.template] ? menu.tenant.template : DEFAULT_TEMPLATE;
 const sheet = SHEETS[template];
 const title = cfg.site_name || menu.tenant.name;
+const pageTitle = soloItem ? `${soloItem.name_en} · ${title}` : `${title} · Menu`;
 // Both palettes, each scoped to its own `data-theme`, plus the settings that reach CSS.
 // Scoped rather than flat so the restaurant's colours beat the template's defaults AND so
 // the day/night button has something to switch between - see `paletteCss`.
@@ -116,6 +135,12 @@ const runtimeCfg = Object.fromEntries(
 // restaurant to file its counts under (0009_events). It is not a secret - it is in the URL
 // as a slug already - and the sink refuses ids that are not real restaurants.
 runtimeCfg.tenant_id = menu.tenant.id;
+// One-dish mode, for `init.js`: open this dish's 3D on arrival and file the visit under
+// the "flyer / poster" source, so a restaurant can see what its printed codes bring in.
+if (soloItem) {
+  runtimeCfg.solo = true;
+  runtimeCfg.solo_token = String(Astro.locals.soloToken || "");
+}
 
 // Who may repaint this page in preview. The admin, and nothing else. Configured rather
 // than inferred from the referrer, because a referrer is whatever the other side says.
@@ -137,12 +162,16 @@ const buildMs = Date.now() - started;
   data-phone-layout={cfg.phone_layout || "list"}
   data-hero-image={cfg.hero_image_url ? "true" : undefined}
   data-generic-hero={cfg.hero_image_url ? "true" : undefined}
+  data-solo={soloItem ? "true" : undefined}
 >
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>{title} · Menu</title>
-    <meta name="description" content={`${title} menu`} />
+    <title>{pageTitle}</title>
+    <meta name="description" content={soloItem ? (soloItem.description_en || `${soloItem.name_en} at ${title}`) : `${title} menu`} />
+    {soloItem && <meta property="og:title" content={pageTitle} />}
+    {soloItem && soloItem.description_en && <meta property="og:description" content={soloItem.description_en.slice(0, 200)} />}
+    {soloItem && soloItem.thumbnail_url && <meta property="og:image" content={new URL(soloItem.thumbnail_url, Astro.url.origin).href} />}
     {cfg.hero_image_url && (
       <link rel="preload" as="image" href={cfg.hero_image_url} fetchpriority="high" />
     )}
@@ -157,13 +186,29 @@ const buildMs = Date.now() - started;
         watches happen; resolved here, there is no second state to flash to. */}
     <style set:html={palette + (settings ? `:root{${settings}}` : "")} />
     <Fragment set:html={fontLinks(cfg)} />
+    {/* One-dish mode: nothing that belongs to a whole menu. The basket goes because a
+        flyer is not a table - there is nobody to show an order to. */}
+    {soloItem && <style set:html={`
+      html[data-solo] #basket-bar, html[data-solo] .qty-ctrl, html[data-solo] #modal-qty-wrap,
+      html[data-solo] #modal-prev, html[data-solo] #modal-next, html[data-solo] #xr-add-btn,
+      html[data-solo] .cat-bar { display: none !important; }
+      html[data-solo] .menu-list { max-width: 640px; margin: 0 auto; }
+      .solo-more { display: block; text-align: center; margin: 22px auto 40px; padding: 12px 20px;
+                   max-width: 320px; border-radius: 999px; text-decoration: none; font-weight: 600;
+                   color: var(--text, inherit); border: 1px solid currentColor; opacity: .85; }
+    `} />}
   </head>
   <body>
     <Fragment set:html={toggles(menu)} />
-    <Fragment set:html={hero(cfg)} />
+    {!soloItem && <Fragment set:html={hero(cfg)} />}
     <Fragment set:html={header(menu, cfg, lang)} />
-    <Fragment set:html={catBar(menu, lang)} />
+    {!soloItem && <Fragment set:html={catBar(menu, lang)} />}
     <Fragment set:html={menuList(menu, lang)} />
+    {soloItem && (
+      <a class="solo-more" href={`/${menu.tenant.slug}`}>
+        {lang === "ka" ? "სრული მენიუ →" : "See the full menu →"}
+      </a>
+    )}
 
     {/* The 3D modal, the AR overlay, the lightbox, the basket, the staff QR. After the
         list, as the platform has them, because two of them are position:fixed and the
