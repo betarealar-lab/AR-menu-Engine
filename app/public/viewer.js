@@ -1098,16 +1098,22 @@ window.UI = {
     waiter_qr_shown: "waiter_qr",
     delivery: "delivery", order: "delivery",
     lang: "lang", theme: "theme", theme_change: "theme",
+    // Time, added 2026-09-28 when Temo asked for "avg time spent". `modal_close` carries
+    // `duration_ms`: how long a dish was held in 3D - the closest thing we have to "did
+    // the diner actually look at it". `leave` is ours (below): visible seconds on the menu.
+    modal_close: "item_close", leave: "leave",
   };
 
   // Called by the ported code, and deliberately not sent. Named rather than ignored, so
   // that "we decided not to count this" and "we forgot this exists" stop looking alike.
   //
-  //   modal_close   how long a dish was held open. Interesting later, and it would double
-  //                 the rows in `events` to learn it. Not while the question is still
-  //                 "does 3D sell food".
-  //   ar_duration   the same argument, for AR.
-  const NOT_COUNTED = ["modal_close", "ar_duration"];
+  //   ar_duration   how long AR was open. Nothing fires it today; named so the day
+  //                 something does, it is a decision and not an accident.
+  //
+  // `modal_close` used to be here ("it would double the rows"). It is counted since
+  // 2026-09-28: time-in-3D per dish is the number owners asked for, and one row per
+  // closed dish is the price.
+  const NOT_COUNTED = ["ar_duration"];
   window.__notCounted = NOT_COUNTED;
 
   // Random, per tab, forgotten when it closes. Its only job is to tell one diner opening
@@ -1214,10 +1220,27 @@ window.UI = {
   // The last flush, and the one that matters most - a diner who reached AR and then closed
   // the tab is the whole funnel. `visibilitychange` fires where `unload` does not, which
   // is every iOS browser.
+  //
+  // **Time on the menu.** Counted as VISIBLE time, not wall-clock: a phone face-down on the
+  // table for twenty minutes is not a diner reading the menu. Each time the page is hidden
+  // it reports the visible seconds since it was last shown, so a session's time is the sum
+  // of its `leave` rows - and a diner who switches to WhatsApp and back is counted
+  // correctly. Under a second is noise (a page flashed on and off); over three hours is a
+  // tab left open, capped rather than trusted.
+  let _shownAt = document.visibilityState === "visible" ? Date.now() : 0;
+  function _reportVisible() {
+    if (!_shownAt) return;
+    const ms = Math.min(Date.now() - _shownAt, 3 * 3600 * 1000);
+    _shownAt = 0;
+    if (ms >= 1000) window.track("leave", null, { ms: ms });
+  }
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "hidden") flush();
+    if (document.visibilityState === "hidden") { _reportVisible(); flush(); }
+    else { _shownAt = Date.now(); }
   });
-  window.addEventListener("pagehide", flush);
+  // `pagehide` after `visibilitychange` on most browsers, and alone on some: the guard
+  // is `_shownAt`, which the first of the two clears.
+  window.addEventListener("pagehide", function () { _reportVisible(); flush(); });
 
   // The platform's marker for "this visitor did something". Ours fires the one event it
   // is really for and then gets out of the way.
@@ -3636,7 +3659,27 @@ window.UI = {
     //
     // First, before the hero and before the viewer, because it must survive a diner who
     // closes the tab immediately - which is itself a number worth having.
-    try { window.track("view"); } catch (e) { /* never let a count break a menu */ }
+    // With three facts a restaurant cannot get anywhere else (2026-09-28): the kind of
+    // phone, where the diner came from, and the language THEIR PHONE is set to - which
+    // is not the language they picked on the menu, and is the tourist signal.
+    // Nothing identifying: no user agent string, no full referrer, no IP.
+    try {
+      var ua = navigator.userAgent || "";
+      var d = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+        ? "ios" : /Android/.test(ua) ? "android" : "desktop";
+      var src = "direct";
+      if (/[?&]t=\d/.test(location.search)) src = "table";
+      else if (/[?&]q=1(&|$)/.test(location.search)) src = "qr";
+      else if (document.referrer) {
+        var h = "";
+        try { h = new URL(document.referrer).hostname; } catch (_) { h = ""; }
+        src = /instagram/.test(h) ? "instagram" : /facebook|fb\./.test(h) ? "facebook"
+          : /google/.test(h) ? "google" : /tiktok/.test(h) ? "tiktok"
+          : h && h !== location.hostname ? "web" : "direct";
+      }
+      var pl = String((navigator.language || "").slice(0, 2)).toLowerCase();
+      window.track("view", null, { d: d, src: src, pl: /^[a-z]{2}$/.test(pl) ? pl : "" });
+    } catch (e) { /* never let a count break a menu */ }
     // hero.js and viewer.js both read the global config the platform sets.
     window._themeConfig = Object.assign(window._themeConfig || {}, cfg);
 

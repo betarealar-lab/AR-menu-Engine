@@ -25,6 +25,10 @@ export default function SharePage() {
   if (!plan.restaurantId) return <p style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</p>
 
   const url = `${MENU_ORIGIN}/${plan.restaurantSlug}`
+  // `?q=1` marks a scan of the printed restaurant code, so Analytics can tell "scanned the
+  // QR on the table" from "typed the address / tapped a link" (2026-09-28). Table codes
+  // carry `?t=<n>` instead, which already says the same thing and more.
+  const qrUrl = `${url}?q=1`
 
   async function copy() {
     try {
@@ -56,7 +60,7 @@ export default function SharePage() {
         </div>
 
         <div className="card p-4 text-center">
-          <QrCode value={url} size={200} label={plan.restaurantSlug} />
+          <QrCode value={qrUrl} size={200} label={plan.restaurantSlug} />
         </div>
       </div>
 
@@ -98,7 +102,7 @@ export default function SharePage() {
           the card at the top already shows it; present here so that Print gives a sheet
           with something on it even when nobody has asked for table codes. */}
       <div className="hidden print:block text-center print-block" style={{ marginTop: 24 }}>
-        <QrCode value={url} size={200} label={plan.restaurantSlug} />
+        <QrCode value={qrUrl} size={200} label={plan.restaurantSlug} />
         <div className="text-sm mt-2 font-semibold">{plan.restaurantName || plan.restaurantSlug}</div>
       </div>
     </div>

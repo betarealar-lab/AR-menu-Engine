@@ -1,22 +1,24 @@
 'use client'
-// Analytics - redesigned 2026-09-28 (Temo: "make UI better, I don't like it").
+// Analytics.
 //
-// What changed, and why each thing is where it is:
+// 2026-09-28, twice. First the redesign (Temo: "make UI better, I don't like it"), then
+// "add yesterday option, also more relevant stats like avg time spent".
 //
-//   * ONE row of range controls at the top, and it scopes everything below it, so every
-//     number on the screen agrees with every other.
-//   * Four stat tiles lead - the four numbers an owner actually asks about - each with its
-//     change against the period before, so "is it going up" needs no arithmetic.
-//   * The over-time chart is a real chart now: a continuous line (empty hours are ZERO,
-//     not skipped - the old bars silently dropped them and made a quiet week look busy),
-//     visitors and 3D opens on one scale, a crosshair tooltip, and a table view.
-//   * "Does 3D sell the dish?" - `event_3d_lift` (0014) existed and nothing showed it. It
-//     is the sentence that renews a ₾300 subscription.
-//   * Dishes and tables are ranked bars, not lists of numbers.
+//   * Windows, not "the last N minutes": Today, Yesterday, 7/30/90 days and any date range,
+//     all on the owner's own clock. One call to `analytics()` (0032) per window - this one
+//     and the one before it, for the deltas - so every number on the screen comes from the
+//     same rows and no two cards can disagree.
+//   * Time: a typical visit (median visible time on the menu) and time spent looking at a
+//     dish in 3D. Median, not mean - one tab left open on a table from lunch to dinner
+//     makes an average meaningless, which is exactly what the first run showed (52 min).
+//   * Ordering: added to basket, shown to the waiter, and the one the company is a bet
+//     on - of the dishes a diner opened in 3D, how many they then added to the basket.
+//   * Who: busiest hours, iPhone vs Android, where they came from (table QR, restaurant
+//     QR, Instagram, Google...), and the language THEIR PHONE is set to - the tourist
+//     signal no other tool gives a restaurant.
 //
-// Unchanged, on purpose: percentages are of SESSIONS, never hits (one diner opening four
-// dishes is one person who opened 3D), and the layout is always drawn, zeroes included,
-// so an empty screen shows what will be counted rather than looking broken.
+// Unchanged on purpose: percentages are of PEOPLE (sessions), never taps, and the layout
+// is always drawn, zeroes included, so an empty screen shows what will be counted.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePlan } from '@/lib/usePlan'
@@ -24,69 +26,86 @@ import { createClient } from '@/lib/supabase/client'
 import { useLang } from '@/lib/useLang'
 import { text } from '@/lib/i18n'
 
-type Funnel = { name: string; sessions: number; hits: number }
-type TopItem = { item_id: string; name: string; opens: number; ar: number }
-type Point = { bucket: string; sessions: number; opens: number }
-type TableRow = { table_no: string; sessions: number; opens: number; ar: number }
-type Lift = { with_3d: number; without_3d: number; dishes_3d: number; dishes_plain: number }
+type KV = { k: string; v: number }
+type Item = { id: string; name: string; opens: number; ar: number; adds: number; avg_3d_s: number | null }
+type Report = {
+  unit: 'minute' | 'hour' | 'day'
+  funnel: Record<string, number>
+  hits: Record<string, number>
+  time: { sessions: number; measured: number; avg_s: number | null; median_s: number | null; under_10s: number; over_2m: number }
+  time_3d: { closes: number; avg_s: number | null; median_s: number | null }
+  basket: { sessions: number; adds: number; waiter: number; opened_pairs: number; opened_then_added: number }
+  series: { b: string; v: number; o: number }[]
+  hours: { h: number; v: number }[]
+  devices: KV[]; sources: KV[]; langs: KV[]
+  items: Item[]
+  tables: { t: string; v: number; o: number; ar: number }[]
+  lift: { with_3d: number; without_3d: number; dishes_3d: number; dishes_plain: number }
+}
 
-const RANGES: [string, number][] = [
-  ['24h', 1440], ['7d', 10080], ['30d', 43200], ['90d', 129600],
-]
+type Preset = 'today' | 'yesterday' | '7d' | '30d' | '90d' | 'custom'
+type Win = { from: Date; to: Date }
 
-// The same buckets `event_series` uses (0014): minutes up to 3 h, hours up to 3 days,
-// days beyond - so the gaps filled here line up exactly with the rows it returns.
-const unitMs = (minutes: number) =>
-  minutes <= 180 ? 60_000 : minutes <= 4320 ? 3_600_000 : 86_400_000
+const DAY = 86_400_000
+const midnight = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+const addDays = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+const isoDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** The window for a preset, on the browser's clock - which is the owner's. "Yesterday" is
+ *  00:00 to 24:00 of the day before, not "24 to 48 hours ago". */
+function windowFor(p: Preset, now: number, custom: { from: string; to: string }): Win {
+  const n = new Date(now)
+  switch (p) {
+    case 'today': return { from: midnight(n), to: n }
+    case 'yesterday': return { from: addDays(midnight(n), -1), to: midnight(n) }
+    case '7d': return { from: new Date(now - 7 * DAY), to: n }
+    case '90d': return { from: new Date(now - 90 * DAY), to: n }
+    case 'custom': {
+      const f = custom.from ? new Date(`${custom.from}T00:00:00`) : new Date(now - 30 * DAY)
+      const t = custom.to ? addDays(new Date(`${custom.to}T00:00:00`), 1) : n
+      return t > f ? { from: f, to: t < n ? t : n } : { from: new Date(now - 30 * DAY), to: n }
+    }
+    default: return { from: new Date(now - 30 * DAY), to: n }
+  }
+}
+
+/** The same length of time, immediately before. Yesterday's "before" is the day before. */
+const previous = (w: Win): Win => {
+  const len = w.to.getTime() - w.from.getTime()
+  return { from: new Date(w.from.getTime() - len), to: w.from }
+}
 
 export default function DashboardPage() {
   const [T, lang] = useLang()
   const plan = usePlan()
-  const [minutes, setMinutes] = useState(43200)
+  const [preset, setPreset] = useState<Preset>('30d')
+  const [custom, setCustom] = useState({ from: '', to: '' })
   const [customOpen, setCustomOpen] = useState(false)
-  const [custom, setCustom] = useState({ n: '', unit: 'days' as 'minutes' | 'hours' | 'days' })
-  const [data, setData] = useState<{
-    funnel: Funnel[]; prev: Funnel[]; items: TopItem[]; series: Point[]
-    tables: TableRow[]; lift: Lift | null; key: string; at: number
-  } | null>(null)
-  const want = `${plan.restaurantId}:${minutes}`
+  const [data, setData] = useState<{ cur: Report | null; prev: Report | null; key: string; win: Win } | null>(null)
+  const tz = useMemo(() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Tbilisi' } catch { return 'Asia/Tbilisi' }
+  }, [])
+
+  const want = `${plan.restaurantId}:${preset}:${custom.from}:${custom.to}`
   const refetching = !!data && data.key !== want
 
-  // Fetches and hands back; the effect below does the setting, in the promise's callback,
-  // so no state is written synchronously inside an effect.
   const fetchAll = useCallback(async () => {
     if (plan.loading || !plan.restaurantId) return null
+    const win = windowFor(preset, Date.now(), custom)
+    const before = previous(win)
     const supabase = createClient()
-    const args = { p_tenant: plan.restaurantId, p_minutes: minutes }
-    // The period before, as "twice the range minus this range". Sessions rarely span the
-    // boundary, so the subtraction is honest to within a visitor or two.
-    const [f, f2, i, s, tb, l] = await Promise.all([
-      supabase.rpc('event_funnel', args),
-      supabase.rpc('event_funnel', { ...args, p_minutes: Math.min(minutes * 2, 1051200) }),
-      supabase.rpc('event_top_items', { ...args, p_limit: 10 }),
-      supabase.rpc('event_series', args),
-      supabase.rpc('event_by_table', args),
-      supabase.rpc('event_3d_lift', args),
-    ])
-    const cur = (f.data as Funnel[]) || []
-    const both = (f2.data as Funnel[]) || []
-    const prev = both.map(b => ({
-      name: b.name,
-      sessions: Math.max(0, Number(b.sessions) - Number(cur.find(c => c.name === b.name)?.sessions ?? 0)),
-      hits: 0,
-    }))
+    const call = (w: Win) => supabase.rpc('analytics', {
+      p_tenant: plan.restaurantId, p_from: w.from.toISOString(), p_to: w.to.toISOString(), p_tz: tz,
+    })
+    const [a, b] = await Promise.all([call(win), call(before)])
     return {
-      funnel: cur, prev,
-      items: (i.data as TopItem[]) || [],
-      series: (s.data as Point[]) || [],
-      tables: (tb.data as TableRow[]) || [],
-      lift: ((l.data as Lift[]) || [])[0] ?? null,
-      key: `${plan.restaurantId}:${minutes}`,
-      // The clock the chart's empty buckets are laid out against. Captured here, once,
-      // rather than read during render - a render must not depend on when it happens.
-      at: Date.now(),
+      cur: (a.data as Report | null) ?? null,
+      prev: (b.data as Report | null) ?? null,
+      key: `${plan.restaurantId}:${preset}:${custom.from}:${custom.to}`,
+      win,
     }
-  }, [plan.loading, plan.restaurantId, minutes])
+  }, [plan.loading, plan.restaurantId, preset, custom, tz])
 
   useEffect(() => {
     let dead = false
@@ -94,142 +113,164 @@ export default function DashboardPage() {
     return () => { dead = true }
   }, [fetchAll])
 
-  function applyCustom() {
-    const n = Number(custom.n)
-    if (!Number.isFinite(n) || n <= 0) return
-    const mult = custom.unit === 'minutes' ? 1 : custom.unit === 'hours' ? 60 : 1440
-    setMinutes(Math.min(Math.round(n * mult), 525600))
-    setCustomOpen(false)
-  }
-
-  const rangeLabel = minutes < 120 ? `${minutes} ${T.dashUnitMin}`
-    : minutes < 2880 ? `${Math.round(minutes / 60)} ${T.dashUnitHours}`
-      : `${Math.round(minutes / 1440)} ${T.dashUnitDays}`
-  const isPreset = RANGES.some(([, m]) => m === minutes)
-
   if (!plan.loading && !plan.restaurantId) {
     return <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>{T.pickRestaurantFirst}</div>
   }
 
-  const funnel = data?.funnel ?? []
-  const prev = data?.prev ?? []
-  const at = (list: Funnel[], name: string) => Number(list.find(f => f.name === name)?.sessions ?? 0)
-  const visits = at(funnel, 'view')
-  const pctOf = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0)
+  const r = data?.cur ?? null
+  const p = data?.prev ?? null
+  const f = (rep: Report | null, name: string) => Number(rep?.funnel?.[name] ?? 0)
+  const visits = f(r, 'view')
+  const pct = (n: number, of: number) => (of ? Math.round((n / of) * 100) : 0)
 
-  const tiles = [
-    { label: T.dashVisitors, name: 'view', sub: null as string | null },
-    { label: T.dashOpened3d, name: 'item_open', sub: 'pct' },
-    { label: T.dashReachedAr, name: 'ar_open', sub: 'pct' },
-    { label: T.dashPlaced, name: 'ar_placed', sub: 'pct' },
+  const PRESETS: [Preset, string][] = [
+    ['today', T.dashToday], ['yesterday', T.dashYesterday],
+    ['7d', '7d'], ['30d', '30d'], ['90d', '90d'],
   ]
+  const locale = lang === 'ka' ? 'ka-GE' : 'en-GB'
+  const winLabel = data ? describeWindow(data.win, preset, T, locale) : ''
+  const prevLabel = preset === 'today' ? T.dashVsYesterday
+    : preset === 'yesterday' ? T.dashVsDayBefore : T.dashVsPrevPeriod
+  const noPrev = !!p && f(p, 'view') === 0
+
+  const secs = (s: number | null | undefined) => formatSecs(s, T)
+  const basketPeople = r?.basket.sessions ?? 0
 
   return (
     <div className="page-content">
-      {/* ── The one control row ── */}
+      {/* ── The one control row: it scopes everything below it ── */}
       <div className="flex items-end gap-3 flex-wrap mb-6">
         <div className="mr-auto min-w-0">
           <h1 className="page-title">{T.dashTitle}</h1>
           <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--dim)' }}>
-            {plan.restaurantName} · {text(T.dashLastRange, { range: rangeLabel })}
-            {data && at(prev, 'view') === 0 && visits > 0 && <> · {T.dashNoPrev}</>}
+            {plan.restaurantName}{winLabel && <> · {winLabel}</>}
+            {noPrev && visits > 0 && <> · {T.dashNoPrev}</>}
           </p>
         </div>
-        <div className="relative flex rounded-lg p-0.5" style={{ background: 'var(--card2)' }}
+        <div className="relative flex flex-wrap rounded-lg p-0.5" style={{ background: 'var(--card2)' }}
              role="group" aria-label={T.dashTime}>
-          {RANGES.map(([label, m]) => {
-            const on = minutes === m
-            return (
-              <button key={label} onClick={() => setMinutes(m)} aria-pressed={on}
-                      className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                      style={{ background: on ? 'var(--card)' : 'transparent',
-                               color: on ? 'var(--text)' : 'var(--dim)',
-                               boxShadow: on ? 'var(--shadow)' : 'none' }}>
-                {label}
-              </button>
-            )
-          })}
-          <button onClick={() => setCustomOpen(o => !o)} aria-expanded={customOpen}
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                  style={{ background: !isPreset ? 'var(--card)' : 'transparent',
-                           color: !isPreset ? 'var(--text)' : 'var(--dim)',
-                           boxShadow: !isPreset ? 'var(--shadow)' : 'none' }}>
-            {isPreset ? T.dashCustom : rangeLabel}
-          </button>
+          {PRESETS.map(([id, label]) => (
+            <Seg key={id} on={preset === id} onClick={() => { setPreset(id); setCustomOpen(false) }}>{label}</Seg>
+          ))}
+          <Seg on={preset === 'custom'} onClick={() => setCustomOpen(o => !o)}>
+            {preset === 'custom' && custom.from ? `${custom.from.slice(5)} – ${(custom.to || isoDate(new Date())).slice(5)}` : T.dashCustom} ▾
+          </Seg>
           {customOpen && (
-            <div className="absolute right-0 top-full mt-2 z-20 card p-3 flex items-center gap-2 shadow-2xl">
-              <div style={{ width: 72 }}>
-                <input type="number" min={1} value={custom.n} placeholder="5" autoFocus
-                       onChange={e => setCustom(c => ({ ...c, n: e.target.value }))}
-                       onKeyDown={e => { if (e.key === 'Enter') applyCustom() }} />
-              </div>
-              <div style={{ width: 110 }}>
-                <select value={custom.unit}
-                        onChange={e => setCustom(c => ({ ...c, unit: e.target.value as typeof c.unit }))}>
-                  <option value="minutes">{T.dashUnitMin}</option>
-                  <option value="hours">{T.dashUnitHours}</option>
-                  <option value="days">{T.dashUnitDays}</option>
-                </select>
-              </div>
-              <button className="btn btn-primary btn-sm" onClick={applyCustom} disabled={!custom.n}>
-                {T.dashApply}
-              </button>
+            <div className="absolute right-0 top-full mt-2 z-20 card p-3 grid gap-2 shadow-2xl" style={{ width: 260 }}>
+              <label className="text-xs" style={{ color: 'var(--dim)' }}>{T.dashFrom}
+                <input type="date" value={custom.from} max={custom.to || isoDate(new Date())}
+                       onChange={e => setCustom(c => ({ ...c, from: e.target.value }))} />
+              </label>
+              <label className="text-xs" style={{ color: 'var(--dim)' }}>{T.dashTo}
+                <input type="date" value={custom.to} min={custom.from} max={isoDate(new Date())}
+                       onChange={e => setCustom(c => ({ ...c, to: e.target.value }))} />
+              </label>
+              <button className="btn btn-primary btn-sm" disabled={!custom.from}
+                      onClick={() => { setPreset('custom'); setCustomOpen(false) }}>{T.dashApply}</button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Refetch keeps the frame: the old numbers stay, dimmed, instead of a flash. */}
       <div className="grid gap-4 transition-opacity" style={{ opacity: refetching || !data ? 0.55 : 1 }}>
         {data && visits === 0 && (
           <div className="card px-4 py-3 text-sm" style={{ color: 'var(--dim)' }}>{T.dashNothingRange}</div>
         )}
 
-        {/* ── Stat tiles ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {tiles.map(t => {
-            const now = at(funnel, t.name)
-            const before = at(prev, t.name)
-            return (
-              <StatTile key={t.name} label={t.label} value={now}
-                        sub={t.sub ? text(T.dashOfVisitors, { pct: pctOf(now, visits) }) : null}
-                        before={data ? before : null} rangeLabel={rangeLabel} T={T} lang={lang} />
-            )
-          })}
-        </div>
+        {/* ── Reach: how far diners got ── */}
+        <Section title={T.dashSecReach}>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatTile label={T.dashVisitors} value={visits} before={p ? f(p, 'view') : null} prevLabel={prevLabel} lang={lang} />
+            <StatTile label={T.dashOpened3d} value={f(r, 'item_open')} before={p ? f(p, 'item_open') : null}
+                      sub={text(T.dashOfVisitors, { pct: pct(f(r, 'item_open'), visits) })} prevLabel={prevLabel} lang={lang} />
+            <StatTile label={T.dashReachedAr} value={f(r, 'ar_open')} before={p ? f(p, 'ar_open') : null}
+                      sub={text(T.dashOfVisitors, { pct: pct(f(r, 'ar_open'), visits) })} prevLabel={prevLabel} lang={lang} />
+            <StatTile label={T.dashPlaced} value={f(r, 'ar_placed')} before={p ? f(p, 'ar_placed') : null}
+                      sub={text(T.dashOfVisitors, { pct: pct(f(r, 'ar_placed'), visits) })} prevLabel={prevLabel} lang={lang} />
+          </div>
+        </Section>
 
-        {/* ── Over time ── */}
+        {/* ── Attention and orders ── */}
+        <Section title={T.dashSecEngage}>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatTile label={T.dashTypicalVisit} display={secs(r?.time.median_s)}
+                      value={Number(r?.time.median_s ?? 0)} before={p?.time.median_s != null ? Number(p.time.median_s) : null}
+                      sub={r?.time.sessions
+                        ? text(T.dashVisitSub, { avg: secs(r.time.avg_s), quick: pct(r.time.under_10s, r.time.sessions) })
+                        : null}
+                      note={r && r.time.sessions > 0 && r.time.measured < r.time.sessions ? T.dashTimeFloor : null}
+                      prevLabel={prevLabel} lang={lang} />
+            <StatTile label={T.dashTime3d} display={secs(r?.time_3d.median_s)}
+                      value={Number(r?.time_3d.median_s ?? 0)} before={p?.time_3d.median_s != null ? Number(p.time_3d.median_s) : null}
+                      sub={r?.time_3d.closes ? text(T.dashTime3dSub, { n: r.time_3d.closes }) : T.dashRecordingFrom}
+                      prevLabel={prevLabel} lang={lang} />
+            <StatTile label={T.dashAddedBasket} value={basketPeople} before={p ? p.basket.sessions : null}
+                      sub={r ? text(T.dashBasketSub, { pct: pct(basketPeople, visits), n: r.basket.adds }) : null}
+                      prevLabel={prevLabel} lang={lang} />
+            <StatTile label={T.dashShowedWaiter} value={r?.basket.waiter ?? 0} before={p ? p.basket.waiter : null}
+                      sub={basketPeople ? text(T.dashWaiterSub, { pct: pct(r?.basket.waiter ?? 0, basketPeople) }) : null}
+                      prevLabel={prevLabel} lang={lang} />
+          </div>
+        </Section>
+
         <div className="card p-5 min-w-0">
-          <TrendChart points={data?.series ?? []} minutes={minutes} now={data?.at ?? 0} T={T} lang={lang} />
+          <TrendChart report={r} win={data?.win ?? null} T={T} locale={locale} />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-5">
-          {/* ── Funnel ── */}
-          <div className="card p-5 lg:col-span-3">
+          <div className="card p-5 lg:col-span-3 min-w-0">
             <h2 className="text-sm font-semibold mb-4">{T.dashFunnel}</h2>
             <FunnelBars visits={visits} T={T} steps={[
               { label: T.dashVisitors, value: visits },
-              { label: T.dashPastHero, value: at(funnel, 'hero_pass') },
-              { label: T.dashOpened3d, value: at(funnel, 'item_open') },
-              { label: T.dashReachedAr, value: at(funnel, 'ar_open') },
-              { label: T.dashPlaced, value: at(funnel, 'ar_placed') },
+              { label: T.dashPastHero, value: f(r, 'hero_pass') },
+              { label: T.dashOpened3d, value: f(r, 'item_open') },
+              { label: T.dashReachedAr, value: f(r, 'ar_open') },
+              { label: T.dashPlaced, value: f(r, 'ar_placed') },
+              { label: T.dashAddedBasket, value: basketPeople },
             ]} />
             <p className="text-xs mt-4 pt-3" style={{ color: 'var(--dim)', borderTop: '1px solid var(--border)' }}>
               {T.dashSessionsNote}
             </p>
           </div>
-
-          {/* ── The number that renews ── */}
-          <div className="card p-5 lg:col-span-2 flex flex-col">
-            <h2 className="text-sm font-semibold mb-3">{T.dashLiftTitle}</h2>
-            <LiftCard lift={data?.lift ?? null} T={T} />
+          <div className="lg:col-span-2 grid gap-4">
+            <div className="card p-5 flex flex-col">
+              <h2 className="text-sm font-semibold mb-3">{T.dashLiftTitle}</h2>
+              <LiftCard lift={r?.lift ?? null} T={T} />
+            </div>
+            <div className="card p-5">
+              <h2 className="text-sm font-semibold mb-2">{T.dash3dToBasket}</h2>
+              {r && r.basket.opened_pairs > 0 && r.basket.adds > 0 ? (
+                <>
+                  <div className="text-4xl font-bold tracking-tight" style={{ fontVariantNumeric: 'normal' }}>
+                    {pct(r.basket.opened_then_added, r.basket.opened_pairs)}%
+                  </div>
+                  <p className="text-sm mt-1">{text(T.dash3dToBasketX, {
+                    a: r.basket.opened_then_added, b: r.basket.opened_pairs })}</p>
+                </>
+              ) : (
+                <p className="text-sm" style={{ color: 'var(--dim)' }}>{T.dash3dToBasketNone}</p>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* The restaurant's own website (0028). Shown only once it has happened: most
-            restaurants have no embed, and a card of zeroes would read as a feature they
-            are failing at. */}
-        {at(funnel, 'embed_view') > 0 && (
+        <div className="card p-5 min-w-0">
+          <HoursChart hours={r?.hours ?? []} T={T} />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <Breakdown title={T.dashDevices} rows={r?.devices ?? []} T={T}
+                     label={k => ({ ios: 'iPhone', android: 'Android', desktop: T.dashComputer } as Record<string, string>)[k] ?? k} />
+          <Breakdown title={T.dashSources} rows={r?.sources ?? []} T={T}
+                     label={k => ({
+                       table: T.dashSrcTable, qr: T.dashSrcQr, direct: T.dashSrcDirect, instagram: 'Instagram',
+                       facebook: 'Facebook', google: 'Google', tiktok: 'TikTok', web: T.dashSrcWeb,
+                     } as Record<string, string>)[k] ?? k} />
+          <Breakdown title={T.dashPhoneLang} rows={r?.langs ?? []} T={T}
+                     label={k => langName(k, lang)} />
+        </div>
+
+        {f(r, 'embed_view') > 0 && (
           <div className="card p-5">
             <div className="flex items-baseline gap-2 mb-4 flex-wrap">
               <h2 className="text-sm font-semibold">{T.dashWebsite}</h2>
@@ -240,36 +281,27 @@ export default function DashboardPage() {
                 .map(([label, name]) => (
                   <div key={name}>
                     <div className="text-xs" style={{ color: 'var(--dim)' }}>{label}</div>
-                    <div className="text-2xl font-bold mt-0.5" style={{ fontVariantNumeric: 'normal' }}>
-                      {fmt(at(funnel, name), lang)}
-                    </div>
+                    <div className="text-2xl font-bold mt-0.5" style={{ fontVariantNumeric: 'normal' }}>{fmt(f(r, name), lang)}</div>
                   </div>
                 ))}
             </div>
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="card p-5 min-w-0">
-            <div className="flex items-baseline gap-2 mb-4">
-              <h2 className="text-sm font-semibold">{T.dashMostOpened}</h2>
-              <span className="text-xs ml-auto" style={{ color: 'var(--dim)' }}>{T.dashOpens3d} · AR</span>
-            </div>
-            <RankBars rows={(data?.items ?? []).map(r => ({
-              key: r.item_id, label: r.name, value: Number(r.opens), extra: Number(r.ar),
-            }))} empty={['—', '—', '—']} />
+        <div className="grid gap-4 lg:grid-cols-5">
+          <div className="card p-5 lg:col-span-3 min-w-0">
+            <h2 className="text-sm font-semibold mb-4">{T.dashMostOpened}</h2>
+            <DishTable items={r?.items ?? []} T={T} secs={secs} />
             <p className="text-xs mt-4" style={{ color: 'var(--dim)' }}>{T.dashWorthBuilding}</p>
           </div>
-
-          <div className="card p-5">
+          <div className="card p-5 lg:col-span-2 min-w-0">
             <div className="flex items-baseline gap-2 mb-4">
               <h2 className="text-sm font-semibold">{T.dashByTable}</h2>
-              <span className="text-xs ml-auto" style={{ color: 'var(--dim)' }}>{T.dashDiners} · AR</span>
+              <span className="text-xs ml-auto" style={{ color: 'var(--dim)' }}>{T.dashDiners}</span>
             </div>
-            <RankBars rows={(data?.tables ?? []).map(r => ({
-              key: r.table_no,
-              label: r.table_no === '—' ? T.dashNoTableRow : text(T.shareTableN, { n: r.table_no }),
-              value: Number(r.sessions), extra: Number(r.ar), muted: r.table_no === '—',
+            <RankBars rows={(r?.tables ?? []).map(t => ({
+              key: t.t, value: Number(t.v), extra: Number(t.ar), muted: t.t === '—',
+              label: t.t === '—' ? T.dashNoTableRow : text(T.shareTableN, { n: t.t }),
             }))} empty={[text(T.shareTableN, { n: 1 }), text(T.shareTableN, { n: 2 }), T.dashNoTableRow]} />
             <p className="text-xs mt-4" style={{ color: 'var(--dim)' }}>{T.dashFromTableCodes}</p>
           </div>
@@ -284,11 +316,53 @@ type Dict = ReturnType<typeof useLang>[0]
 const fmt = (n: number, lang: string) =>
   new Intl.NumberFormat(lang === 'ka' ? 'ka-GE' : 'en-US', { notation: n >= 10000 ? 'compact' : 'standard' }).format(n)
 
-/** Label, value, and the change against the period before. The arrow and the sign carry
- *  the direction, so it never rests on green-versus-red alone. */
-function StatTile({ label, value, sub, before, rangeLabel, T, lang }: {
-  label: string; value: number; sub: string | null; before: number | null
-  rangeLabel: string; T: Dict; lang: string
+function formatSecs(s: number | null | undefined, T: Dict) {
+  if (s == null || !Number.isFinite(Number(s))) return '—'
+  const v = Math.round(Number(s))
+  if (v < 60) return `${v}${T.dashSecShort}`
+  const m = Math.floor(v / 60), r = v % 60
+  return r ? `${m}${T.dashMinShort} ${r}${T.dashSecShort}` : `${m}${T.dashMinShort}`
+}
+
+function langName(code: string, ui: string) {
+  if (code === '?') return code
+  try {
+    return new Intl.DisplayNames([ui === 'ka' ? 'ka' : 'en'], { type: 'language' }).of(code) || code
+  } catch { return code }
+}
+
+function describeWindow(w: Win, p: Preset, T: Dict, locale: string) {
+  if (p === 'today') return T.dashToday
+  if (p === 'yesterday') return `${T.dashYesterday}, ${w.from.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' })}`
+  const d = (x: Date) => x.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+  return `${d(w.from)} – ${d(new Date(w.to.getTime() - 1))}`
+}
+
+function Seg({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} aria-pressed={on}
+            className="px-3 py-1.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap"
+            style={{ background: on ? 'var(--card)' : 'transparent', color: on ? 'var(--text)' : 'var(--dim)',
+                     boxShadow: on ? 'var(--shadow)' : 'none' }}>
+      {children}
+    </button>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="eyebrow mb-2">{title}</h2>
+      {children}
+    </section>
+  )
+}
+
+/** Label, value, and the change against the window before. Arrow and sign carry the
+ *  direction, so it never rests on green-versus-red alone. */
+function StatTile({ label, value, display, sub, note, before, prevLabel, lang }: {
+  label: string; value: number; display?: string; sub?: string | null; note?: string | null
+  before: number | null; prevLabel: string; lang: string
 }) {
   let delta: { text: string; up: boolean; flat: boolean } | null = null
   if (before !== null && before > 0) {
@@ -296,36 +370,32 @@ function StatTile({ label, value, sub, before, rangeLabel, T, lang }: {
     delta = { text: `${d > 0 ? '+' : ''}${d}%`, up: d > 0, flat: d === 0 }
   }
   return (
-    <div className="card p-4">
+    <div className="card p-4 flex flex-col">
       <div className="text-xs" style={{ color: 'var(--dim)' }}>{label}</div>
       <div className="text-3xl font-bold mt-1 tracking-tight" style={{ fontVariantNumeric: 'normal' }}>
-        {fmt(value, lang)}
+        {display ?? fmt(value, lang)}
       </div>
       <div className="text-xs mt-1 min-h-[1rem]" style={{ color: 'var(--dim)' }}>{sub}</div>
-      <div className="text-xs mt-2 flex items-center gap-1.5 flex-wrap">
+      {note && <div className="text-[11px] mt-1" style={{ color: 'var(--dim)', opacity: 0.8 }}>{note}</div>}
+      <div className="text-xs mt-auto pt-2 flex items-center gap-1.5 flex-wrap">
         {delta ? (
           <>
             <span className="font-semibold"
                   style={{ color: delta.flat ? 'var(--dim)' : delta.up ? 'var(--success)' : 'var(--danger)' }}>
               {delta.flat ? '→' : delta.up ? '▲' : '▼'} {delta.text}
             </span>
-            <span style={{ color: 'var(--dim)' }}>{text(T.dashVsPrev, { range: rangeLabel })}</span>
+            <span style={{ color: 'var(--dim)' }}>{prevLabel}</span>
           </>
-        ) : (
-          // Said once, in the header, rather than four times here.
-          <span>{' '}</span>
-        )}
+        ) : <span>{' '}</span>}
       </div>
     </div>
   )
 }
 
-/** Visitors and 3D opens over time. One scale (both are counts), a hairline grid, the
- *  visitors line with a 10% wash under it, a crosshair that snaps to the nearest bucket,
- *  and a table view for anyone who would rather read numbers. */
-function TrendChart({ points, minutes, now, T, lang }: {
-  points: Point[]; minutes: number; now: number; T: Dict; lang: string
-}) {
+/** Visitors and 3D opens over the window. Buckets come back as wall-clock times in the
+ *  owner's zone; every empty bucket is drawn as zero - skipping them drew a quiet week as
+ *  a busy one. One scale, crosshair tooltip, and a table view. */
+function TrendChart({ report, win, T, locale }: { report: Report | null; win: Win | null; T: Dict; locale: string }) {
   const box = useRef<HTMLDivElement>(null)
   const [w, setW] = useState(640)
   const [hover, setHover] = useState<number | null>(null)
@@ -337,49 +407,56 @@ function TrendChart({ points, minutes, now, T, lang }: {
     const ro = new ResizeObserver(([e]) => setW(Math.max(280, Math.round(e.contentRect.width))))
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [asTable])
 
-  // Every bucket in the range, empty ones as zero. Skipping them drew a quiet week as a
-  // busy one - five bars side by side with the empty days between them simply gone.
+  const unit = report?.unit ?? 'day'
   const series = useMemo(() => {
-    const step = unitMs(minutes)
-    const byT = new Map(points.map(p => [Math.floor(Date.parse(p.bucket) / step) * step,
-      { v: Number(p.sessions), o: Number(p.opens) }]))
-    if (!now) return []
-    const end = Math.floor(now / step) * step
-    const start = Math.floor((now - minutes * 60_000) / step) * step
+    if (!win || !report) return []
+    const trunc = (d: Date) => {
+      const x = new Date(d)
+      if (unit === 'day') x.setHours(0, 0, 0, 0)
+      else if (unit === 'hour') x.setMinutes(0, 0, 0)
+      else x.setSeconds(0, 0)
+      return x
+    }
+    // "2026-09-18T00:00:00", no zone: parsed as local time, which is the zone it was
+    // bucketed in (the browser's, passed to `analytics()`).
+    const byT = new Map(report.series.map(pt => [new Date(pt.b).getTime(), { v: Number(pt.v), o: Number(pt.o) }]))
     const out: { t: number; v: number; o: number }[] = []
-    for (let t = start; t <= end; t += step) out.push({ t, ...(byT.get(t) ?? { v: 0, o: 0 }) })
+    for (let d = trunc(win.from); d < win.to; ) {
+      out.push({ t: d.getTime(), ...(byT.get(d.getTime()) ?? { v: 0, o: 0 }) })
+      d = new Date(d)
+      if (unit === 'day') d.setDate(d.getDate() + 1)
+      else if (unit === 'hour') d.setHours(d.getHours() + 1)
+      else d.setMinutes(d.getMinutes() + 1)
+      if (out.length > 1500) break
+    }
     return out
-  }, [points, minutes, now])
+  }, [report, win, unit])
 
   const H = 200, padL = 36, padR = 12, padT = 12, padB = 26
-  const peak = Math.max(1, ...series.map(p => Math.max(p.v, p.o)))
+  const peak = Math.max(1, ...series.map(pt => Math.max(pt.v, pt.o)))
   const niceMax = (() => {
-    const pow = 10 ** Math.floor(Math.log10(peak))
-    const n = peak / pow
+    const pow = 10 ** Math.floor(Math.log10(peak)); const n = peak / pow
     return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * pow
   })()
   const ticks = [0, niceMax / 2, niceMax]
   const x = (i: number) => padL + (series.length <= 1 ? 0 : (i / (series.length - 1)) * (w - padL - padR))
   const y = (v: number) => padT + (1 - v / niceMax) * (H - padT - padB)
-  const path = (k: 'v' | 'o') => series.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join('')
-  const area = `${path('v')}L${x(series.length - 1)},${y(0)}L${x(0)},${y(0)}Z`
-
-  const locale = lang === 'ka' ? 'ka-GE' : 'en-GB'
+  const path = (k: 'v' | 'o') => series.map((pt, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(pt[k]).toFixed(1)}`).join('')
+  const area = series.length ? `${path('v')}L${x(series.length - 1)},${y(0)}L${x(0)},${y(0)}Z` : ''
   const label = (t: number) => {
     const d = new Date(t)
-    return minutes <= 4320
-      ? d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
-      : d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+    return unit === 'day'
+      ? d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+      : d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
   }
   const xTicks = series.length ? [0, Math.floor((series.length - 1) / 2), series.length - 1] : []
   const hp = hover !== null ? series[hover] : null
-  const peakVisitors = Math.max(0, ...series.map(p => p.v))
 
   function onMove(e: React.PointerEvent<SVGSVGElement>) {
-    const r = e.currentTarget.getBoundingClientRect()
-    const px = ((e.clientX - r.left) / r.width) * w
+    const rect = e.currentTarget.getBoundingClientRect()
+    const px = ((e.clientX - rect.left) / rect.width) * w
     const i = Math.round(((px - padL) / (w - padL - padR)) * (series.length - 1))
     setHover(Math.max(0, Math.min(series.length - 1, i)))
   }
@@ -388,46 +465,36 @@ function TrendChart({ points, minutes, now, T, lang }: {
     <div>
       <div className="flex items-center gap-4 flex-wrap mb-3">
         <h2 className="text-sm font-semibold mr-auto">{T.dashVisitsOverTime}</h2>
-        {/* Legend: line keys, text in text colour - identity is never colour alone. */}
-        <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--dim)' }}>
-          <span className="inline-block w-4 h-[2px] rounded" style={{ background: 'var(--viz-1)' }} />{T.dashVisitors}
-        </span>
-        <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--dim)' }}>
-          <span className="inline-block w-4 h-[2px] rounded" style={{ background: 'var(--viz-2)' }} />{T.dashOpens3d}
-        </span>
+        <Key color="var(--viz-1)" label={T.dashVisitors} />
+        <Key color="var(--viz-2)" label={T.dashOpens3d} />
         <button className="text-xs underline" style={{ color: 'var(--dim)' }} onClick={() => setAsTable(t => !t)}>
           {asTable ? T.dashShowChart : T.dashShowTable}
         </button>
       </div>
-
       {asTable ? (
         <div className="table-scroll max-h-72 overflow-y-auto">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs" style={{ color: 'var(--dim)' }}>
-                <th className="text-left py-1.5">{T.dashTime}</th>
-                <th className="text-right py-1.5">{T.dashVisitors}</th>
-                <th className="text-right py-1.5">{T.dashOpens3d}</th>
-              </tr>
-            </thead>
+            <thead><tr className="text-xs" style={{ color: 'var(--dim)' }}>
+              <th className="text-left py-1.5">{T.dashTime}</th>
+              <th className="text-right py-1.5">{T.dashVisitors}</th>
+              <th className="text-right py-1.5">{T.dashOpens3d}</th>
+            </tr></thead>
             <tbody>
-              {[...series].reverse().map(p => (
-                <tr key={p.t} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td className="py-1.5">{label(p.t)}</td>
-                  <td className="py-1.5 text-right">{p.v}</td>
-                  <td className="py-1.5 text-right">{p.o}</td>
+              {[...series].reverse().map(pt => (
+                <tr key={pt.t} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td className="py-1.5">{label(pt.t)}</td>
+                  <td className="py-1.5 text-right">{pt.v}</td>
+                  <td className="py-1.5 text-right">{pt.o}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       ) : (
-        // `width: 100%` on the svg, not `width={w}`: a fixed width set before the first
-        // measurement pushed a phone layout 250px past the screen edge, and the observer
-        // then measured the overflow it had caused.
+        // `width: 100%`, not `width={w}`: a fixed width before the first measurement
+        // pushed a phone layout past the screen edge.
         <div ref={box} className="relative w-full min-w-0">
-          <svg width="100%" height={H} viewBox={`0 0 ${w} ${H}`} role="img"
-               aria-label={`${T.dashVisitsOverTime}: ${text(T.dashPeak, { n: peakVisitors })}`}
+          <svg width="100%" height={H} viewBox={`0 0 ${w} ${H}`} role="img" aria-label={T.dashVisitsOverTime}
                onPointerMove={onMove} onPointerLeave={() => setHover(null)}
                style={{ display: 'block', touchAction: 'pan-y' }}>
             {ticks.map(tv => (
@@ -439,7 +506,7 @@ function TrendChart({ points, minutes, now, T, lang }: {
               </g>
             ))}
             {xTicks.map((i, k) => (
-              <text key={i} x={x(i)} y={H - 6} fontSize={11} fill="var(--dim)"
+              <text key={`${i}-${k}`} x={x(i)} y={H - 6} fontSize={11} fill="var(--dim)"
                     textAnchor={k === 0 ? 'start' : k === xTicks.length - 1 ? 'end' : 'middle'}>
                 {label(series[i].t)}
               </text>
@@ -447,10 +514,8 @@ function TrendChart({ points, minutes, now, T, lang }: {
             {series.length > 1 && (
               <>
                 <path d={area} fill="var(--viz-1)" opacity={0.1} />
-                <path d={path('v')} fill="none" stroke="var(--viz-1)" strokeWidth={2}
-                      strokeLinejoin="round" strokeLinecap="round" />
-                <path d={path('o')} fill="none" stroke="var(--viz-2)" strokeWidth={2}
-                      strokeLinejoin="round" strokeLinecap="round" />
+                <path d={path('v')} fill="none" stroke="var(--viz-1)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+                <path d={path('o')} fill="none" stroke="var(--viz-2)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
               </>
             )}
             {hp && (
@@ -464,18 +529,11 @@ function TrendChart({ points, minutes, now, T, lang }: {
             )}
           </svg>
           {hp && (
-            <div className="absolute top-0 pointer-events-none card px-3 py-2 text-xs shadow-2xl"
-                 style={{ left: Math.min(Math.max(0, x(hover!) + 12), w - 150), minWidth: 138 }}>
+            <Tip left={Math.min(Math.max(0, (x(hover!) / w) * 100), 80)}>
               <div style={{ color: 'var(--dim)' }}>{label(hp.t)}</div>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="inline-block w-3 h-[2px]" style={{ background: 'var(--viz-1)' }} />
-                <b className="text-sm">{hp.v}</b><span style={{ color: 'var(--dim)' }}>{T.dashVisitors}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-3 h-[2px]" style={{ background: 'var(--viz-2)' }} />
-                <b className="text-sm">{hp.o}</b><span style={{ color: 'var(--dim)' }}>{T.dashOpens3d}</span>
-              </div>
-            </div>
+              <TipRow color="var(--viz-1)" value={hp.v} label={T.dashVisitors} />
+              <TipRow color="var(--viz-2)" value={hp.o} label={T.dashOpens3d} />
+            </Tip>
           )}
         </div>
       )}
@@ -483,11 +541,80 @@ function TrendChart({ points, minutes, now, T, lang }: {
   )
 }
 
-/** Each step as a bar of the visitors, with two percentages: of everyone, and of the step
- *  just before - the second is where the drop-off actually is. */
-function FunnelBars({ steps, visits, T }: {
-  steps: { label: string; value: number }[]; visits: number; T: Dict
-}) {
+/** Visitors by hour of the day, on the owner's clock. The question behind it is staffing
+ *  and timing: when do diners actually open the menu, and when would a promotion land. */
+function HoursChart({ hours, T }: { hours: { h: number; v: number }[]; T: Dict }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const by = new Map(hours.map(h => [Number(h.h), Number(h.v)]))
+  const vals = Array.from({ length: 24 }, (_, h) => by.get(h) ?? 0)
+  const peak = Math.max(1, ...vals)
+  const top = vals.indexOf(Math.max(...vals))
+  const any = vals.some(v => v > 0)
+  const hh = (h: number) => `${String(h).padStart(2, '0')}:00`
+  return (
+    <div>
+      <div className="flex items-baseline gap-2 mb-4 flex-wrap">
+        <h2 className="text-sm font-semibold mr-auto">{T.dashBusiestHours}</h2>
+        {any && <span className="text-xs" style={{ color: 'var(--dim)' }}>
+          {text(T.dashPeakHour, { h: `${hh(top)}–${hh((top + 1) % 24)}` })}
+        </span>}
+      </div>
+      <div className="relative">
+        <div className="flex items-end gap-[2px] h-28" onPointerLeave={() => setHover(null)}>
+          {vals.map((v, h) => (
+            // The whole column is the hit target, not the painted bar - a 2 px sliver
+            // for a quiet hour is unhittable otherwise.
+            <div key={h} className="flex-1 h-full flex items-end justify-center cursor-default"
+                 onPointerEnter={() => setHover(h)} tabIndex={0} onFocus={() => setHover(h)} onBlur={() => setHover(null)}
+                 aria-label={`${hh(h)} · ${v} ${T.dashVisitors}`}>
+              <div className="w-full rounded-t transition-all"
+                   style={{ maxWidth: 24, height: `${v ? Math.max(4, (v / peak) * 100) : 2}%`,
+                            background: v ? 'var(--viz-1)' : 'var(--card2)',
+                            opacity: hover === null || hover === h ? 1 : 0.55 }} />
+            </div>
+          ))}
+        </div>
+        {hover !== null && (
+          <Tip left={Math.min((hover / 24) * 100, 82)} top={-8}>
+            <div style={{ color: 'var(--dim)' }}>{hh(hover)}–{hh((hover + 1) % 24)}</div>
+            <TipRow color="var(--viz-1)" value={vals[hover]} label={T.dashVisitors} />
+          </Tip>
+        )}
+      </div>
+      <div className="flex justify-between text-[11px] mt-1.5" style={{ color: 'var(--dim)' }}>
+        {[0, 6, 12, 18, 23].map(t => <span key={t}>{hh(t)}</span>)}
+      </div>
+    </div>
+  )
+}
+
+function Key({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--dim)' }}>
+      <span className="inline-block w-4 h-[2px] rounded" style={{ background: color }} />{label}
+    </span>
+  )
+}
+
+function Tip({ left, top = 0, children }: { left: number; top?: number; children: React.ReactNode }) {
+  return (
+    <div className="absolute pointer-events-none card px-3 py-2 text-xs shadow-2xl"
+         style={{ left: `${left}%`, top, minWidth: 138, zIndex: 5 }}>
+      {children}
+    </div>
+  )
+}
+
+function TipRow({ color, value, label }: { color: string; value: number; label: string }) {
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <span className="inline-block w-3 h-[2px]" style={{ background: color }} />
+      <b className="text-sm">{value}</b><span style={{ color: 'var(--dim)' }}>{label}</span>
+    </div>
+  )
+}
+
+function FunnelBars({ steps, visits, T }: { steps: { label: string; value: number }[]; visits: number; T: Dict }) {
   return (
     <div className="grid gap-3.5">
       {steps.map((s, i) => {
@@ -498,9 +625,7 @@ function FunnelBars({ steps, visits, T }: {
             <div className="flex items-baseline gap-2 mb-1.5 text-sm">
               <span className="flex-1 truncate">{s.label}</span>
               <b>{s.value.toLocaleString()}</b>
-              <span className="text-xs w-10 text-right" style={{ color: 'var(--dim)' }}>
-                {i === 0 ? '' : `${Math.round(ofAll)}%`}
-              </span>
+              <span className="text-xs w-10 text-right" style={{ color: 'var(--dim)' }}>{i === 0 ? '' : `${Math.round(ofAll)}%`}</span>
             </div>
             <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--card2)' }}>
               <div className="h-full rounded-full transition-all"
@@ -519,7 +644,7 @@ function FunnelBars({ steps, visits, T }: {
   )
 }
 
-function LiftCard({ lift, T }: { lift: Lift | null; T: Dict }) {
+function LiftCard({ lift, T }: { lift: Report['lift'] | null; T: Dict }) {
   const a = Number(lift?.with_3d ?? 0)
   const b = Number(lift?.without_3d ?? 0)
   const ready = !!lift && Number(lift.dishes_3d) > 0 && Number(lift.dishes_plain) > 0 && a > 0 && b > 0
@@ -528,14 +653,14 @@ function LiftCard({ lift, T }: { lift: Lift | null; T: Dict }) {
   return (
     <div className="flex-1 flex flex-col">
       {ready && (
-        <div className="text-5xl font-bold tracking-tight" style={{ fontVariantNumeric: 'normal' }}>
+        <div className="text-4xl font-bold tracking-tight" style={{ fontVariantNumeric: 'normal' }}>
           {`${x >= 10 ? Math.round(x) : x.toFixed(1)}×`}
         </div>
       )}
-      <p className={ready ? 'text-sm mt-2' : 'text-sm'} style={{ color: ready ? 'var(--text)' : 'var(--dim)' }}>
+      <p className={ready ? 'text-sm mt-1' : 'text-sm'} style={{ color: ready ? 'var(--text)' : 'var(--dim)' }}>
         {ready ? text(T.dashLiftX, { x: x.toFixed(1) }) : T.dashLiftNone}
       </p>
-      <div className="grid gap-2 mt-auto pt-5">
+      <div className="grid gap-2 mt-4">
         {[['3D', a, 'var(--viz-2)'], [T.dashPhotoDish, b, 'var(--viz-1)']].map(([k, v, c]) => (
           <div key={k as string} className="flex items-center gap-2 text-xs">
             <span className="w-12 shrink-0 truncate" style={{ color: 'var(--dim)' }}>{k}</span>
@@ -545,18 +670,90 @@ function LiftCard({ lift, T }: { lift: Lift | null; T: Dict }) {
             <span className="w-10 text-right font-semibold">{(v as number).toFixed(1)}</span>
           </div>
         ))}
-        {lift && (
-          <p className="text-[11px]" style={{ color: 'var(--dim)' }}>
-            {text(T.dashLiftDetail, { a: a.toFixed(1), b: b.toFixed(1) })}
-          </p>
-        )}
       </div>
     </div>
   )
 }
 
-/** Ranked horizontal bars: the name, a thin bar scaled to the leader, the value at its
- *  end. `extra` is the AR count, as text beside it - a second bar would be a second scale. */
+/** Share of visitors per kind. Old visits have no device/source/language and show as
+ *  "not recorded" rather than being guessed or hidden. */
+function Breakdown({ title, rows, label, T }: { title: string; rows: KV[]; label: (k: string) => string; T: Dict }) {
+  // Shares are of the visits that HAVE this detail. Dividing by every visit read
+  // "iPhone 3%" when the one recorded visit was an iPhone and 38 older ones had no device.
+  const known = rows.filter(r => r.k !== '?')
+  const total = known.reduce((s, r) => s + Number(r.v), 0)
+  const unknown = rows.find(r => r.k === '?')
+  return (
+    <div className="card p-5 min-w-0">
+      <h2 className="text-sm font-semibold mb-4">{title}</h2>
+      {known.length === 0 ? (
+        <p className="text-sm" style={{ color: 'var(--dim)' }}>{T.dashRecordingFrom}</p>
+      ) : (
+        <div className="grid gap-3">
+          {known.slice(0, 6).map(r => {
+            const share = total ? (Number(r.v) / total) * 100 : 0
+            return (
+              <div key={r.k}>
+                <div className="flex items-baseline gap-2 text-sm mb-1">
+                  <span className="flex-1 truncate">{label(r.k)}</span>
+                  <b>{Math.round(share)}%</b>
+                  <span className="text-xs w-8 text-right" style={{ color: 'var(--dim)' }}>{r.v}</span>
+                </div>
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--card2)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${share}%`, background: 'var(--viz-1)' }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {unknown && known.length > 0 && (
+        <p className="text-[11px] mt-3" style={{ color: 'var(--dim)' }}>{text(T.dashNotRecorded, { n: unknown.v })}</p>
+      )}
+    </div>
+  )
+}
+
+/** The dishes, with everything that says whether each one earns its 3D: how many people
+ *  opened it, how long they looked, how many took it to AR, how many added it. */
+function DishTable({ items, T, secs }: { items: Item[]; T: Dict; secs: (s: number | null) => string }) {
+  if (!items.length) return <RankBars rows={[]} empty={['—', '—', '—']} />
+  const top = Math.max(1, ...items.map(i => Number(i.opens)))
+  return (
+    <div className="table-scroll">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs" style={{ color: 'var(--dim)' }}>
+            <th className="text-left py-1.5 font-normal">#</th>
+            <th className="text-left py-1.5 font-normal">{T.dashDish}</th>
+            <th className="text-right py-1.5 font-normal">{T.dashOpens3d}</th>
+            <th className="text-right py-1.5 font-normal hidden sm:table-cell">{T.dashLooked}</th>
+            <th className="text-right py-1.5 font-normal">AR</th>
+            <th className="text-right py-1.5 font-normal hidden sm:table-cell">{T.dashAdds}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((it, i) => (
+            <tr key={it.id ?? i} style={{ borderTop: '1px solid var(--border)' }}>
+              <td className="py-2 pr-2 text-xs" style={{ color: 'var(--dim)' }}>{i + 1}</td>
+              <td className="py-2 pr-3 min-w-[9rem]">
+                <div className="truncate max-w-[16rem]">{it.name}</div>
+                <div className="h-1 mt-1 rounded-full overflow-hidden" style={{ background: 'var(--card2)' }}>
+                  <div className="h-full rounded-full" style={{ width: `${(Number(it.opens) / top) * 100}%`, background: 'var(--viz-2)' }} />
+                </div>
+              </td>
+              <td className="py-2 text-right font-semibold">{it.opens}</td>
+              <td className="py-2 pl-3 text-right hidden sm:table-cell">{secs(it.avg_3d_s)}</td>
+              <td className="py-2 pl-3 text-right">{it.ar || ''}</td>
+              <td className="py-2 pl-3 text-right hidden sm:table-cell">{it.adds || ''}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function RankBars({ rows, empty }: {
   rows: { key: string; label: string; value: number; extra: number; muted?: boolean }[]
   empty: string[]
@@ -582,9 +779,7 @@ function RankBars({ rows, empty }: {
             <span className="w-5 text-xs shrink-0" style={{ color: 'var(--dim)' }}>{i + 1}</span>
             <span className="flex-1 truncate" style={{ color: r.muted ? 'var(--dim)' : 'var(--text)' }}>{r.label}</span>
             <b>{r.value.toLocaleString()}</b>
-            <span className="text-xs w-12 text-right" style={{ color: 'var(--dim)' }}>
-              {r.extra > 0 ? `${r.extra} AR` : ''}
-            </span>
+            <span className="text-xs w-12 text-right" style={{ color: 'var(--dim)' }}>{r.extra > 0 ? `${r.extra} AR` : ''}</span>
           </div>
           <div className="h-1.5 rounded-full overflow-hidden ml-7" style={{ background: 'var(--card2)' }}>
             <div className="h-full rounded-full" style={{ width: `${(r.value / top) * 100}%`, background: 'var(--viz-1)' }} />

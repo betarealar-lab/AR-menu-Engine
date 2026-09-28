@@ -36,7 +36,27 @@
     //
     // First, before the hero and before the viewer, because it must survive a diner who
     // closes the tab immediately - which is itself a number worth having.
-    try { window.track("view"); } catch (e) { /* never let a count break a menu */ }
+    // With three facts a restaurant cannot get anywhere else (2026-09-28): the kind of
+    // phone, where the diner came from, and the language THEIR PHONE is set to - which
+    // is not the language they picked on the menu, and is the tourist signal.
+    // Nothing identifying: no user agent string, no full referrer, no IP.
+    try {
+      var ua = navigator.userAgent || "";
+      var d = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+        ? "ios" : /Android/.test(ua) ? "android" : "desktop";
+      var src = "direct";
+      if (/[?&]t=\d/.test(location.search)) src = "table";
+      else if (/[?&]q=1(&|$)/.test(location.search)) src = "qr";
+      else if (document.referrer) {
+        var h = "";
+        try { h = new URL(document.referrer).hostname; } catch (_) { h = ""; }
+        src = /instagram/.test(h) ? "instagram" : /facebook|fb\./.test(h) ? "facebook"
+          : /google/.test(h) ? "google" : /tiktok/.test(h) ? "tiktok"
+          : h && h !== location.hostname ? "web" : "direct";
+      }
+      var pl = String((navigator.language || "").slice(0, 2)).toLowerCase();
+      window.track("view", null, { d: d, src: src, pl: /^[a-z]{2}$/.test(pl) ? pl : "" });
+    } catch (e) { /* never let a count break a menu */ }
     // hero.js and viewer.js both read the global config the platform sets.
     window._themeConfig = Object.assign(window._themeConfig || {}, cfg);
 

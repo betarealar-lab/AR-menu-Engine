@@ -564,7 +564,13 @@ def main() -> int:
                       ("item_view", "a dish opened in 3D"),
                       ("ar_tap", "a diner asking for AR")]:
         check(f"{name} is translated ({why})", name in mapped)
-    check("the menu actually fires a view on load", 'window.track("view")' in bundle)
+    # A prefix, not the whole call: since 0032 the view carries its context (device,
+    # source, phone language) as a third argument.
+    check("the menu actually fires a view on load", 'window.track("view"' in bundle)
+    # ...and the two time events the Analytics screen's time cards are built from.
+    check("the menu reports visible time on leaving", 'window.track("leave"' in bundle)
+    check("closing a 3D dish is counted, with its duration",
+          'modal_close: "item_close"' in bundle and "duration_ms" in bundle)
     # The sink's whitelist is the other half: a name translated to something `record_events`
     # refuses is dropped one layer further down, which looks identical from the screen.
     # The NEWEST migration that redefines the whitelist, not 0009 - it has been widened
