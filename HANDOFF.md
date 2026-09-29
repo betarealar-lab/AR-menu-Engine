@@ -26,8 +26,8 @@ Shipped after the developer console, all deployed (menu + admin), migrations 003
 - Upload model: optimise OR as-is (lib/asis/), 8 MiB multipart parts (Next proxy buffers 10 MB).
 - 3D modal button = AR only (`_modalCanAR`), hidden when the device cannot do AR.
 
-**Open / not done:** engine still on Temo's PC (down most of 09-27/28); hero videos >10 MB fail on
-/api/asset (should use multipart); printed QRs point at workers.dev (decide betareal.ge first);
+**Open / not done:** engine still on Temo's PC (down most of 09-27/28); hero videos are capped at 6 MB on
+screen AND server (Temo: never upload a 10 MB video - speed first; NOT a bug to "fix" with multipart); printed QRs point at workers.dev (decide betareal.ge first);
 BetaReal-owned model pages record no analytics (events need a tenant); fal adapter written, off;
 menu import unbuilt (parked); MIGRATION.md questions §9 unanswered.
 

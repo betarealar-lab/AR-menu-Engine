@@ -41,7 +41,10 @@ const RULES: Record<Kind, { ext: string; type: string; ours: boolean; max: numbe
   logo:  { ext: 'webp', type: 'image/webp',         ours: false, max: 2  },
   glb:   { ext: 'glb',  type: 'model/gltf-binary',  ours: true,  max: 40 },
   usdz:  { ext: 'usdz', type: 'model/vnd.usdz+zip', ours: true,  max: 40 },
-  video: { ext: 'mp4',  type: 'video/mp4',          ours: true,  max: 60 },
+  // 6 MB, the same ceiling the theme editor enforces (HERO_VIDEO_MAX_MB). It was 60 here, so
+  // the screen and the server disagreed. Temo, 2026-09-29: speed first - a 10 MB hero video
+  // should never be uploaded at all. The live ones are about 1.5 MB.
+  video: { ext: 'mp4',  type: 'video/mp4',          ours: true,  max: 6 },
 }
 
 /** Everything a restaurant uploads goes in ONE bucket, and it is the photos one.
