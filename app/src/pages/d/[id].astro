@@ -20,6 +20,7 @@
 // happens there. Without the loader, the button opens this page on its own, where it works.
 import { loadDish, decide, frameAncestors, ownOrigins, DISH_ID } from "../../lib/embed.js";
 import { envFrom } from "../../lib/env.js";
+import { inAppBrowser, isIOSUA, escapeHref, bouncePage } from "../../lib/inapp.js";
 
 export const prerender = false;
 
@@ -30,6 +31,12 @@ const theme = q.get("theme") === "dark" ? "dark" : "light";
 const loadWhen = ["tap", "eager"].includes(q.get("load") || "") ? q.get("load") : "visible";
 const showTitle = q.get("title") !== "0";
 const wantsAr = q.get("ar") === "1";
+// Instagram/Facebook's own browser: AR cannot run there, so the button leaves for the real
+// one (lib/inapp.js). `from` is the tag that comes back with it, so arrivals are counted.
+const ua = Astro.request.headers.get("user-agent") || "";
+const inApp = inAppBrowser(ua);
+const uaIOS = isIOSUA(ua);
+const from = (q.get("from") || "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 16);
 
 const notFound = (msg) => new Response(
   `<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex">` +
@@ -48,6 +55,13 @@ try {
 }
 if (!dish) return notFound("Dish not available");
 
+const pageUrl = Astro.url.origin + Astro.url.pathname;
+if (q.get("out") === "1") {
+  return new Response(bouncePage({ app: inApp, ios: uaIOS, pageUrl, lang: dish.lang }), {
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
+               "X-Robots-Tag": "noindex" } });
+}
+
 const env = envFrom(Astro.locals);
 const own = ownOrigins(env("PREVIEW_ORIGINS", "http://127.0.0.1:3001,http://localhost:3001"));
 const dest = (Astro.request.headers.get("sec-fetch-dest") || "").toLowerCase();
@@ -57,7 +71,7 @@ const { mode, restrict } = decide({ dish, dest, refererHost, own });
 
 const h = Astro.response.headers;
 h.set("Cache-Control", "private, max-age=60");
-h.set("Vary", "Referer, Sec-Fetch-Dest");
+h.set("Vary", "Referer, Sec-Fetch-Dest, User-Agent");
 h.set("X-Robots-Tag", "noindex");
 if (restrict) h.set("Content-Security-Policy", frameAncestors(restrict, own));
 
@@ -86,8 +100,11 @@ const boot = {
   id: dish.id, tenant: dish.tenant.id, mode, lang,
   glb: full ? abs(dish.glb) : "", usdz: full ? abs(dish.usdz) : "",
   arScale: dish.arScale, orbit: dish.orbit, load: loadWhen, wantsAr,
-  host: refererHost, t: T,
+  host: refererHost, t: T, inApp, from,
 };
+// Only the link page leaves; a frame has its own route to AR (embed.js / the new tab).
+const escape = full && inApp && dest !== "iframe"
+  ? escapeHref({ app: inApp, ios: uaIOS, pageUrl, lang }) : "";
 ---
 <!doctype html>
 <html lang={lang} data-theme={theme} data-mode={mode}>
@@ -140,6 +157,7 @@ const boot = {
              font-size: 14px; font-weight: 600; line-height: 1;
              background: var(--btn); color: var(--btnfg); cursor: pointer; white-space: nowrap;
              box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+      a.cta { text-decoration: none; display: inline-block; }
       .cta[hidden], .tap[hidden] { display: none; }
       .hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
               font-size: 12px; color: var(--dim); background: var(--chip); padding: 4px 10px;
@@ -171,7 +189,11 @@ const boot = {
         : <div class="empty">{dish.name}</div>}
       {showTitle && <div class="chip"><b>{dish.name}</b></div>}
       {full && <button class="tap" id="tap" type="button" hidden><span>{T.view}</span></button>}
-      {full && <button class="cta" id="cta" type="button" hidden>{T.ar}</button>}
+      {/* In Instagram's browser the button is a real LINK out - a tap on an <a>, not a
+          scripted jump, is what both escape schemes need (lib/inapp.js). */}
+      {full && (escape
+        ? <a class="cta" id="cta" href={escape} data-escape hidden>{T.ar}</a>
+        : <button class="cta" id="cta" type="button" hidden>{T.ar}</button>)}
       {full && <div class="hint gone" id="hint">{T.drag}</div>}
       <a class="mark" href={`${origin}/help/embed/`} target="_blank" rel="noopener">{T.by}</a>
     </div>
@@ -200,6 +222,8 @@ const boot = {
       function track(name, meta) {
         try {
           var m = { host: D.host || "", framed: framed, mode: D.mode };
+          if (D.inApp) m.app = D.inApp;
+          if (D.from) m.from = D.from;
           for (var k in meta || {}) m[k] = meta[k];
           var body = JSON.stringify({ tenant: D.tenant, session: session,
                                       events: [{ name: name, item: D.id, meta: m }] });
@@ -215,7 +239,8 @@ const boot = {
       var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
       var touch = (navigator.maxTouchPoints || 0) > 0 ||
                   (window.matchMedia && matchMedia("(any-pointer: coarse)").matches);
-      var canAR = touch && (isIOS ? !!D.usdz : true);
+      var escaping = !!(cta && cta.hasAttribute("data-escape"));
+      var canAR = touch && (escaping || (isIOS ? !!D.usdz : true));
       var standaloneUrl = location.origin + location.pathname + "?ar=1" + (D.lang ? "&lang=" + D.lang : "");
 
       // ── the viewer, on demand ───────────────────────────────────────────────────────
@@ -306,6 +331,9 @@ const boot = {
         setTimeout(function () { a.remove(); }, 1000);
       }
       function arTap() {
+        // Inside Instagram/Facebook: count it and let the link do the leaving - no
+        // preventDefault, the navigation IS the action. sendBeacon outlives the page.
+        if (escaping) { track("embed_ar", { via: "escape", stage: "tap" }); return; }
         if (isIOS) {
           if (framed) { track("embed_ar", { via: "newtab", stage: "tap" }); window.open(standaloneUrl, "_blank", "noopener"); }
           else { track("embed_ar", { via: "quicklook", stage: "tap" }); quickLook(); }
