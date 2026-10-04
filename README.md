@@ -39,6 +39,7 @@ diner's phone <── app/ (Astro Worker) <─┴──────────�
 
 | | |
 |---|---|
+| [docs/ROADMAP.md](docs/ROADMAP.md) | **current priorities: migrating the manual-scan clients here** |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | current state, environment traps, measurements, mistakes not to repeat |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | why things are the way they are, settled calls |
 | [docs/MENU-PLATFORM.md](docs/MENU-PLATFORM.md) | architecture of the self-serve menu |

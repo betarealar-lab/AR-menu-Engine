@@ -23,10 +23,12 @@ on BetaReal's own GitHub and Cloudflare accounts.
 
 ## Read before changing anything
 
-1. `docs/HANDOFF.md`: read the newest **STATE** block first. It covers live URLs, environment traps,
+1. `docs/ROADMAP.md`: what to work on now. Since 2026-10-04 that means migrating the manual-scan clients
+   from production, not new self-serve features.
+2. `docs/HANDOFF.md`: read the newest **STATE** block first. It covers live URLs, environment traps,
    and mistakes already made.
-2. `docs/DECISIONS.md` §9 and §13: what the product is. These are Temo's calls, so don't re-open them.
-3. The doc for the area you're touching: `MENU-PLATFORM.md` (menu), `EMBED.md` (embeds),
+3. `docs/DECISIONS.md` §9 and §13: what the product is. These are Temo's calls, so don't re-open them.
+4. The doc for the area you're touching: `MENU-PLATFORM.md` (menu), `EMBED.md` (embeds),
    `MIGRATION.md` (moving production restaurants here), `CUSTOMER.md` / `AUDIT.md`
    (owner experience and known defect classes), `RISKS.md`.
 
