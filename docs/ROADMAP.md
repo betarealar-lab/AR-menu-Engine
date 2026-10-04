@@ -26,26 +26,30 @@ restaurant at a time, measured parity, no 3D Studio for migrated restaurants
 
 ## 1 · An admin made for restaurants we scan for
 
-Design: **https://claude.ai/artifact/JrJxckaLd2GJfj8UcKDpgZ** (4 phone screens).
-The shell already hides the 3D Studio when `studio = false`. What's still wrong: Home
-pushes "Make a 3D model", a "Building" card and "Build these next" links into the locked
-Studio.
+Design: **https://claude.ai/artifact/JrJxckaLd2GJfj8UcKDpgZ** (desktop: Menu Editor,
+Analytics, Theme Editor). Temo, 2026-10-04: **keep production's admin panel elements.**
+Product decisions such as dish comparisons, plans and partner reports are the team's;
+don't design them in.
 
-- **Home** for `studio = false`: menu live + link + QR, the one-tap **sold-out** list,
-  "Your 3D dishes" strip, last 30 days in three numbers, and **Ask for a new dish**.
-- **3D dishes** replaces 3D Studio: plan usage (n of 5 live), dishes **being made** with
-  a status (Scanned → Building → Checking → Live), each live dish with views / AR
-  placements, its dish link & QR, and "Something looks off?" (reports to us).
-  Needs a production-status field on our side, set from the Library Studio / Upload.
-- **Ask for a new dish**: pick from their menu (sorted by diner interest), a visit
-  window, a note → a request row we see in `/dev` and act on. **Nothing is charged
-  from the screen**; extras are agreed on the call (Sales Kit v4).
-- **Results**: 3D dish vs its **twin** (same category, similar price, no 3D); the
-  funnel; the owner enters **monthly order counts** (counts only, no money), which is the
-  share-of-mix proof we have missed at MG and Ikigai; **Share with partners**, a read-only
-  link that answers "I'm just a manager, I'll ask the partners".
-- Our side: put a model straight onto a restaurant's dish from Upload (as-is or optimise)
-  and the Library Studio, and set its production status there.
+- **Same navigation as production:** Menu Editor, Theme Editor, Analytics, Change History,
+  Branches; restaurant picker; View Menu, EN/KA, light/dark and sign out in the footer.
+  No 3D Studio, setup wizard or "Make a model" for `studio = false`; today's Home
+  still pushes those and must not.
+- **Menu Editor** as production: Menu Items / Categories, Food / Drinks, search, the filters
+  (category, visibility, content, data quality), twin phone view, 360° spin, every item
+  field. A 3D dish shows "3D model by BetaReal"; AR scale and view angle are ours.
+- **Theme Editor** as production: Night, Day, Background, Fonts, Branding (logo, hero
+  gallery, hero video), Templates, Announcement, Page content, with a live preview, Reset
+  and the unsaved-changes guard.
+- **Analytics: unique visitors first, never sessions.** Production's restaurant numbers,
+  counted per person: unique visitors (and how many came back), people who opened 3D, put
+  a dish on the table, added to the basket, time on the menu and in 3D, AR-capable phones,
+  most opened / placed / added dishes, visitors per day, busiest hours, a per-dish table,
+  language and phone split. Phones only by default; one period filter sets every number.
+- **Gap: the rebuild cannot count unique visitors yet.** Its events carry only a per-tab
+  `session` (0009); production carries a persistent `visitor_id` (localStorage UUID).
+  Add `visitor_id` to the menu's events and the analytics functions, and carry
+  production's across in the import, before any restaurant moves.
 
 ## 2 · Parity gaps the rebuild must close first (`MIGRATION.md` §3)
 
