@@ -5,4 +5,5 @@ store/
 dataset/
 __pycache__/
 *.pyc
-category-map.html
+docs/
+tools/

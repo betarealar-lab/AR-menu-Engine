@@ -1,96 +1,62 @@
-# BetaReal Engine
+# BetaReal: self-serve 3D menus
 
-The image-to-3D layer behind one interface, plus a local bench for judging what comes out.
+A restaurant photographs a dish, gets a 3D model back, approves it, and diners see it in 3D
+and in AR on their own table from a QR code, with no app. This repo holds all of it: the engine that
+builds the models, the diner menu, and the admin panel the restaurant runs itself.
 
-Nothing here names a vendor except `engines/meshy.py`. Meshy today; self-hosted Hunyuan and
-the VGGT hybrid slot in as more entries in the registry. This is module #1 of the scanning
-app, not a throwaway — the app will call the same `Engine.generate()`.
+**Working on this repo? Read [AGENTS.md](AGENTS.md) first.** It has the rules, how to run things, the
+checks, and how changes ship. Then read the newest STATE block in [docs/HANDOFF.md](docs/HANDOFF.md).
 
-**New here (or a fresh session)? Read [HANDOFF.md](HANDOFF.md) first** - live state,
-environment gotchas, measurements not to re-derive, and mistakes already made. Then
-[ROADMAP.md](ROADMAP.md) for what to build next, [DECISIONS.md](DECISIONS.md) for why the
-engine works the way it does, and [COMPETITORS.md](COMPETITORS.md) for the market.
+## The pieces
 
-## Setup
-
-```bash
-pip install requests pillow
+```
+owner's phone ──> admin/ (Next) ──> Supabase ──> model_requests ──> engine (root *.py)
+                                        │                               │  Meshy -> optimise
+                                        v                               v  -> GLB + USDZ
+diner's phone <── app/ (Astro Worker) <─┴──────────── R2 (photos, models, catalogue)
 ```
 
-Create a key at <https://meshy.ai/settings/api> — it is shown once. Put it in `.env`:
+- **Engine.** `jobs.py` is a queue on R2, `pipeline.py` does generate → optimise, and `worker.py`
+  claims the work a small host can't handle. `engines/` holds the vendor adapters (Meshy on,
+  fal.ai written but off). Nothing outside `engines/` names a vendor.
+- **Menu (`app/`).** Pages are rendered at the edge with the restaurant's template inlined,
+  so there's no flash of a generic page. The 3D and AR code is ported verbatim from the
+  production platform.
+- **Admin (`admin/`).** Built phone-first: menu, theme, 3D Studio, analytics, dish QR codes,
+  and change history. Super admins also get `/dev`, the Library Studio, and Upload & optimise.
+- **Hand pipeline (`tools/model/`).** Fixes a model by hand when the automatic path isn't
+  good enough.
 
-```powershell
-Set-Content -Path .env -Value 'MESHY_API_KEY=msy_...' -Encoding ascii
-```
+## Live
 
-Use `-Encoding ascii`. PowerShell 5.1's `utf8` writes a BOM that attaches itself to
-`MESHY_API_KEY` and the line stops matching. `.env` is gitignored — never commit it,
-never put a key in client-side code.
+| | |
+|---|---|
+| menu | https://betareal-menu.betareal-ar.workers.dev |
+| admin | https://betareal-admin.betareal-ar.workers.dev |
+| Scan Studio | https://ar-menu-engine.onrender.com (internal, basic auth) |
+
+## Docs
+
+| | |
+|---|---|
+| [docs/HANDOFF.md](docs/HANDOFF.md) | current state, environment traps, measurements, mistakes not to repeat |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | why things are the way they are, settled calls |
+| [docs/MENU-PLATFORM.md](docs/MENU-PLATFORM.md) | architecture of the self-serve menu |
+| [docs/CUSTOMER.md](docs/CUSTOMER.md), [docs/AUDIT.md](docs/AUDIT.md) | the owner's experience, and the defect classes plus the checks that catch them |
+| [docs/EMBED.md](docs/EMBED.md) | dishes on other people's websites, and the dish link |
+| [docs/MIGRATION.md](docs/MIGRATION.md) | moving production restaurants here, one at a time (a plan, not run) |
+| [docs/RISKS.md](docs/RISKS.md), [docs/COMPETITORS.md](docs/COMPETITORS.md) | exposures on the live platform, and the market |
+| [tools/model/README.md](tools/model/README.md) | the hand model pipeline |
+| `docs/archive/` | superseded: the old roadmap, the Sep 7 rebuild post-mortem, the old handoff prompt |
+
+## Scan Studio (internal engine bench)
 
 ```bash
-python preflight.py        # confirms the key works, prints the exact request body
-```
-
-## Scan Studio
-
-```bash
+python preflight.py        # checks the Meshy key and R2, and prints the exact request body. Spends nothing
 python studio.py           # http://localhost:8765
+python runner.py --list    # engines and their credit cost; --go spends credits, so ask first
 ```
 
-**Nothing is read from your drive and no folder is watched.** Make a dish, drop four photos
-into the plate, run an engine, record a verdict. Frames land in `dataset/` on upload, so the
-same dish can be re-run against another engine later on byte-identical input.
-
-The browser downscales each photo to 2048px before upload — the same size the engine reduces
-it to anyway, so a 24 MB camera JPEG becomes about 1 MB and nothing is lost.
-
-**A variant is one angle strategy for one dish.** `ring-25`, `ring-45`, `three-plus-top`.
-The same dish shot four ways is four experiments, and which angles work is the open question
-the engine comparison cannot answer. See DECISIONS.md §4.
-
-**Frame order is semantic.** Slot 1 is the primary view — meshy-7 reconstructs from it first.
-Slots 2–4 are coverage. The front/right/back/left names are our discipline for even coverage;
-Meshy receives a plain ordered array, but Hunyuan3D-2mv takes explicitly named views, so
-keeping the convention now costs nothing and pays later.
-
-## Batch
-
-```bash
-python runner.py --list                    # engines and credit cost
-python runner.py --engines meshy-5         # DRY RUN — shows the spend, calls nothing
-python runner.py --engines meshy-5 --go    # spends credits
-```
-
-Fans everything already in `dataset/` across other engines. Dry run is the default because
-credits are finite and a mistyped batch is expensive.
-
-## Output
-
-```
-dataset/<dish>/<variant>/   1-front.jpg .. 4-left.jpg + meta.json (sha256 per frame)
-out/<dish>/<variant>/<engine>/  <dish>.glb  .usdz  .png
-out/verdicts.csv            the judgement log
-out/runs.csv                batch results
-```
-
-`verdicts.csv` is the point of the exercise. `verdict` plus `faults` is what turns "some come
-back abhorrent" into a rule the scanning app can enforce **before** spending a credit — and
-into the eval set for the hybrid later.
-
-## Credits
-
-Published table (meshy.ai → API cost details, 2026-08-26), Multi Image to 3D:
-
-| model | no texture | with texture |
-|---|---|---|
-| Meshy 6 | 20 | 30 |
-| other models | 5 | 15 |
-
-Meshy 7 is not named and is assumed to be "other models". The runner shows a worst case
-beside the estimate. One real call settles it — **Settings → API → Daily Usage** reports the
-exact charge. API credits come from the same pool as the web app.
-
-## Adding an engine
-
-Subclass `Engine`, implement `generate()`, add a line to `REGISTRY` in `engines/__init__.py`.
-Nothing else changes.
+A variant is one angle strategy for one dish (`ring-25`, `ring-45`, `three-plus-top`). Frame
+order matters: slot 1 is the primary view. To add an engine, subclass `Engine` in
+`engines/base.py` and register it in `engines/__init__.py`.

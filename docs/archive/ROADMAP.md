@@ -1,7 +1,7 @@
 # BetaReal — architecture, costs and roadmap
 
 Written 2026-08-29. The path from what exists today to the product described in
-`DECISIONS.md`. Companion to [DECISIONS.md](DECISIONS.md) and [COMPETITORS.md](COMPETITORS.md).
+`DECISIONS.md`. Companion to [DECISIONS.md](../DECISIONS.md) and [COMPETITORS.md](../COMPETITORS.md).
 
 Everything here is a proposal to be corrected, not a settled plan. Items marked
 **⚠ placeholder** are guesses that need verifying against real dishes before anyone

@@ -1,0 +1,21 @@
+{
+  "name": "betareal-model-tools",
+  "private": true,
+  "type": "module",
+  "description": "Hand pipeline for dish models: replate/fix in Blender, then optimise to Draco GLB + USDZ. See README.md.",
+  "scripts": {
+    "optimize": "node optimize-model.mjs",
+    "inspect": "node inspect-model.mjs"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.4.2",
+    "@gltf-transform/extensions": "^4.4.2",
+    "@gltf-transform/functions": "^4.4.2",
+    "draco3dgltf": "^1.5.7",
+    "meshoptimizer": "^1.0.1",
+    "sharp": "^0.35.0"
+  },
+  "overrides": {
+    "sharp": "^0.35.0"
+  }
+}

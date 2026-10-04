@@ -30,7 +30,7 @@ Order matters at runtime, and it is the same order the platform's own index.html
 `platform.js` sits before `viewer.js` deliberately: viewer.js calls `addToBasket`,
 `_variantsHtml` and `_syncQtyCtrl` by name, and those used to be stubs living in shim.js.
 That is the arrangement this whole layer exists to make impossible again - see its
-docstring, and FEEDBACK.md.
+docstring, and docs/archive/FEEDBACK.md.
 """
 from __future__ import annotations
 

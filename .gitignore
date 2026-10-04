@@ -30,3 +30,6 @@ app/.wrangler/
 # got committed. The same directory under app/ has previously held the R2 access key and
 # secret inside build sourcemaps, so the rule is the whole path, everywhere.
 /.wrangler/
+
+# Model tools install their own npm packages on first run.
+tools/model/node_modules/

@@ -1,7 +1,7 @@
 # MENU-PLATFORM.md — the self-serve half, and the decisions that are expensive to reverse
 
 Written 2026-09-05, before any of it exists. Companion to [DECISIONS.md](DECISIONS.md) §9
-(what Temo settled about the product) and [ROADMAP.md](ROADMAP.md) Part 1 (which sketched
+(what Temo settled about the product) and [ROADMAP.md](archive/ROADMAP.md) Part 1 (which sketched
 this and got some of it wrong).
 
 **Why this file exists.** Temo: *"0.1 degree off now means we miss the mark by a

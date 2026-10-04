@@ -4,10 +4,28 @@ Written 2026-08-29, last revised 2026-09-11 (see STATE below). Everything a fres
 **not** already in the other docs. The other docs carry the reasoning; this one carries the
 state, the environment, and the mistakes already made so they are not made again.
 
-**Read in this order:** the STATE block below → `AUDIT.md` and `CUSTOMER.md` (both written 2026-09-09, and the most current picture of the product) → the rest of this file → `DECISIONS.md` §9 (what the product is, settled by
+**Read in this order:** `AGENTS.md` at the repo root (the rules) → the STATE block below → `AUDIT.md` and `CUSTOMER.md` (both written 2026-09-09, and the most current picture of the product) → the rest of this file → `DECISIONS.md` §9 (what the product is, settled by
 Temo) → `MENU-PLATFORM.md` (the self-serve half - read before building any of it) →
-`ROADMAP.md` (older, AI-written, partly wrong - see §9.8) → `COMPETITORS.md` (only when
-positioning or pricing comes up).
+`COMPETITORS.md` (only when positioning or pricing comes up). `archive/ROADMAP.md` is
+older, AI-written and partly wrong (§9.8).
+
+**Layout since 2026-10-04:** docs live in `docs/`, superseded ones in `docs/archive/`, and
+the hand model pipeline in `tools/model/`. Section numbers quoted in code comments
+(`MENU-PLATFORM §2.6`, `AUDIT.md 15`) still point at these files by name.
+
+---
+
+# STATE — 2026-10-04 (main after cbe350c)
+
+- **Dish link leaves Instagram's browser for AR** (`cbe350c`, deployed). `/d/<id>` detects
+  the IG/FB in-app browser (`app/src/lib/inapp.js`); "View on your table" links out: iPhone +
+  Instagram via `?out=1` (meta refresh to `instagram://extbrowser/`), Android via a Chrome
+  intent, iPhone + Facebook shows the manual taps. Tagged `meta.app` / `meta.from` on the
+  `embed_*` events. **Real-phone test from inside Instagram still owed.**
+- **Repo set up for more than one person:** `AGENTS.md` (+ `CLAUDE.md` pointing at it),
+  docs moved to `docs/`, model tools versioned in `tools/model/` (copied from Niko's working
+  copy, where they had never been committed; verified: a 4.09 MB scan → 0.71 MB Draco +
+  2.53 MB USDZ at real size).
 
 
 ---
