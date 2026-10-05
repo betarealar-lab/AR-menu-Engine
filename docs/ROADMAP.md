@@ -26,26 +26,33 @@ restaurant at a time, measured parity, no 3D Studio for migrated restaurants
 
 ## 1 · An admin made for restaurants we scan for
 
-Design: **https://claude.ai/artifact/JrJxckaLd2GJfj8UcKDpgZ** (desktop: Menu Editor,
-Analytics, Theme Editor). Temo, 2026-10-04: **keep production's admin panel elements.**
-Product decisions such as dish comparisons, plans and partner reports are the team's;
-don't design them in.
+Design: **https://claude.ai/artifact/JrJxckaLd2GJfj8UcKDpgZ**, two rows: what a restaurant
+sees, and what the BetaReal team sees (2026-10-06). Built from production's admin
+elements; product calls (comparisons, plans, reports) stay with the team.
 
-- **Same navigation as production:** Menu Editor, Theme Editor, Analytics, Change History,
-  Branches; restaurant picker; View Menu, EN/KA, light/dark and sign out in the footer.
-  No 3D Studio, setup wizard or "Make a model" for `studio = false`; today's Home
-  still pushes those and must not.
-- **Menu Editor** as production: Menu Items / Categories, Food / Drinks, search, the filters
-  (category, visibility, content, data quality), twin phone view, 360° spin, every item
-  field. A 3D dish shows "3D model by BetaReal"; AR scale and view angle are ours.
-- **Theme Editor** as production: Night, Day, Background, Fonts, Branding (logo, hero
-  gallery, hero video), Templates, Announcement, Page content, with a live preview, Reset
-  and the unsaved-changes guard.
-- **Analytics: unique visitors first, never sessions.** Production's restaurant numbers,
-  counted per person: unique visitors (and how many came back), people who opened 3D, put
-  a dish on the table, added to the basket, time on the menu and in 3D, AR-capable phones,
-  most opened / placed / added dishes, visitors per day, busiest hours, a per-dish table,
-  language and phone split. Phones only by default; one period filter sets every number.
+**Restaurant (owner/manager), four screens.** Each covers one thing they actually do:
+- **Menu**: prices, sold out (the switch in the row), translations, new dishes. Food /
+  Drinks, search, category, quick filters *Hidden* and *Missing Georgian*. A 3D dish
+  says "made by BetaReal"; they can hide it, never change its model.
+- **Analytics**: per person, phones only: people who opened the menu (and came back),
+  opened 3D, put a dish on the table, added to basket (and showed a waiter); visitors per
+  day, the 3D dishes table, busiest hours, menu language.
+- **Brand & page**: announcement, logo and hero photos, address / hours / links. Content
+  they own; the look is ours.
+- **Change history**: edits are live with no draft, so undo must be theirs.
+
+**Team (super admin), the same restaurant plus what only we touch.** Blue, with a TEAM tag:
+- **All restaurants**: runs on (production / moving / rebuild), 3D dishes, visitors, last
+  edit, *needs us* (reason in words); engine status on top.
+- **Menu + 3D panel**: model, show in 3D/AR, live 3D thumbnail, real size (one
+  dimension), camera angle, dish page & QR; *Re-import from production* while moving.
+- **Look**: template, colours, background, fonts, layout (single/twin, spin, default
+  theme + lock, 3D block), hero video (6 MB cap).
+- **Analytics, Diagnostics tab**: sources (table QR, dish QR/flyer, Instagram, embed),
+  AR tapped vs placed per platform, phone language vs menu languages, hero pass, time on
+  menu / in 3D, delivery taps, desktop visits excluded, last event received.
+- **See as the owner** on every team screen.
+
 - **Gap: the rebuild cannot count unique visitors yet.** Its events carry only a per-tab
   `session` (0009); production carries a persistent `visitor_id` (localStorage UUID).
   Add `visitor_id` to the menu's events and the analytics functions, and carry
