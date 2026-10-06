@@ -30,16 +30,31 @@ Design: **https://claude.ai/artifact/JrJxckaLd2GJfj8UcKDpgZ**, two rows: what a 
 sees, and what the BetaReal team sees (2026-10-06). Built from production's admin
 elements; product calls (comparisons, plans, reports) stay with the team.
 
-**Restaurant (owner/manager), four screens.** Each covers one thing they actually do:
-- **Menu**: prices, sold out (the switch in the row), translations, new dishes. Food /
-  Drinks, search, category, quick filters *Hidden* and *Missing Georgian*. A 3D dish
-  says "made by BetaReal"; they can hide it, never change its model.
-- **Analytics**: per person, phones only: people who opened the menu (and came back),
-  opened 3D, put a dish on the table, added to basket (and showed a waiter); visitors per
-  day, the 3D dishes table, busiest hours, menu language.
-- **Brand & page**: announcement, logo and hero photos, address / hours / links. Content
-  they own; the look is ours.
-- **Change history**: edits are live with no draft, so undo must be theirs.
+**Rule (Temo, 2026-10-06): never worse than production's admin.** An owner gets every
+function production gives a brand owner; only what production gates to super admins
+(`canUploadModels` / `isThemeTemplateActionAllowed`) is team-only. Inventory, read from
+production's `admin-app` at `b43b1f7`:
+
+- **Menu Editor**: Menu Items / Categories; + Add; twin phone view; 360° spin; active 3D
+  count; search; filters Category, Top-level tab, Visibility, Content, Data quality; columns
+  Name, Category, Tab, Price, Model, Visible, Edit, Delete. Item: names and descriptions EN/KA,
+  price, category, top-level tab, text-only, thumbnail upload/clear, sort order, signature
+  dish, visible (+ the rebuild's old price and sizes & extras). Categories: names EN/KA, tab,
+  menu order, item count, edit, delete.
+- **Theme Editor**: Night and Day (13 colours each, low-contrast warning), Background (colour
+  + image per theme), Fonts (heading/body, any Google Font), Branding (names EN/KA, logo, hero
+  gallery, page content + visit photo on templates that have it), Announcement; Reset Theme,
+  Save Changes, unsaved-changes guard, live preview desktop/phone.
+- **Analytics** (production's restaurant set, counted per person): people, 3D, AR, basket,
+  basket after AR / after 3D, time in 3D, AR-capable phones, most viewed / ordered / placed,
+  per day, by hour, by weekday, top dishes, categories, language.
+  **Gap:** the rebuild does not record AR capability yet (production's `ar_cap`).
+- **Change History**: tick changes, revert selected, refresh.
+- **Branches**: brand owners with more than one branch (depends on MIGRATION Q2).
+
+**Team-only, as in production:** Templates tab, hero video, model upload / picture-only mode,
+3D thumbnail, AR size, view angle, creating restaurants, accounts (production's Tenants +
+Account Log; here invite and reset links, no stored passwords).
 
 **Team (super admin), the same restaurant plus what only we touch.** Blue, with a TEAM tag:
 - **All restaurants**: runs on (production / moving / rebuild), 3D dishes, visitors, last
