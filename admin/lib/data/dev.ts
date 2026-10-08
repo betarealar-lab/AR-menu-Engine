@@ -8,6 +8,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import type { Dims } from '@/lib/data/studio'
+import { removeRestaurantWith } from '@/lib/removeRestaurant'
 
 const menuOrigin = () => (process.env.NEXT_PUBLIC_MENU_ORIGIN || '').replace(/\/$/, '')
 const assetUrl = (key: string | null | undefined) =>
@@ -51,6 +52,10 @@ export async function loadDirectory(): Promise<{ rows: DirectoryRow[]; error: st
     sessions_7d: Number(r.sessions_7d),
   }))
   return { rows, error: error?.message || '' }
+}
+
+export function removeRestaurant(row: DirectoryRow, confirmation: string) {
+  return removeRestaurantWith(createClient(), row, confirmation)
 }
 
 /** Does this restaurant need one of us? The rule the "Needs attention" filter and the

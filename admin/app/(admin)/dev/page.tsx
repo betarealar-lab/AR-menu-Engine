@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePlan } from '@/lib/usePlan'
 import {
-  loadDirectory, needsAttention, liveMenuUrl, type DirectoryRow,
+  loadDirectory, removeRestaurant, needsAttention, liveMenuUrl, type DirectoryRow,
 } from '@/lib/data/dev'
 import DevNav from '@/components/DevNav'
 
@@ -71,6 +71,31 @@ export default function DevConsole() {
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<Sort>('name')
   const search = useRef<HTMLInputElement>(null)
+  const dialog = useRef<HTMLDialogElement>(null)
+  const removeLock = useRef(false)
+  const [removing, setRemoving] = useState<DirectoryRow | null>(null)
+  const [confirmation, setConfirmation] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [removeError, setRemoveError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    if (removing) dialog.current?.showModal()
+    else dialog.current?.close()
+  }, [removing])
+
+  async function confirmRemoval() {
+    if (!removing || removeLock.current || confirmation !== removing.slug) return
+    removeLock.current = true; setBusy(true); setRemoveError('')
+    try {
+      await removeRestaurant(removing, confirmation)
+      setRows(current => current.filter(r => r.tenant_id !== removing.tenant_id))
+      setNotice(`${removing.name} was removed. Stored photos and 3D files were kept.`)
+      setRemoving(null)
+    } catch (e) {
+      setRemoveError(e instanceof Error ? e.message : 'Removal failed. Refresh before retrying.')
+    } finally { removeLock.current = false; setBusy(false) }
+  }
 
   useEffect(() => {
     if (plan.loading || plan.role !== 'super_admin') return
@@ -177,7 +202,8 @@ export default function DevConsole() {
         </div>
       </div>
 
-      {error && <div className="card p-4 mb-4 text-sm" style={{ color: 'var(--danger)' }}>{error}</div>}
+      {notice && <div role="status" className="card p-4 mb-4 text-sm">{notice}</div>}
+      {error && <div role="alert" className="card p-4 mb-4 text-sm" style={{ color: 'var(--danger)' }}>{error}</div>}
       {loading && <div className="card p-6 text-sm" style={{ color: 'var(--dim)' }}>Loading restaurants…</div>}
       {!loading && shown.length === 0 && (
         <div className="card p-6 text-sm text-center" style={{ color: 'var(--dim)' }}>
@@ -217,6 +243,9 @@ export default function DevConsole() {
                   <Link href={`/models${q}`} className="btn btn-ghost btn-sm">3D</Link>
                   <Link href={`/theme${q}`} className="btn btn-ghost btn-sm">Theme</Link>
                   <Link href={`/dashboard${q}`} className="btn btn-ghost btn-sm">Stats</Link>
+                  <button type="button" className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--danger)' }} aria-label={`Remove ${r.name} /${r.slug}`}
+                    onClick={() => { setConfirmation(''); setRemoveError(''); setRemoving(r) }}>Remove</button>
                   <a href={liveMenuUrl(r.slug)} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">Live ↗</a>
                 </div>
               </div>
@@ -224,6 +253,28 @@ export default function DevConsole() {
           )
         })}
       </div>
+      <dialog ref={dialog} aria-labelledby="remove-title" aria-describedby="remove-description"
+        className="card p-6 w-full max-w-lg backdrop:bg-black/70"
+        style={{ color: 'var(--text)', background: 'var(--card)', margin: 'auto' }}
+        onCancel={e => { if (busy) e.preventDefault(); else setRemoving(null) }}>
+        <h2 id="remove-title" className="text-xl font-bold">Remove {removing?.name}?</h2>
+        <p id="remove-description" className="text-sm my-4">
+          Permanently deletes this restaurant, its menu, model records, history and access memberships.
+          Its live menu and QR links will stop working. This cannot be undone here.
+          Stored photos, 3D files and user accounts are not deleted.
+        </p>
+        <label htmlFor="remove-confirm" className="text-sm">Type <strong>{removing?.slug}</strong> to confirm</label>
+        <input id="remove-confirm" autoFocus autoComplete="off" spellCheck={false}
+          value={confirmation} disabled={busy} onChange={e => setConfirmation(e.target.value)} />
+        {removeError && <p role="alert" className="text-sm mt-3" style={{ color: 'var(--danger)' }}>{removeError}</p>}
+        <div className="flex justify-end gap-2 mt-5">
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setRemoving(null)}>Cancel</button>
+          <button type="button" className="btn btn-ghost" style={{ color: 'var(--danger)' }}
+            disabled={busy || !removing || confirmation !== removing.slug} onClick={confirmRemoval}>
+            {busy ? 'Removing…' : 'Permanently remove'}
+          </button>
+        </div>
+      </dialog>
     </div>
   )
 }
