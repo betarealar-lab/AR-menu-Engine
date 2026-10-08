@@ -43,7 +43,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   const TABS: Tab[] = [
     { href: `/home${q}`, match: '/home', label: 'Home', icon: 'home' },
     { href: `/menu${q}`, match: '/menu', label: T.navMenu, icon: 'menu' },
-    { href: `/models${q}`, match: '/models', label: '3D', icon: 'cube' },
+    // Same rule as the sidebar: the Studio tab only where the Studio is (0029).
+    ...(plan.canUseStudio ? [{ href: `/models${q}`, match: '/models', label: '3D', icon: 'cube' as IconName }] : []),
     { href: `/dashboard${q}`, match: '/dashboard', label: T.navAnalytics, icon: 'chart' },
   ]
 

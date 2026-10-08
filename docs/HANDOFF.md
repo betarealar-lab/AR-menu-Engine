@@ -15,6 +15,21 @@ the hand model pipeline in `tools/model/`. Section numbers quoted in code commen
 
 ---
 
+# STATE — 2026-10-08
+
+- **3D Studio is developer-only (0039, Temo).** Every restaurant `studio = false`, default false;
+  super admins keep the Studio on every restaurant, Library Studio and Upload. No new
+  mechanism: 0029's gate already refuses owners of a studio-off restaurant. Admin: Home hides
+  the Building card, "Build these next" and "Make a 3D model"; the phone tab bar drops "3D";
+  the setup wizard starts at "Pick a look". Reopen per restaurant with
+  `update tenants set studio = true where slug = ...` (super admin). Before 0039 all ten
+  (internal) restaurants had it on.
+- **Checks:** check_admin 303 (+2: a new restaurant starts without the Studio, its owner is
+  refused) · check_features 203 · check_render 116 · check_schema 86 · check_publish 29 ·
+  check_jobs 70 · admin unit 26.
+
+---
+
 # STATE — 2026-10-04 (main after cbe350c)
 
 - **Dish link leaves Instagram's browser for AR** (`cbe350c`, deployed). `/d/<id>` detects

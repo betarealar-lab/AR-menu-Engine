@@ -96,7 +96,7 @@ export default function HomePage() {
           <Link href={`/share${q}`} className="btn btn-sm mt-4">{T.homeQrCode}</Link>
         </div>
 
-        <div className="card p-5">
+        {plan.canUseStudio && <div className="card p-5">
           {/* The heading follows what is actually in the list. With a `pending` request
               and nothing else, "Building" is false - that request is over quota and
               waiting on one of us, and no engine has it. Same fix as the Studio's own
@@ -126,9 +126,9 @@ export default function HomePage() {
               )}
             </div>
           )}
-        </div>
+        </div>}
 
-        <div className="card p-5 md:col-span-2">
+        <div className={`card p-5 ${plan.canUseStudio ? 'md:col-span-2' : ''}`}>
           <div className="eyebrow mb-2">{T.homeLiftTitle}</div>
           {lift === null ? (
             <p className="text-sm" style={{ color: 'var(--dim)' }}>
@@ -151,7 +151,8 @@ export default function HomePage() {
         </div>
       </div>
 
-      {next3d.length > 0 && (
+      {/* "Build these next" sends the owner to the Studio, so it goes with it. */}
+      {plan.canUseStudio && next3d.length > 0 && (
         <div className="card p-5 mt-4">
           <div className="eyebrow mb-2">{T.homeBuildNext}</div>
           <p className="text-sm mb-3">
@@ -167,9 +168,9 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3 mt-4">
+      <div className={`grid gap-3 mt-4 ${plan.canUseStudio ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
         <Link href={`/menu${q}`} className="btn">{T.homeEditMenu}</Link>
-        <Link href={`/models${q}`} className="btn btn-primary">{T.homeMakeModel}</Link>
+        {plan.canUseStudio && <Link href={`/models${q}`} className="btn btn-primary">{T.homeMakeModel}</Link>}
         <Link href={`/theme${q}`} className="btn">{T.homeChangeLook}</Link>
       </div>
     </div>

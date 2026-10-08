@@ -39,12 +39,17 @@ export default function SetupPage() {
   const [T] = useLang()
   const plan = usePlan()
   const router = useRouter()
-  const [step, setStep] = useState<Step>('model')
+  const [picked, setStep] = useState<Step>('model')
+  // No Studio, no first-model step (2026-10-08: the Studio is developer-only for now). The
+  // restaurant's models are made by us, so asking the owner for four photos would start a
+  // request the database refuses (0029).
+  const order: Step[] = plan.canUseStudio ? ORDER : ORDER.filter(s => s !== 'model')
+  const step: Step = order.includes(picked) ? picked : order[0]
   const [msg, setMsg] = useState('')
   const [building, setBuilding] = useState<ModelRequest | null>(null)
   const [landed, setLanded] = useState<TenantModel | null>(null)
   const say = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 4000) }
-  const next = () => setStep(ORDER[ORDER.indexOf(step) + 1])
+  const next = () => setStep(order[order.indexOf(step) + 1])
 
   // The model is building in the background for the whole of steps 2 and 3. Watched here,
   // at the top, so whichever step they are on the moment it lands is announced.
@@ -81,8 +86,8 @@ export default function SetupPage() {
     <div className="page-content max-w-5xl">
       {/* progress */}
       <div className="flex items-center gap-2 mb-6 flex-wrap">
-        {ORDER.slice(0, 3).map((s, i) => {
-          const done = ORDER.indexOf(step) > i
+        {order.slice(0, -1).map((s, i, shown) => {
+          const done = order.indexOf(step) > i
           const here = step === s
           return (
             <div key={s} className="flex items-center gap-2">
@@ -94,7 +99,7 @@ export default function SetupPage() {
               <span className="text-xs font-semibold" style={{ color: here ? 'var(--text)' : 'var(--dim)' }}>
                 {labels(T)[s]}
               </span>
-              {i < 2 && <span className="w-6 h-px mx-1" style={{ background: 'var(--border)' }} />}
+              {i < shown.length - 1 && <span className="w-6 h-px mx-1" style={{ background: 'var(--border)' }} />}
             </div>
           )
         })}

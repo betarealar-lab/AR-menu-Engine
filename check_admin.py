@@ -1070,6 +1070,22 @@ def main() -> int:
 
         # ── 3D ───────────────────────────────────────────────────────────────
         print("\n== 3D ==")
+        # 0039: the Studio is developer-only. A restaurant made through the real signup
+        # starts without it, and its owner's request is refused by the database - not just
+        # hidden by the admin. Then this run switches it on for its own throwaway restaurant
+        # (as a super admin would), so the Studio stays tested for when it reopens.
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("select studio from tenants where id = %s", (tenant_id,))
+            check("a new restaurant starts without the 3D Studio (0039)",
+                  cur.fetchone()[0] is False)
+        r = sb.post(tok, "model_requests", {
+            "tenant_id": str(tenant_id), "item_id": item_id, "dish": item_id,
+            "photo_keys": [f"t/x/capture/zzzz-{a}.jpg" for a in ("front", "right", "back", "left")]})
+        check("...and its owner cannot ask for a model", not r.ok and "plan" in r.text,
+              f"HTTP {r.status_code} {r.text[:80]}")
+        with psycopg.connect(db, connect_timeout=25) as conn, conn.cursor() as cur:
+            cur.execute("update tenants set studio = true where id = %s", (tenant_id,))
+            conn.commit()
         r = sb.post(tok, "model_requests", {
             "tenant_id": str(tenant_id), "item_id": item_id, "dish": item_id,
             "title": "Khachapuri",
