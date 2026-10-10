@@ -1,0 +1,15 @@
+/* Food & Market's kitchens - the part that is ours rather than the platform's.
+   Hand-written; loaded after the generated minimal_sushi.css.
+
+   The platform re-renders the list per kitchen. Here every kitchen's cards are already
+   in the page, tagged `data-fm-kitchen`, and the kitchen on screen is `html[data-fm-group]`.
+   These rules hide the other three - sections, the 3D block's cards and the pills alike -
+   so page.js's category filter works unchanged inside a kitchen. */
+html[data-fm-group="georgian"] [data-fm-kitchen]:not([data-fm-kitchen="georgian"]),
+html[data-fm-group="thai"] [data-fm-kitchen]:not([data-fm-kitchen="thai"]),
+html[data-fm-group="japanese"] [data-fm-kitchen]:not([data-fm-kitchen="japanese"]),
+html[data-fm-group="drinks"] [data-fm-kitchen]:not([data-fm-kitchen="drinks"]) {
+  display: none !important;
+}
+/* A kitchen with no 3D dish shows no 3D block (fm.js sets this). */
+.cat-section[data-fm-empty] { display: none !important; }

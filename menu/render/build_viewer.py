@@ -25,6 +25,8 @@ Order matters at runtime, and it is the same order the platform's own index.html
     viewer    the 3D modal, the photo lightbox, AR entry, thumbnail upgrades. VERBATIM
     hero      the hero video, the crossfade, the venue block. VERBATIM
     page      category filtering, 3D-first ordering, language, day/night
+    fm        Food & Market's kitchen picker and tabs (inert everywhere else)
+    fm-motion its UI motion, VERBATIM, gated on html[data-fm-motion]
     init      boots the lot once the page is parsed
 
 `platform.js` sits before `viewer.js` deliberately: viewer.js calls `addToBasket`,
@@ -42,7 +44,7 @@ PORTED = ROOT / "menu" / "render" / "ported"
 OUT = ROOT / "app" / "public" / "viewer.js"
 
 FILES = ["ui.js", "xr.js", "shim.js", "platform.js", "viewer.js", "hero.js",
-         "page.js", "init.js"]
+         "page.js", "fm.js", "fm-motion.js", "init.js"]
 
 
 def build() -> str:

@@ -63,6 +63,8 @@
     view: "view", page_view: "view", page_load: "view", menu_view: "view",
     hero_pass: "hero_pass", scroll_past_hero: "hero_pass",
     category: "category", category_change: "category", category_filter: "category",
+    // Food & Market's kitchen switch (Georgian / Thai / Japanese / Drinks), `meta.group`.
+    menu_group: "category",
     // A dish opened in the 3D viewer, however it was reached. `ar_fallback` belongs here
     // and not under AR: it fires when AR could not start and the diner got the 3D modal
     // instead, so counting it as an AR open would inflate the number we most need honest.

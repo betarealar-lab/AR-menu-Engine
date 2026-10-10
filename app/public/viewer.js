@@ -1081,6 +1081,8 @@ window.UI = {
     view: "view", page_view: "view", page_load: "view", menu_view: "view",
     hero_pass: "hero_pass", scroll_past_hero: "hero_pass",
     category: "category", category_change: "category", category_filter: "category",
+    // Food & Market's kitchen switch (Georgian / Thai / Japanese / Drinks), `meta.group`.
+    menu_group: "category",
     // A dish opened in the 3D viewer, however it was reached. `ar_fallback` belongs here
     // and not under AR: it fires when AR could not start and the diner got the 3D modal
     // instead, so counting it as an AR open would inflate the number we most need honest.
@@ -3497,7 +3499,18 @@ window.UI = {
       const nameEl = card.querySelector(".item-name");
       if (nameEl) {
         const alt = lang === "en" ? d.name : (d["name" + suffix] || d.name);
-        if (alt && nameEl.textContent !== alt) nameEl.textContent = alt;
+        // Food & Market's diet badges sit inside the name; keep them across the swap.
+        const badges = $$(".fm-diet-badge", nameEl);
+        const text = badges.length ? nameEl.firstChild && nameEl.firstChild.nodeValue : nameEl.textContent;
+        if (alt && text !== alt) {
+          nameEl.textContent = alt;
+          for (const b of badges) nameEl.appendChild(b);
+        }
+      }
+      const infoEl = card.querySelector(".additional-info");
+      if (infoEl) {
+        const alt = lang === "en" ? d.info : (d["info" + suffix] || d.info);
+        if (alt && infoEl.textContent !== alt) infoEl.textContent = alt;
       }
       const descEl = card.querySelector(".ingredients");
       if (descEl) {
@@ -3633,6 +3646,237 @@ window.UI = {
     start();
   }
 })();
+
+/* ---- fm.js ---- */
+// ─── fm.js — Food & Market's kitchens: the picker, the tabs, "← Kitchens" ──────────────
+//
+// The platform's `_fmSyncLanding` / `_setGroup` / landing-tile handlers, for a page whose
+// cards arrive already tagged with `data-fm-kitchen` (markup.js). Which kitchen is on
+// screen is one attribute, `html[data-fm-group]`, and the stylesheet hides the rest - so
+// the category filter in page.js keeps working unchanged inside a kitchen.
+//
+// Inert on every other restaurant: it returns at once unless the page is Food & Market.
+(function () {
+  const root = document.documentElement;
+  if (root.dataset.tenant !== "food-market-main") return;
+
+  const KITCHENS = ["georgian", "thai", "japanese", "drinks"];
+  const LABELS = {
+    en: { georgian: "Georgian & More", thai: "Thai", japanese: "Japanese", drinks: "Drinks" },
+    ka: { georgian: "ქართული და სხვა", thai: "ტაილანდური", japanese: "იაპონური", drinks: "სასმელები" },
+  };
+  const track = (name, meta) => { if (typeof window.track === "function") window.track(name, null, meta); };
+
+  function setUrl(kitchen) {
+    const url = new URL(location.href);
+    if (kitchen) url.searchParams.set("menu", kitchen); else url.searchParams.delete("menu");
+    history.replaceState(history.state, "", url);
+  }
+
+  // The 3D block and the "3D" pill only when this kitchen has a 3D dish in it.
+  function sync3d(kitchen) {
+    const block = document.querySelector('.cat-section[data-cat="__ar3d"]');
+    const any = !!(block && block.querySelector(`.menu-item[data-fm-kitchen="${kitchen}"]`));
+    if (block) block.toggleAttribute("data-fm-empty", !any);
+    const pill = document.querySelector('.cat-pill[data-cat="__ar3d"]');
+    if (pill) pill.hidden = !any;
+  }
+
+  function setGroup(kitchen) {
+    if (!KITCHENS.includes(kitchen)) return;
+    root.dataset.fmGroup = kitchen;
+    document.querySelectorAll(".group-btn").forEach((b) =>
+      b.classList.toggle("active", b.dataset.group === kitchen));
+    sync3d(kitchen);
+    // Back to "All" inside the new kitchen, as the platform does.
+    if (typeof window.applyFilter === "function") window.applyFilter("");
+    const scroll = document.querySelector(".cat-filter");
+    if (scroll) scroll.scrollLeft = 0;
+  }
+
+  function enter(kitchen, source) {
+    setUrl(kitchen);
+    root.dataset.fmLanding = "0";
+    track("menu_group", { group: kitchen, source });
+    setGroup(kitchen);
+    window.scrollTo(0, 0);
+  }
+
+  function start() {
+    document.querySelectorAll("#fm-kitchen-landing .fm-kitchen-tile").forEach((btn) =>
+      btn.addEventListener("click", () => enter(btn.dataset.kitchen, "landing")));
+    const groups = document.getElementById("menu-groups");
+    if (groups) groups.addEventListener("click", (ev) => {
+      const b = ev.target.closest(".group-btn");
+      if (b && b.dataset.group !== root.dataset.fmGroup) enter(b.dataset.group, "tab");
+    });
+    const back = document.getElementById("fm-back-to-kitchens");
+    if (back) back.addEventListener("click", () => {
+      setUrl(null);
+      root.dataset.fmLanding = "1";
+      window.scrollTo(0, 0);
+    });
+    sync3d(root.dataset.fmGroup || "georgian");
+    // The motion script (fm-motion.js) primes its scroll reveal when the list changes or
+    // `data-fm-motion` flips. Our list is already in the HTML and never changes, so flip
+    // the attribute once after it has attached its observers.
+    setTimeout(() => {
+      if (!root.hasAttribute("data-fm-motion")) return;
+      root.removeAttribute("data-fm-motion");
+      root.setAttribute("data-fm-motion", "");
+    }, 0);
+
+    // Tab labels follow the language switch. page.js calls its own applyLang directly,
+    // so this listens for the `lang` attribute it sets rather than wrapping the function.
+    new MutationObserver(() => {
+      const lab = LABELS[root.lang] || LABELS.en;
+      document.querySelectorAll(".group-btn").forEach((b) => {
+        const span = b.querySelector("span:last-child");
+        (span || b).textContent = lab[b.dataset.group];
+      });
+    }).observe(root, { attributes: true, attributeFilter: ["lang"] });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+})();
+
+/* ---- fm-motion.js ---- */
+// Food & Market's UI motion, verbatim from the platform (extract_food_market.py).
+// Do not edit; re-run the extractor.
+// Only runs while <html data-fm-motion> is set (both Food & Market sites).
+    // Buzz and doodle drift need data-fm-motion-lab too (test copy only).
+    // Cards reveal on scroll, a kitchen switch slides sideways, the basket bar bumps
+    // with a dish flying into it, haptic ticks, photos zoom out of their thumbnail.
+    // Doodle drift is CSS only. Reduced-motion users get none of it.
+    (function () {
+        const root = document.documentElement;
+        const on = () => root.hasAttribute('data-fm-motion')
+            && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const buzz = ms => {
+            if (!root.hasAttribute('data-fm-motion-lab')) return;
+            try { navigator.vibrate?.(ms); } catch (_) {}
+        };
+
+        // Cards reveal as they scroll in; a kitchen switch sets the slide direction.
+        const list = document.getElementById('menu-list');
+        if (list && 'IntersectionObserver' in window) {
+            let batch = 0, batchTimer = null;
+            const io = new IntersectionObserver(entries => {
+                entries.forEach(en => {
+                    if (!en.isIntersecting) return;
+                    io.unobserve(en.target);
+                    en.target.style.setProperty('--fmm-delay', Math.min(batch++ * 55, 275) + 'ms');
+                    en.target.classList.add('fmm-in');
+                    requestAnimationFrame(() => en.target.classList.remove('fmm-pending'));
+                });
+                clearTimeout(batchTimer);
+                batchTimer = setTimeout(() => { batch = 0; }, 120);
+            }, { rootMargin: '0px 0px -8% 0px' });
+            const prime = () => {
+                if (!on()) return;
+                list.querySelectorAll('.menu-item:not(.fmm-in):not(.fmm-pending)').forEach(card => {
+                    card.classList.add('fmm-pending');
+                    io.observe(card);
+                });
+            };
+            new MutationObserver(prime).observe(list, { childList: true, subtree: true });
+            new MutationObserver(prime).observe(root, { attributes: true, attributeFilter: ['data-fm-motion'] });
+        }
+        let lastGroup = root.dataset.fmGroup, dxTimer = null;
+        new MutationObserver(() => {
+            const g = root.dataset.fmGroup;
+            if (g === lastGroup) return;
+            const keys = [...document.querySelectorAll('.group-btn')].map(b => b.dataset.group);
+            const dir = keys.indexOf(g) >= keys.indexOf(lastGroup) ? 1 : -1;
+            lastGroup = g;
+            if (!on()) return;
+            root.style.setProperty('--fmm-dx', (dir * 36) + 'px');
+            clearTimeout(dxTimer);
+            dxTimer = setTimeout(() => root.style.removeProperty('--fmm-dx'), 900);
+            buzz(8);
+        }).observe(root, { attributes: true, attributeFilter: ['data-fm-group'] });
+
+        // Basket: bar bump, count tick, the dish photo flying into the bar, haptics.
+        let lastTap = null;
+        document.addEventListener('pointerdown', e => {
+            const btn = e.target.closest('.qty-add-btn, .qty-inc, .qty-btn[data-delta="1"]');
+            if (!btn) return;
+            const r = btn.getBoundingClientRect();
+            const img = btn.closest('.menu-item')?.querySelector('img');
+            lastTap = { x: r.left + r.width / 2, y: r.top + r.height / 2, src: img?.currentSrc || img?.src || '', t: performance.now() };
+        }, true);
+        const countEl = document.getElementById('basket-bar-count');
+        const bar = document.getElementById('basket-bar');
+        let lastCount = 0;
+        const replay = (el, cls) => { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); };
+        function fly(tap, barHidden) {
+            const b = bar.getBoundingClientRect();
+            // A hidden bar is still parked below the screen; aim where it slides up to.
+            const by = barHidden ? innerHeight - b.height / 2 : b.top + b.height / 2;
+            const el = document.createElement(tap.src ? 'img' : 'div');
+            el.className = 'fmm-fly';
+            if (tap.src) { el.src = tap.src; el.alt = ''; }
+            el.style.left = tap.x + 'px'; el.style.top = tap.y + 'px';
+            document.body.appendChild(el);
+            const dx = b.left + b.width / 2 - tap.x, dy = by - tap.y;
+            const anim = el.animate([
+                { transform: 'translate(0,0) scale(0.6)', opacity: 0.95 },
+                { transform: `translate(${dx * 0.45}px, ${dy * 0.45 - 70}px) scale(1)`, opacity: 1, offset: 0.45 },
+                { transform: `translate(${dx}px, ${dy}px) scale(0.3)`, opacity: 0.4 }
+            ], { duration: 600, easing: 'cubic-bezier(0.45, 0, 0.55, 1)' });
+            anim.onfinish = anim.oncancel = () => el.remove();
+            return anim;
+        }
+        if (countEl && bar) {
+            new MutationObserver(() => {
+                const n = parseInt(countEl.textContent, 10) || 0;
+                const prev = lastCount; lastCount = n;
+                if (!on() || n === prev) return;
+                if (n > prev) {
+                    buzz(12);
+                    const tap = lastTap && performance.now() - lastTap.t < 800 ? lastTap : null;
+                    lastTap = null;
+                    const bump = () => { replay(bar, 'fmm-bump'); replay(countEl, 'fmm-tick'); };
+                    if (tap) fly(tap, prev === 0).finished.then(bump, bump); else bump();
+                } else {
+                    buzz(6);
+                    replay(countEl, 'fmm-tick-down');
+                }
+            }).observe(countEl, { childList: true, characterData: true, subtree: true });
+        }
+
+        // Photo-only dishes: the fullscreen photo zooms out of the tapped thumbnail.
+        const lb = document.getElementById('img-lightbox'), lbImg = document.getElementById('lightbox-img');
+        let fromRect = null;
+        document.addEventListener('click', e => {
+            const img = e.target.closest('.menu-item img');
+            fromRect = img ? img.getBoundingClientRect() : null;
+        }, true);
+        const zoomIn = () => {
+            const to = lbImg.getBoundingClientRect();
+            if (!fromRect || !to.width) return;
+            const sx = fromRect.width / to.width, sy = fromRect.height / to.height;
+            const dx = fromRect.left + fromRect.width / 2 - (to.left + to.width / 2);
+            const dy = fromRect.top + fromRect.height / 2 - (to.top + to.height / 2);
+            lbImg.animate([
+                { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` },
+                { transform: 'none' }
+            ], { duration: 380, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+            fromRect = null;
+        };
+        if (lb && lbImg) {
+            new MutationObserver(() => {
+                if (!on() || !lb.classList.contains('open') || lb.classList.contains('has-panel')) return;
+                buzz(6);
+                if (lbImg.complete && lbImg.naturalWidth) zoomIn();
+                else lbImg.addEventListener('load', zoomIn, { once: true });
+            }).observe(lb, { attributes: true, attributeFilter: ['class'] });
+        }
+    })();
 
 /* ---- init.js ---- */
 // init.js — start the hero and venue features the way the platform starts them.

@@ -98,6 +98,9 @@ export async function loadMenu(slug, { assetBase = "/a", locals } = {}) {
       name_en: r.name, name_ka: ka.name || "", name_ru: ru.name || "",
       description_en: r.description || "",
       description_ka: ka.description || "", description_ru: ru.description || "",
+      // Food & Market's extra line (allergens, serving notes); imported into i18n.
+      additional_info_en: ((r.i18n || {}).en || {}).additional_info || "",
+      additional_info_ka: ka.additional_info || "",
       price: priceOf(r),
       price_old: r.price_old_minor
         ? priceOf({ price_minor: r.price_old_minor, currency: r.currency }) : null,

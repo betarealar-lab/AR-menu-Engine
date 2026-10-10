@@ -15,6 +15,29 @@ the hand model pipeline in `tools/model/`. Section numbers quoted in code commen
 
 ---
 
+# STATE — 2026-10-10 (Nika, branch nika/food-market-worker)
+
+- **Food & Market copy on the rebuild ("worker")**: tenant `food-market-worker`, imported read-only
+  from production `food-market-main` (209 dishes, 43 categories, 12 models; photos/models still
+  hot-linked from production's r2.dev). Owner login `foodandmarket@test.com` (test account).
+  `studio = false`. Menu: `/food-market-worker`; `?menu=georgian|thai|japanese|drinks` skips the picker.
+- **How the look is copied**: template `minimal_sushi` (0040) =
+  `menu/render/extract_food_market.py` run on the live `index.html` (`BETAREAL_PLATFORM_HTML`):
+  trimmed live CSS keeping F&M's tenant rules (`trim_css.trim(split=True)`), the kitchen
+  landing markup and the UI motion script, all verbatim. Page renders with
+  `data-tenant="food-market-main"` when the tenant setting `platform_tenant` says so (the
+  platform's own alias for its F&M test copy). Kitchens/doodles/diet badges/additional info
+  are server-side (`app/src/lib/foodmarket.js`), kitchen switching is `ported/fm.js` + CSS.
+  Images in `app/public/img/` (same paths as production).
+- **Importer**: production now needs `x-restaurant-id` to return dishes; categories keep
+  production order; `additional_info_*` lands in `items.i18n`; `--verbatim-prices`; a re-import
+  merges settings instead of replacing them.
+- **Not copied yet**: production's newer F&M AR (steam, plate guide, scan + tap placing) - the
+  rebuild's `xr.js` is an older port shared by every restaurant; assets are not in our R2 yet.
+- **Checks:** check_features 203 · check_render 116 · embed/inapp 21.
+
+---
+
 # STATE — 2026-10-08
 
 - **3D Studio is developer-only (0039, Temo).** Every restaurant `studio = false`, default false;

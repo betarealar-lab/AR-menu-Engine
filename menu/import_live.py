@@ -70,7 +70,7 @@ def tenants() -> list[dict]:
 
 
 def menu(restaurant_id: str) -> list[dict]:
-    return select(f"menu_items?select=*,categories(name_en,name_ka,name_ru)"
+    return select(f"menu_items?select=*,categories(name_en,name_ka,name_ru,sort_order)"
                   f"&restaurant_id=eq.{restaurant_id}&order=category_id,sort_order")
 
 

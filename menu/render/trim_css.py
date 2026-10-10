@@ -71,31 +71,72 @@ def blocks(css: str):
         i = j
 
 
-def applies(selector: str, template: str) -> bool:
-    """False only when the selector REQUIRES a template or tenant this page is not."""
+def applies(selector: str, template: str, tenants: tuple[str, ...] = ()) -> bool:
+    """False only when the selector REQUIRES a template or tenant this page is not.
+
+    `tenants` names the platform tenants this sheet is FOR - a migrated restaurant renders
+    with `data-tenant` set to its production slug, so its own scoped rules can match."""
     for wanted in TEMPLATE_ATTR.findall(selector):
         if wanted != template:
             return False
-    # Tenant-scoped rules belong to somebody else's restaurant. Our slugs are ours, so
-    # none of the platform's tenant names can ever match one of our pages.
-    if TENANT_ATTR.search(selector):
-        return False
+    # Tenant-scoped rules belong to somebody else's restaurant, unless this sheet is that
+    # restaurant's.
+    for wanted in TENANT_ATTR.findall(selector):
+        if wanted not in tenants:
+            return False
     return True
 
 
-def trim(css: str, template: str) -> tuple[str, dict]:
+def branches(selector: str) -> list[str]:
+    """A selector list split at its TOP-LEVEL commas (not inside `:is(a, b)`)."""
+    out, depth, cur = [], 0, ""
+    for ch in selector:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    out.append(cur.strip())
+    return [b for b in out if b]
+
+
+def trim(css: str, template: str, tenants: tuple[str, ...] = (),
+         split: bool = False) -> tuple[str, dict]:
+    """`split` keeps the branches of a selector list that apply instead of dropping the
+    whole rule when any branch names another template - the platform writes rules like
+    `[data-template="monday_greens"] .x, [data-template="minimal_sushi"] .x`, and the
+    whole-rule cut loses them for BOTH. Off by default so the committed sheets for the
+    other templates regenerate byte-identical."""
+    def keep(sel: str) -> str | None:
+        if not split:
+            return sel if applies(sel, template, tenants) else None
+        ok = [b for b in branches(sel) if applies(b, template, tenants)]
+        return ",\n".join(ok) if ok else None
+
     kept, dropped = [], 0
     for clean, raw, body, is_at in blocks(css):
         if is_at:
-            inner = [f"{c} {{{b}}}" for c, _r, b, _a in blocks(body) if applies(c, template)]
-            dropped += sum(1 for c, _r, _b, _a in blocks(body) if not applies(c, template))
+            inner = []
+            for c, _r, b, _a in blocks(body):
+                sel = keep(c)
+                if sel is None:
+                    dropped += 1
+                else:
+                    inner.append(f"{sel} {{{b}}}")
             if inner:
                 kept.append(f"{clean} {{\n" + "\n".join(inner) + "\n}")
             continue
-        if applies(clean, template):
+        sel = keep(clean)
+        if sel is None:
+            dropped += 1
+        elif sel == clean:
             kept.append(f"{raw.strip()} {{{body}}}")
         else:
-            dropped += 1
+            kept.append(f"{sel} {{{body}}}")
     out = "\n".join(kept) + "\n"
     return out, {"kept": len(kept), "dropped": dropped}
 
