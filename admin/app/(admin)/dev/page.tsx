@@ -75,12 +75,15 @@ export default function DevConsole() {
 
   // Typing the slug back is the confirmation: a test restaurant and a client can share a
   // name ("Food & Market" twice), never a slug.
+  // Test restaurants go in one click; a real-sized menu (over 25 dishes) asks first.
   async function remove(r: DirectoryRow) {
-    const typed = window.prompt(
-      `Delete "${r.name}" (/${r.slug}) and all of its ${r.dishes} dishes, categories, ` +
-      `models and stats? This cannot be undone.\n\nType ${r.slug} to confirm:`)
-    if (typed === null) return
-    if (typed.trim() !== r.slug) { window.alert('The slug did not match. Nothing was deleted.'); return }
+    if (r.dishes > 25) {
+      const typed = window.prompt(
+        `Delete "${r.name}" (/${r.slug}) and all of its ${r.dishes} dishes, categories, ` +
+        `models and stats? This cannot be undone.\n\nType ${r.slug} to confirm:`)
+      if (typed === null) return
+      if (typed.trim() !== r.slug) { window.alert('The slug did not match. Nothing was deleted.'); return }
+    }
     setDeleting(r.tenant_id)
     const err = await deleteTenant(r.tenant_id, r.slug)
     setDeleting('')
