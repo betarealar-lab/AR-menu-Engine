@@ -52,6 +52,20 @@ def parse_price(raw) -> tuple[int, str, str | None]:
     return minor, cur, (None if plain else s)
 
 
+# Choices the platform adds IN CODE (`CODE_VARIANTS` in its index.html) for dishes whose
+# variants its admin cannot enter yet. Used only while the dish has none of its own, as
+# there. Keyed by the platform's menu_items.id.
+CODE_VARIANTS = {
+    # Food & Market - No Bun Burger: sauce choice, same price
+    "2484": [
+        {"en": "Carbonara", "ka": "კარბონარა", "price": "30.00 ₾"},
+        {"en": "Champignon", "ka": "სოკოს სოუსი", "price": "30.00 ₾"},
+        {"en": "White Sauce", "ka": "თეთრი სოუსი", "price": "30.00 ₾"},
+        {"en": "Black Pepper", "ka": "პილპილის სოუსი", "price": "30.00 ₾"},
+    ],
+}
+
+
 def split_theme(cfg: dict) -> tuple[dict, dict, dict]:
     """theme_config -> (palette, settings, item camera angles).
 
@@ -77,6 +91,9 @@ def main() -> int:
     ap.add_argument("--slug", required=True, help="slug to create HERE (not theirs)")
     ap.add_argument("--template", default="monday_greens")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--verbatim-prices", action="store_true",
+                    help="keep the platform's price text exactly as written ('201.00 ₾', "
+                         "'38') for a copy that must read the same; the integer stays the truth")
     a = ap.parse_args()
 
     blob = json.loads(a.file.read_text(encoding="utf-8"))
@@ -112,8 +129,10 @@ def main() -> int:
             values (%s,%s,%s,%s,%s,%s)
             on conflict (slug) do update set
               name = excluded.name, template_id = excluded.template_id,
-              theme = excluded.theme, settings = excluded.settings,
-              languages = excluded.languages
+              theme = excluded.theme,
+              -- Merged, not replaced: settings set here by hand (platform_tenant,
+              -- default_theme) survive a re-import. Languages are set once, on insert.
+              settings = tenants.settings || excluded.settings
             returning id
         """, (a.slug, rest["name"], a.template, json.dumps(palette),
               json.dumps(settings), langs))
@@ -127,6 +146,9 @@ def main() -> int:
             if key and key not in cats:
                 cats[key] = c
                 order.append(key)
+        # The platform's own category order when it sent one; first appearance otherwise.
+        order.sort(key=lambda k: (cats[k].get("sort_order") is None,
+                                  cats[k].get("sort_order") or 0))
         for pos, key in enumerate(order):
             c = cats[key]
             i18n = {k: {"name": c.get(f"name_{k}")} for k in ("ka", "ru")
@@ -145,6 +167,8 @@ def main() -> int:
         for pos, it in enumerate(items):
             ref = str(it["id"])
             minor, cur_code, price_text = parse_price(it.get("price"))
+            if a.verbatim_prices and str(it.get("price") or "").strip():
+                price_text = str(it["price"]).strip()
             old_minor, _, _ = parse_price(it.get("price_old"))
             i18n = {}
             for code in ("ka", "ru"):
@@ -155,6 +179,12 @@ def main() -> int:
                     sub["description"] = it[f"description_{code}"]
                 if sub:
                     i18n[code] = sub
+            # Food & Market's "additional info" line (allergens, serving notes). It has no
+            # column here; it rides in i18n next to the translations, keyed per language.
+            for code in ("en", "ka"):
+                extra = (it.get(f"additional_info_{code}") or "").strip()
+                if extra:
+                    i18n.setdefault(code, {})["additional_info"] = extra
 
             model_id = None
             glb, usdz = it.get("model"), it.get("model_usdz")
@@ -192,7 +222,8 @@ def main() -> int:
                   photo_key=excluded.photo_key, model_id=excluded.model_id,
                   visible=excluded.visible, position=excluded.position, i18n=excluded.i18n,
                   text_only=excluded.text_only, is_3d=excluded.is_3d,
-                  thumb_3d=excluded.thumb_3d, variants=excluded.variants
+                  thumb_3d=excluded.thumb_3d, variants=excluded.variants,
+                  addons=excluded.addons, featured=excluded.featured
             """, (tid, cats.get(str(it.get("category_id") or "")),
                   it.get("name_en") or it.get("name_ka") or "Item",
                   it.get("description_en") or "", minor, price_text,
@@ -201,7 +232,7 @@ def main() -> int:
                   json.dumps(i18n), bool(it.get("text_only")),
                   bool(it.get("is_3d", True)), bool(it.get("thumb_3d")),
                   bool(it.get("featured")),
-                  json.dumps(it.get("variants") or []),
+                  json.dumps(it.get("variants") or CODE_VARIANTS.get(ref) or []),
                   json.dumps(it.get("addons") or []), ref))
             made += 1
 

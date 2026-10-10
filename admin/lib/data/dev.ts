@@ -53,6 +53,17 @@ export async function loadDirectory(): Promise<{ rows: DirectoryRow[]; error: st
   return { rows, error: error?.message || '' }
 }
 
+/** Delete a restaurant and everything in it (0041). Super admins only, and the slug has
+ *  to be typed back - the database checks both. Files in R2 are never touched, and a model
+ *  another restaurant still uses moves to the library instead of going with it. */
+export async function deleteTenant(tenantId: string, confirmSlug: string): Promise<string> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('delete_tenant', {
+    p_tenant: tenantId, p_confirm_slug: confirmSlug,
+  })
+  return error?.message || ''
+}
+
 /** Does this restaurant need one of us? The rule the "Needs attention" filter and the
  *  dot on a row both use, so the two can never disagree.
  *

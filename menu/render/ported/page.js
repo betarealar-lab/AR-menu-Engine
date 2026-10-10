@@ -185,7 +185,18 @@
       const nameEl = card.querySelector(".item-name");
       if (nameEl) {
         const alt = lang === "en" ? d.name : (d["name" + suffix] || d.name);
-        if (alt && nameEl.textContent !== alt) nameEl.textContent = alt;
+        // Food & Market's diet badges sit inside the name; keep them across the swap.
+        const badges = $$(".fm-diet-badge", nameEl);
+        const text = badges.length ? nameEl.firstChild && nameEl.firstChild.nodeValue : nameEl.textContent;
+        if (alt && text !== alt) {
+          nameEl.textContent = alt;
+          for (const b of badges) nameEl.appendChild(b);
+        }
+      }
+      const infoEl = card.querySelector(".additional-info");
+      if (infoEl) {
+        const alt = lang === "en" ? d.info : (d["info" + suffix] || d.info);
+        if (alt && infoEl.textContent !== alt) infoEl.textContent = alt;
       }
       const descEl = card.querySelector(".ingredients");
       if (descEl) {

@@ -52,6 +52,13 @@ import japanSkinCss from "../lib/css/japan.skin.css?raw";
 // any restaurant that wants the dishes to be the whole design. Same two-piece pattern.
 import cleanCss from "../lib/css/clean.css?raw";
 import cleanSkinCss from "../lib/css/clean.skin.css?raw";
+// MINIMAL_SUSHI is Food & Market: the LIVE platform's sheet for that template plus F&M's
+// own tenant-scoped rules (menu/render/extract_food_market.py), and a small skin of ours
+// for the kitchen split. The landing is the platform's markup, verbatim.
+import minimalSushiCss from "../lib/css/minimal_sushi.css?raw";
+import minimalSushiSkinCss from "../lib/css/minimal_sushi.skin.css?raw";
+import fmLandingHtml from "../../../menu/render/ported/fm-chrome.html?raw";
+import { isFoodMarket, kitchenFromQuery, FM_TENANT } from "../lib/foodmarket.js";
 
 const SHEETS = {
   monday_greens: mondayGreensCss,
@@ -60,6 +67,8 @@ const SHEETS = {
 ${japanSkinCss}`,
   clean: `${cleanCss}
 ${cleanSkinCss}`,
+  minimal_sushi: `${minimalSushiCss}
+${minimalSushiSkinCss}`,
 };
 // Only two templates matter now - Monday Greens, and Corner at Tabidze on elegant_black.
 // Everything else waits for a later generation. A restaurant with no template chosen gets
@@ -132,6 +141,12 @@ if (soloModel) {
 const isPreview = Astro.url.searchParams.has("preview");
 
 const cfg = menu.config;
+// Food & Market: which kitchen the URL asks for. None means the kitchen picker first,
+// exactly as the platform does it (a table QR with ?menu=thai skips straight in).
+const fm = !soloItem && isFoodMarket(cfg);
+const fmKitchen = fm ? kitchenFromQuery(Astro.url) : null;
+if (fm) menu = { ...menu, fm: true, fmKitchen: fmKitchen || "georgian" };
+const dataTenant = fm ? FM_TENANT : menu.tenant.slug;
 const mode = themeMode(cfg);
 const lang = (menu.tenant.languages || ["en"])[0];
 const template = SHEETS[menu.tenant.template] ? menu.tenant.template : DEFAULT_TEMPLATE;
@@ -142,7 +157,28 @@ const pageTitle = soloModel ? `${soloItem.name_en} · 3D` : soloItem ? `${soloIt
 // Both palettes, each scoped to its own `data-theme`, plus the settings that reach CSS.
 // Scoped rather than flat so the restaurant's colours beat the template's defaults AND so
 // the day/night button has something to switch between - see `paletteCss`.
-const palette = paletteCss(cfg);
+// Food & Market: the restaurant's palette at the PLATFORM's specificity. Its stylesheet
+// pins the white-and-black day theme with `[data-tenant][data-theme]`, deliberately
+// stronger than the admin palette (`[data-theme]`), which is older sage green; ours is
+// `:root[data-theme]`, which would tie and win on order, repainting the menu green.
+const palette = fm
+  ? paletteCss(cfg).replaceAll(":root[data-theme=", "[data-theme=")
+  : paletteCss(cfg);
+// Food & Market: the platform writes the fonts as INLINE styles (body, and
+// `_applyHeadingFontToMenu`), which beat every non-important rule in its sheet. This is
+// the same precedence, stated as CSS.
+const fmFonts = !fm ? "" :
+  (cfg.font_body ? `body{font-family:'${cfg.font_body}',sans-serif !important}` : "") +
+  (cfg.font_heading ? `.restaurant-name,.item-name,.category-header,.badge-3d,.ar-featured-title` +
+    `{font-family:'${cfg.font_heading}',sans-serif !important}` : "");
+// The platform's hero logo falls back to the restaurant logo, and F&M's band carries a
+// "Menu ↓" link; the header logo is hidden for F&M.
+const heroCfg = fm ? { ...cfg, hero_logo_url: cfg.hero_logo_url || cfg.logo_url } : cfg;
+const headerCfg = fm ? { ...cfg, logo_url: "" } : cfg;
+const heroExtra = !fm ? "" :
+  `<a class="mg-hero-scroll" href="#cat-filter" aria-label="Menu"><span>Menu</span>` +
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ` +
+  `stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></a>`;
 const settings = settingsCss(cfg);
 // The settings the deferred bundle needs at runtime: hero art, the venue block, the
 // links. SETTINGS only - a few hundred bytes, never the menu, which is already in the
@@ -186,8 +222,11 @@ const buildMs = Date.now() - started;
   lang={lang}
   data-template={template}
   data-theme={mode}
-  data-tenant={menu.tenant.slug}
-  data-brand-slug={menu.tenant.slug}
+  data-tenant={dataTenant}
+  data-brand-slug={fm ? "food-market" : dataTenant}
+  data-fm-motion={fm ? "" : undefined}
+  data-fm-landing={fm ? (fmKitchen ? "0" : "1") : undefined}
+  data-fm-group={fm ? (fmKitchen || "georgian") : undefined}
   data-phone-layout={cfg.phone_layout || "list"}
   data-hero-image={cfg.hero_image_url ? "true" : undefined}
   data-generic-hero={cfg.hero_image_url ? "true" : undefined}
@@ -197,6 +236,10 @@ const buildMs = Date.now() - started;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{pageTitle}</title>
+    {fm && <link rel="icon" href="/img/food-and-market-favicon.png" />}
+    {/* The platform's base font set (Georgian script and the display faces its
+        stylesheet names), which every one of its pages loads. */}
+    {fm && <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Cormorant+Garamond:wght@600;700&family=Noto+Sans+Georgian:wght@400;600;700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap" />}
     <meta name="description" content={soloItem ? (soloItem.description_en || `${soloItem.name_en} at ${title}`) : `${title} menu`} />
     {soloItem && <meta property="og:title" content={pageTitle} />}
     {soloItem && soloItem.description_en && <meta property="og:description" content={soloItem.description_en.slice(0, 200)} />}
@@ -213,7 +256,7 @@ const buildMs = Date.now() - started;
     {/* The restaurant's palette, before a single pixel is painted. The platform sets
         these at runtime after fetching theme_config, which is the re-skin a diner
         watches happen; resolved here, there is no second state to flash to. */}
-    <style set:html={palette + (settings ? `:root{${settings}}` : "")} />
+    <style set:html={palette + (settings ? `:root{${settings}}` : "") + fmFonts} />
     <Fragment set:html={fontLinks(cfg)} />
     {/* One-dish mode: nothing that belongs to a whole menu. The basket goes because a
         flyer is not a table - there is nobody to show an order to. */}
@@ -229,11 +272,23 @@ const buildMs = Date.now() - started;
     `} />}
   </head>
   <body>
+    {fm && <Fragment set:html={fmLandingHtml} />}
     <Fragment set:html={toggles(menu)} />
-    {!soloItem && <Fragment set:html={hero(cfg)} />}
-    <Fragment set:html={header(menu, cfg, lang)} />
+    {!soloItem && <Fragment set:html={hero(heroCfg, heroExtra)} />}
+    <Fragment set:html={header(menu, headerCfg, lang)} />
     {!soloItem && <Fragment set:html={catBar(menu, lang)} />}
     <Fragment set:html={menuList(menu, lang)} />
+    {/* The platform's BetaReal footer, as Food & Market shows it (`.show` is what its
+        script adds once the menu has rendered; ours is rendered already). */}
+    {fm && (
+      <footer class="site-footer show">
+        <img class="footer-logo footer-logo-dark" src="/img/betareal-logo-dark.png" alt="BetaReal" width="333" height="110" loading="lazy" decoding="async" />
+        <img class="footer-logo footer-logo-light" src="/img/betareal-logo-light.png" alt="BetaReal" width="366" height="110" loading="lazy" decoding="async" />
+        <img class="footer-logo footer-logo-white" src="/img/betareal-logo-white.png" alt="BetaReal" width="333" height="110" loading="lazy" decoding="async" />
+        <a class="footer-email" href="mailto:betareal.ar@gmail.com">betareal.ar@gmail.com</a>
+        <p class="footer-copy">&copy; 2026 BetaReal &middot; Augmented Reality Menus</p>
+      </footer>
+    )}
     {soloItem && !soloModel && (
       <a class="solo-more" href={`/${menu.tenant.slug}`}>
         {lang === "ka" ? "სრული მენიუ →" : "See the full menu →"}

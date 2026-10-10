@@ -16,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePlan } from '@/lib/usePlan'
 import {
-  loadDirectory, needsAttention, liveMenuUrl, type DirectoryRow,
+  loadDirectory, needsAttention, liveMenuUrl, deleteTenant, type DirectoryRow,
 } from '@/lib/data/dev'
 import DevNav from '@/components/DevNav'
 
@@ -71,6 +71,25 @@ export default function DevConsole() {
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<Sort>('name')
   const search = useRef<HTMLInputElement>(null)
+  const [deleting, setDeleting] = useState('')
+
+  // Typing the slug back is the confirmation: a test restaurant and a client can share a
+  // name ("Food & Market" twice), never a slug.
+  // Test restaurants go in one click; a real-sized menu (over 25 dishes) asks first.
+  async function remove(r: DirectoryRow) {
+    if (r.dishes > 25) {
+      const typed = window.prompt(
+        `Delete "${r.name}" (/${r.slug}) and all of its ${r.dishes} dishes, categories, ` +
+        `models and stats? This cannot be undone.\n\nType ${r.slug} to confirm:`)
+      if (typed === null) return
+      if (typed.trim() !== r.slug) { window.alert('The slug did not match. Nothing was deleted.'); return }
+    }
+    setDeleting(r.tenant_id)
+    const err = await deleteTenant(r.tenant_id, r.slug)
+    setDeleting('')
+    if (err) { window.alert(`Could not delete: ${err}`); return }
+    setRows(rs => rs.filter(x => x.tenant_id !== r.tenant_id))
+  }
 
   useEffect(() => {
     if (plan.loading || plan.role !== 'super_admin') return
@@ -218,6 +237,11 @@ export default function DevConsole() {
                   <Link href={`/theme${q}`} className="btn btn-ghost btn-sm">Theme</Link>
                   <Link href={`/dashboard${q}`} className="btn btn-ghost btn-sm">Stats</Link>
                   <a href={liveMenuUrl(r.slug)} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">Live ↗</a>
+                  <button onClick={() => remove(r)} disabled={deleting === r.tenant_id}
+                          className="btn btn-sm"
+                          style={{ background: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' }}>
+                    {deleting === r.tenant_id ? 'Deleting…' : 'Delete'}
+                  </button>
                 </div>
               </div>
             </div>
