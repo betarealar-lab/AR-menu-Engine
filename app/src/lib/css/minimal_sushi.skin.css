@@ -13,3 +13,9 @@ html[data-fm-group="drinks"] [data-fm-kitchen]:not([data-fm-kitchen="drinks"]) {
 }
 /* A kitchen with no 3D dish shows no 3D block (fm.js sets this). */
 .cat-section[data-fm-empty] { display: none !important; }
+/* The hero is the restaurant's own photo (its `hero_image_url` setting) at every width.
+   The platform pins a desktop-only storefront file here; this copy uses the setting,
+   as it already does on phones. */
+[data-tenant="food-market-main"][data-template="minimal_sushi"] .mg-hero-photo {
+  background-image: var(--hero-image, none);
+}
