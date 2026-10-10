@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -34,7 +35,9 @@ import requests
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-PLATFORM = Path(r"C:\Users\temot\BetaReal scaleable\index.html")
+# Override with BETAREAL_PLATFORM_HTML on machines that are not Temo's.
+PLATFORM = Path(os.environ.get("BETAREAL_PLATFORM_HTML",
+                               r"C:\Users\temot\BetaReal scaleable\index.html"))
 
 
 def creds() -> tuple[str, str]:
@@ -49,8 +52,13 @@ def creds() -> tuple[str, str]:
 
 def select(path: str) -> list[dict]:
     url, key = creds()
-    r = requests.get(f"{url}/rest/v1/{path}",
-                     headers={"apikey": key, "Accept": "application/json"}, timeout=30)
+    headers = {"apikey": key, "Accept": "application/json"}
+    # Production's anon read policy on menu_items returns rows only for the restaurant
+    # named in x-restaurant-id, exactly as its own _supaSelect sends it.
+    rid = re.search(r"[?&]restaurant_id=eq\.(\d+)", path)
+    if rid:
+        headers["x-restaurant-id"] = rid.group(1)
+    r = requests.get(f"{url}/rest/v1/{path}", headers=headers, timeout=30)
     if r.status_code >= 300:
         raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
     return r.json()
