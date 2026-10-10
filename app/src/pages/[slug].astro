@@ -278,6 +278,17 @@ const buildMs = Date.now() - started;
     <Fragment set:html={header(menu, headerCfg, lang)} />
     {!soloItem && <Fragment set:html={catBar(menu, lang)} />}
     <Fragment set:html={menuList(menu, lang)} />
+    {/* The platform's BetaReal footer, as Food & Market shows it (`.show` is what its
+        script adds once the menu has rendered; ours is rendered already). */}
+    {fm && (
+      <footer class="site-footer show">
+        <img class="footer-logo footer-logo-dark" src="/img/betareal-logo-dark.png" alt="BetaReal" width="333" height="110" loading="lazy" decoding="async" />
+        <img class="footer-logo footer-logo-light" src="/img/betareal-logo-light.png" alt="BetaReal" width="366" height="110" loading="lazy" decoding="async" />
+        <img class="footer-logo footer-logo-white" src="/img/betareal-logo-white.png" alt="BetaReal" width="333" height="110" loading="lazy" decoding="async" />
+        <a class="footer-email" href="mailto:betareal.ar@gmail.com">betareal.ar@gmail.com</a>
+        <p class="footer-copy">&copy; 2026 BetaReal &middot; Augmented Reality Menus</p>
+      </footer>
+    )}
     {soloItem && !soloModel && (
       <a class="solo-more" href={`/${menu.tenant.slug}`}>
         {lang === "ka" ? "სრული მენიუ →" : "See the full menu →"}

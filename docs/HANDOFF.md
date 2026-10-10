@@ -32,9 +32,21 @@ the hand model pipeline in `tools/model/`. Section numbers quoted in code commen
 - **Importer**: production now needs `x-restaurant-id` to return dishes; categories keep
   production order; `additional_info_*` lands in `items.i18n`; `--verbatim-prices`; a re-import
   merges settings instead of replacing them.
-- **Not copied yet**: production's newer F&M AR (steam, plate guide, scan + tap placing) - the
-  rebuild's `xr.js` is an older port shared by every restaurant; assets are not in our R2 yet.
-- **Checks:** check_features 203 · check_render 116 · embed/inapp 21.
+- **AR re-ported from the live page** (shared by every restaurant): `ported/xr.js` and
+  `chrome.html` are production's current code (steam, plate guide, scan guide, placed FX).
+  Shim adds `window.__menuItems`, `_priceDisplay`, and `category` on items (steam stays off
+  cold kitchens). `platform.css` hides the scan guide outside F&M. Not tested on a real
+  phone yet. Viewer.js (3D modal) is still the 2026-09-05 port, so F&M's modal
+  "additional info" line is not shown.
+- **Parity, measured** (Pixel 7, all four kitchens, full page): element order and heights
+  identical; remaining pixel bands are the "Menu" link (2-3 px) and the sticky basket bar.
+  F&M cards open on the pictured choice (its photo and price), No Bun Burger has the
+  platform's code-only sauce choices and its green frame (`data-item-id`, 0042 exposes
+  `source_ref` in `public_menu`). BetaReal footer added.
+- **Delete a restaurant** (0041): red Delete on `/dev`, slug typed to confirm; models other
+  restaurants use go to the library; R2 untouched.
+- **Not copied yet**: assets are still hot-linked from production's r2.dev.
+- **Checks:** check_features 203 · check_render 116 · check_schema 86 · embed/inapp 21 · admin unit 26.
 
 ---
 

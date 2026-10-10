@@ -51,3 +51,8 @@
 .ar-featured-banner[hidden] {
   display: none !important;
 }
+
+/* The AR scan guide (#xr-scan-guide, in chrome.html since the 2026-10 XR port) is Food &
+ * Market's: the platform shows it only under html[data-fm-motion]. The template sheets for
+ * everyone else predate it and carry no base rule, so this is that rule. */
+html:not([data-fm-motion]) #xr-scan-guide { display: none !important; }

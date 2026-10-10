@@ -328,6 +328,9 @@
         // meaningless to both.
         id: d.id || "",
         name: d.name || "",
+        // The English category name: the AR's `_isHotDish` keeps steam off cold kitchens
+        // (Japanese, drinks, salads) by reading it.
+        category: d.category || "",
         name_ka: d.nameKa || "",
         name_ru: d.nameRu || "",
         description: desc ? desc.textContent.trim() : "",
@@ -366,7 +369,17 @@
     // sparse array is worth collapsing loudly rather than carrying.
     for (let i = 0; i < out.length; i++) if (!out[i]) out[i] = { id: "", name: "" };
     window.menuItems = out;
+    // The newer XR code (scan guide, placed FX, add-from-AR) reads the same list under
+    // the platform's other name for it.
+    window.__menuItems = out;
     return out;
+  }
+
+  // The platform's price text helper, which the XR name card calls. Prices here are
+  // already display text (markup.js), so it only trims - the platform's Ikigai
+  // "Included with meal" case has no restaurant on this side yet.
+  if (typeof window._priceDisplay !== "function") {
+    window._priceDisplay = (price) => String(price == null ? "" : price).trim();
   }
 
   window.__bootViewer = function () {

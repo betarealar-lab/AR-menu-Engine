@@ -52,6 +52,20 @@ def parse_price(raw) -> tuple[int, str, str | None]:
     return minor, cur, (None if plain else s)
 
 
+# Choices the platform adds IN CODE (`CODE_VARIANTS` in its index.html) for dishes whose
+# variants its admin cannot enter yet. Used only while the dish has none of its own, as
+# there. Keyed by the platform's menu_items.id.
+CODE_VARIANTS = {
+    # Food & Market - No Bun Burger: sauce choice, same price
+    "2484": [
+        {"en": "Carbonara", "ka": "კარბონარა", "price": "30.00 ₾"},
+        {"en": "Champignon", "ka": "სოკოს სოუსი", "price": "30.00 ₾"},
+        {"en": "White Sauce", "ka": "თეთრი სოუსი", "price": "30.00 ₾"},
+        {"en": "Black Pepper", "ka": "პილპილის სოუსი", "price": "30.00 ₾"},
+    ],
+}
+
+
 def split_theme(cfg: dict) -> tuple[dict, dict, dict]:
     """theme_config -> (palette, settings, item camera angles).
 
@@ -218,7 +232,7 @@ def main() -> int:
                   json.dumps(i18n), bool(it.get("text_only")),
                   bool(it.get("is_3d", True)), bool(it.get("thumb_3d")),
                   bool(it.get("featured")),
-                  json.dumps(it.get("variants") or []),
+                  json.dumps(it.get("variants") or CODE_VARIANTS.get(ref) or []),
                   json.dumps(it.get("addons") or []), ref))
             made += 1
 

@@ -193,11 +193,16 @@ function cardPrice(item) {
  */
 const choiceLabel = (c, lang) => (c && (c[lang] || c.en || c.ka)) || "";
 
-function variants(item, lang) {
+/** The choice a card opens on: the first one with a photo, else the first - the same
+ *  rule as `_variantIndex` in platform.js. Used for Food & Market (`pictured`), where the
+ *  card then shows that choice's photo and price, as the platform does. */
+const pictured = (item) => Math.max(0, (item.variants || []).findIndex((v) => v && v.image_url));
+
+function variants(item, lang, sel = 0) {
   if (!item.variants?.length) return "";
   return `<div class="variants" role="radiogroup">` + item.variants.map((v, i) =>
-    `<button type="button" class="variant${i === 0 ? " selected" : ""}" data-vi="${i}" ` +
-    `role="radio" aria-checked="${i === 0}">` +
+    `<button type="button" class="variant${i === sel ? " selected" : ""}" data-vi="${i}" ` +
+    `role="radio" aria-checked="${i === sel}">` +
     `<span class="variant-name">${e(choiceLabel(v, lang))}</span>` +
     `<span class="variant-price">${e(v.price || "")}</span></button>`).join("") + `</div>`;
 }
@@ -256,6 +261,14 @@ export function menuItem(item, i, lang, promoted = false, eager = false, kitchen
   // 3D (`_isFoodMarketDrinksActive`). Every other kitchen is an ordinary card.
   if (kitchen === "drinks") item = { ...item, is_3d: false, text_only: true };
   const info = kitchen ? pick(item, "additional_info", lang) : "";
+  // Food & Market opens each card on its pictured choice, with that choice's photo and
+  // price (the platform's renderMenuCard).
+  const sel = kitchen && item.variants?.length ? pictured(item) : 0;
+  if (kitchen && item.variants?.length) {
+    const v = item.variants[sel];
+    item = { ...item, price: v.price || item.price,
+             thumbnail_url: v.image_url || item.thumbnail_url, price_old: null };
+  }
   // **What a card can actually draw**, which is not the same question as what it has.
   //
   // A model only counts as something to show when `is_3d` is on: a dish CAN carry a model
@@ -311,6 +324,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false, kitchen
     ` data-price="${e(item.price)}"` +
     (item.price_old ? ` data-price-old="${e(item.price_old)}"` : "") +
     (item.category_id ? ` data-cat="${e(item.category_id)}"` : "") +
+    (item.category_name ? ` data-category="${e(item.category_name)}"` : "") +
     // **`data-3d` is not the same question as "has a model".** The owner can keep a dish's
     // model attached and still have it behave like a photo dish - `is_3d` off - and two of
     // Monday Greens' dishes are set that way today. Inferring 3D from the presence of a
@@ -327,6 +341,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false, kitchen
     (item.view_orbit ? ` data-orbit="${e(item.view_orbit)}"` : "") +
     (item.ar_scale !== 1 ? ` data-ar-scale="${e(item.ar_scale)}"` : "") +
     (kitchen ? ` data-fm-kitchen="${kitchen}"` : "") +
+    (kitchen && item.source_ref ? ` data-item-id="${e(item.source_ref)}"` : "") +
     (kitchen && cardDoodle(i, kitchen) ? ` data-bg-doodle="${cardDoodle(i, kitchen)}"` : "") +
     (item.additional_info_en ? ` data-info="${e(item.additional_info_en)}"` : "") +
     (item.additional_info_ka ? ` data-info-ka="${e(item.additional_info_ka)}"` : "");
@@ -355,7 +370,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false, kitchen
 
   const actions = `<div class="item-actions"><p class="price">` +
     (item.price_old ? `<span class="price-was">${e(item.price_old)}</span>` : "") +
-    `${e(cardPrice(item))}</p>${qtyCtrl(i)}</div>`;
+    `${e(kitchen ? item.price : cardPrice(item))}</p>${qtyCtrl(i)}</div>`;
   const nameHtml =
     `<p class="item-name" data-field="name" data-idx="${i}">${e(name)}` +
     `${kitchen ? dietBadges(item.name_en) : ""}</p>`;
@@ -369,7 +384,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false, kitchen
   // the body rather than a right-hand column beside a picture that is not there, and the
   // sizes and add-ons take a full-width row underneath instead of the narrow price column.
   if (noImage) {
-    const extra = variants(item, lang) + addons(item, lang);
+    const extra = variants(item, lang, sel) + addons(item, lang);
     return `<div class="${cls}"${data}>${nameHtml}${descHtml}` +
       `<div class="item-right">${actions}</div>` +
       (extra ? `<div class="no-image-extra">${extra}</div>` : "") +
@@ -377,7 +392,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false, kitchen
   }
   return `<div class="${cls}"${data}>${nameHtml}${left}` +
     `<div class="item-right">${descHtml}${actions}` +
-    `${variants(item, lang)}${addons(item, lang)}` +
+    `${variants(item, lang, sel)}${addons(item, lang)}` +
     // The label is the platform's own string for this language. It is corrected on the
     // client the moment AR capability is known - a phone that can do real AR is offered
     // "VIEW ON TABLE" instead - but it must not be blank or English in the first frame.
