@@ -47,6 +47,9 @@ the hand model pipeline in `tools/model/`. Section numbers quoted in code commen
   restaurants use go to the library; R2 untouched.
 - **Not copied yet**: assets are still hot-linked from production's r2.dev.
 - **Checks:** check_features 203 · check_render 116 · check_schema 86 · embed/inapp 21 · admin unit 26.
+- **Admin deploy gotcha:** `npm run deploy` without `admin/.env.production.local` bakes
+  `placeholder.supabase.co` into the browser bundle and nobody can log in (happened 2026-10-10).
+  That file needs `NEXT_PUBLIC_SUPABASE_URL`, `_ANON_KEY`, `_MENU_ORIGIN`, `_ADMIN_ORIGIN`.
 
 ---
 
