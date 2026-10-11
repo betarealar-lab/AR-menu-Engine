@@ -234,7 +234,9 @@ export default function DevConsole() {
                 <div className="flex flex-wrap gap-1.5 shrink-0">
                   <Link href={`/menu${q}`} className="btn btn-ghost btn-sm">Menu</Link>
                   <Link href={`/models${q}`} className="btn btn-ghost btn-sm">3D</Link>
-                  <Link href={`/theme${q}`} className="btn btn-ghost btn-sm">Theme</Link>
+                  {/* Was "Theme"; the theme is still in the sidebar once a restaurant is open
+                      (Nika, 2026-10-11). */}
+                  <Link href={`/dev/account?tenant=${r.tenant_id}`} className="btn btn-ghost btn-sm">Account</Link>
                   <Link href={`/dashboard${q}`} className="btn btn-ghost btn-sm">Stats</Link>
                   <a href={liveMenuUrl(r.slug)} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">Live ↗</a>
                   <button onClick={() => remove(r)} disabled={deleting === r.tenant_id}

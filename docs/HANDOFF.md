@@ -50,6 +50,9 @@ the hand model pipeline in `tools/model/`. Section numbers quoted in code commen
 - **To-do + Need help?** (0043): super admins get `/dev/todo` (ideas + help requests,
   red count in the sidebar). Owners get "Need help?" in the sidebar footer, which files a
   request via `request_help` - no messaging; the list is the notification.
+- **Account page** (0044): `/dev/account?tenant=` - logins, last sign-in/active, devices
+  (auth.sessions), activity (change_history), password-reset links via `/api/account-reset`.
+  Passwords are never shown: Supabase stores only a hash.
 - **Admin deploy gotcha:** `npm run deploy` without `admin/.env.production.local` bakes
   `placeholder.supabase.co` into the browser bundle and nobody can log in (happened 2026-10-10).
   That file needs `NEXT_PUBLIC_SUPABASE_URL`, `_ANON_KEY`, `_MENU_ORIGIN`, `_ADMIN_ORIGIN`.
