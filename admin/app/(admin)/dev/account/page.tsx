@@ -3,8 +3,9 @@
 // button on a restaurant's row in /dev.
 //
 //   Logins     - who can sign in, when they last signed in, when they were last active
-//   Password   - never shown: Supabase keeps only a hash, and nobody here should know a
-//                client's password. "Reset link" makes a one-time link to send them.
+//   Password   - never shown: Supabase keeps only a hash. "Set password" sets a new one
+//                at once (works for test emails that aren't real inboxes) and shows it
+//                that one time; "Reset link" lets the owner choose their own.
 //   Sign-ins   - each signed-in device, from auth.sessions
 //   Activity   - every edit made to the restaurant (change_history, 0036)
 
@@ -15,7 +16,7 @@ import { usePlan } from '@/lib/usePlan'
 import DevNav from '@/components/DevNav'
 import { ago } from '@/lib/data/todos'
 import {
-  loadTenantAccount, makeResetLink, addLogin, liveMenuUrl, type TenantAccount,
+  loadTenantAccount, makeResetLink, addLogin, setLoginPassword, liveMenuUrl, type TenantAccount,
 } from '@/lib/data/dev'
 
 const when = (iso: string | null) => iso
@@ -47,6 +48,9 @@ function AccountView() {
   const [busy, setBusy] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newLink, setNewLink] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [pwDraft, setPwDraft] = useState<Record<string, string>>({})
+  const [pwSet, setPwSet] = useState<Record<string, string>>({})
 
   const refresh = useCallback(async () => {
     if (!tenantId) return
@@ -68,14 +72,32 @@ function AccountView() {
     navigator.clipboard?.writeText(link).catch(() => {})
   }
 
+  async function setPw(userId: string) {
+    const pw = (pwDraft[userId] || '').trim()
+    setBusy('pw' + userId); setError('')
+    const err = await setLoginPassword(userId, pw)
+    setBusy('')
+    if (err) { setError(err); return }
+    setPwSet(m => ({ ...m, [userId]: pw }))
+    setPwDraft(m => ({ ...m, [userId]: '' }))
+  }
+
   async function add(e: React.FormEvent) {
     e.preventDefault()
-    setBusy('new')
-    const { link, error } = await addLogin(tenantId, newEmail)
+    setBusy('new'); setError('')
+    const { link, userId, error } = await addLogin(tenantId, newEmail)
+    if (error) { setBusy(''); setError(error); return }
+    // With a password typed in, it is set straight away and the link is not needed.
+    if (newPw.trim() && userId) {
+      const err = await setLoginPassword(userId, newPw.trim())
+      if (err) { setBusy(''); setError(err); return }
+      setPwSet(m => ({ ...m, [userId]: newPw.trim() }))
+      setNewLink('')
+    } else {
+      setNewLink(link || '')
+    }
     setBusy('')
-    if (error) { setError(error); return }
-    setNewEmail('')
-    setNewLink(link || '')
+    setNewEmail(''); setNewPw('')
     refresh()
   }
 
@@ -133,11 +155,33 @@ function AccountView() {
                   </button>
                 </div>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-1 text-sm">
-                  <div><span style={{ color: 'var(--dim)' }}>Password: </span>hidden (only a hash is stored)</div>
+                  <div><span style={{ color: 'var(--dim)' }}>Password: </span>
+                    {pwSet[m.user_id]
+                      ? <b style={{ color: 'var(--gold)' }}>{pwSet[m.user_id]}</b>
+                      : 'hidden (only a hash is stored)'}
+                  </div>
                   <div><span style={{ color: 'var(--dim)' }}>Last sign-in: </span>{when(m.last_sign_in_utc)}</div>
                   <div><span style={{ color: 'var(--dim)' }}>Last active: </span>{when(m.last_active_utc)}</div>
                   <div><span style={{ color: 'var(--dim)' }}>Edits: </span>{m.edits} · since {new Date(m.added_utc).toLocaleDateString('en-GB')}</div>
                 </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1 min-w-0">
+                    <input value={pwDraft[m.user_id] || ''} minLength={6} maxLength={72}
+                           onChange={e => setPwDraft(d => ({ ...d, [m.user_id]: e.target.value }))}
+                           placeholder="New password (6+ characters)" aria-label={`New password for ${m.email}`} />
+                  </div>
+                  <button onClick={() => setPw(m.user_id)}
+                          disabled={busy === 'pw' + m.user_id || (pwDraft[m.user_id] || '').trim().length < 6}
+                          className="btn btn-primary btn-sm">
+                    {busy === 'pw' + m.user_id ? 'Setting…' : 'Set password'}
+                  </button>
+                </div>
+                {pwSet[m.user_id] && (
+                  <p className="text-sm" style={{ color: 'var(--gold)' }}>
+                    Done - {m.email} now signs in with <b>{pwSet[m.user_id]}</b>. Note it down:
+                    it is shown only now and is not stored anywhere readable.
+                  </p>
+                )}
                 {links[m.user_id] && (
                   <div className="text-sm grid gap-1">
                     <span style={{ color: 'var(--gold)' }}>
@@ -158,6 +202,10 @@ function AccountView() {
               <div className="flex-1 min-w-0">
                 <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
                        placeholder="owner@restaurant.ge" aria-label="Email" required />
+              </div>
+              <div className="sm:w-56 shrink-0">
+                <input value={newPw} onChange={e => setNewPw(e.target.value)} maxLength={72}
+                       placeholder="Password (optional)" aria-label="Password for the new login" />
               </div>
               <button type="submit" disabled={busy === 'new' || !newEmail.trim()} className="btn btn-primary btn-sm">
                 {busy === 'new' ? 'Adding…' : 'Add as owner'}

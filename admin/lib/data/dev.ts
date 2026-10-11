@@ -358,11 +358,22 @@ export async function makeResetLink(userId: string): Promise<{ link: string; err
 
 /** Give a restaurant a login: the existing invite route, which returns a set-password link. */
 export async function addLogin(tenantId: string, email: string)
-  : Promise<{ link: string | null; error: string }> {
+  : Promise<{ link: string | null; userId: string | null; error: string }> {
   const res = await fetch('/api/members', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tenantId, email, role: 'owner' }),
   })
   const body = await res.json().catch(() => ({}))
-  return { link: body.link || null, error: res.ok ? '' : (body.error || `HTTP ${res.status}`) }
+  return { link: body.link || null, userId: body.userId || null,
+           error: res.ok ? '' : (body.error || `HTTP ${res.status}`) }
+}
+
+/** Set a login's password directly - works for test emails that are not real inboxes. */
+export async function setLoginPassword(userId: string, password: string): Promise<string> {
+  const res = await fetch('/api/account-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, password }),
+  })
+  const body = await res.json().catch(() => ({}))
+  return res.ok ? '' : (body.error || `HTTP ${res.status}`)
 }
