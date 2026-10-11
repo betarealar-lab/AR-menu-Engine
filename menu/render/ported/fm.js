@@ -113,11 +113,16 @@
     };
   }
 
-  // ── The Georgian waiter: in the Georgian kitchen's 3D view, "next" / "previous" has a
+  // ── The kitchen waiters: in a kitchen's 3D view, "next" / "previous" has that kitchen's
   // waiter walk in and shove the dish off screen, and the next one slides in behind it.
-  // An experiment (Nika, 2026-10-11). It wraps the arrows rather than changing viewer.js:
+  // Desktop only - on a phone he covers too much of the dish. An experiment (Nika,
+  // 2026-10-11). It wraps the arrows rather than changing viewer.js:
   // it holds the click, plays, then replays the click for viewer.js to step the dish.
-  const PUSHER = "/img/food-market/georgian-pusher.png";
+  const PUSHERS = {
+    georgian: "/img/food-market/georgian-pusher.png",
+    japanese: "/img/food-market/japanese-pusher.png",
+    thai: "/img/food-market/thai-pusher.png",
+  };
   let pushing = false, replaying = false;
 
   function wirePusher() {
@@ -126,26 +131,31 @@
     if (!modal || !viewer) return;
     const guy = document.createElement("img");
     guy.id = "fm-pusher";
-    guy.src = PUSHER;
+    guy.src = PUSHERS.georgian;
     guy.alt = "";
     guy.setAttribute("aria-hidden", "true");
     modal.appendChild(guy);
 
     const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const wide = () => matchMedia("(min-width: 640px)").matches;
+    // Fetch all three up front so the first push isn't a blank walk-on.
+    Object.values(PUSHERS).forEach((u) => { const i = new Image(); i.src = u; });
 
     function shove(dir, step) {
       // dir +1 = next: he comes in from the right and pushes the dish left. -1 = mirrored.
       pushing = true;
       const W = innerWidth;
       const box = viewer.getBoundingClientRect();
+      guy.src = PUSHERS[root.dataset.fmGroup];
+      guy.style.display = "block";
       const gw = guy.getBoundingClientRect().width || 200;
+      guy.style.marginLeft = `${-gw / 2}px`;          // centred, whatever his build
       // The dish sits mid-viewer; he stands just off its edge, hand on the plate.
       const dishHalf = Math.min(box.width * 0.34, box.height * 0.42);
       const from = dir * (W / 2 + gw);               // where he starts, off screen
       const at = dir * (dishHalf + gw * 0.32);       // shoulder against the dish
       const away = -dir * W * 1.1;                   // how far the dish goes
       const face = dir > 0 ? 1 : -1;                 // he faces the way he pushes
-      guy.style.display = "block";
 
       const walk = guy.animate([
         { transform: `translateX(${from}px) scaleX(${face}) rotate(0deg)` },
@@ -179,7 +189,7 @@
       if (!btn) continue;
       // Capture on the button itself runs before viewer.js's own listener.
       btn.addEventListener("click", (ev) => {
-        if (replaying || root.dataset.fmGroup !== "georgian" || still()) return;
+        if (replaying || !PUSHERS[root.dataset.fmGroup] || still() || !wide()) return;
         ev.stopImmediatePropagation();
         if (pushing) return;
         shove(dir, () => { replaying = true; btn.click(); replaying = false; });
