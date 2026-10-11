@@ -15,6 +15,8 @@ import { usePlan } from '@/lib/usePlan'
 import TenantPicker from '@/components/TenantPicker'
 import Icon, { type IconName } from '@/components/Icon'
 import { adminIdentityLabel } from '@/lib/adminUx'
+import { useHelpCount } from '@/lib/useHelpCount'
+import HelpButton from '@/components/HelpButton'
 
 /** Light mode is a class on <html>, not a second palette written in JavaScript.
  *
@@ -25,7 +27,7 @@ function applyThemeVars(isDark: boolean) {
   document.documentElement.classList.toggle('light', !isDark)
 }
 
-type Row = { href: string; match?: string; label: string; icon: IconName }
+type Row = { href: string; match?: string; label: string; icon: IconName; badge?: number }
 
 /** One row of navigation. Defined at module scope: inside the component it would be a
  *  new function identity on every render, and React would remount every item. */
@@ -46,6 +48,11 @@ row: Row; active: boolean; onClose: () => void
       )}
       <Icon name={row.icon} />
       <span className="truncate">{row.label}</span>
+      {!!row.badge && (
+        <span className="ml-auto text-[11px] font-bold px-1.5 rounded-full"
+              style={{ background: 'var(--danger)', color: '#fff' }}
+              aria-label={`${row.badge} waiting`}>{row.badge}</span>
+      )}
     </Link>
   )
 }
@@ -67,6 +74,7 @@ interface Props {
 export default function Sidebar({ open, onClose }: Props) {
   const pathname = usePathname()
   const plan = usePlan()
+  const helpWaiting = useHelpCount(plan.role === 'super_admin')
 
   const [lang, setLang] = useState<Lang>('en')
   const [dark, setDark] = useState(true)
@@ -121,6 +129,9 @@ export default function Sidebar({ open, onClose }: Props) {
     // The developer console (2026-09-28): every restaurant searchable, the library's own
     // Studio, and the optimiser as a button rather than a script on somebody's laptop.
     plan.role === 'super_admin' ? { href: '/dev', match: '/dev$', label: 'Restaurants', icon: 'grid' } : null,
+    // Our ideas, and the restaurants that pressed "Need help?" (0043). The red number is
+    // how many are waiting - the only notification there is.
+    plan.role === 'super_admin' ? { href: '/dev/todo', match: '/dev/todo', label: 'To-do', icon: 'check', badge: helpWaiting } : null,
     plan.role === 'super_admin' ? { href: '/dev/library', match: '/dev/library', label: 'Library Studio', icon: 'cube' } : null,
     plan.role === 'super_admin' ? { href: '/dev/upload', match: '/dev/upload', label: 'Upload model', icon: 'upload' } : null,
     // One page and QR per dish, for flyers and posters (0033). Restaurant-scoped, so it
@@ -204,6 +215,11 @@ export default function Sidebar({ open, onClose }: Props) {
           <Icon name="external" />
           <span>{T.viewMenu}</span>
         </a>
+
+        {/* An owner's line to us (0043). Not for us: we are the ones it reaches. */}
+        {plan.role !== 'super_admin' && plan.restaurantId && (
+          <HelpButton tenantId={plan.restaurantId} />
+        )}
 
         <NavLink row={{ href: '/account', label: 'Account', icon: 'user' }}
                  onClose={onClose} active={pathname.startsWith('/account')} />

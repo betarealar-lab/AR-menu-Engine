@@ -6,9 +6,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useHelpCount } from '@/lib/useHelpCount'
 
 const TABS: [string, string][] = [
   ['/dev', 'Restaurants'],
+  ['/dev/todo', 'To-do'],
   ['/dev/library', 'Library Studio'],
   ['/dev/upload', 'Upload model'],
   ['/dev/engines', 'Engines'],
@@ -17,6 +19,7 @@ const TABS: [string, string][] = [
 
 export default function DevNav() {
   const path = usePathname()
+  const help = useHelpCount(true)
   return (
     <nav className="flex gap-1 mb-6 overflow-x-auto -mx-1 px-1 pb-1" aria-label="Developer">
       {TABS.map(([href, label]) => {
@@ -28,6 +31,10 @@ export default function DevNav() {
                          color: on ? 'var(--gold)' : 'var(--dim)',
                          fontWeight: on ? 600 : 500 }}>
             {label}
+            {href === '/dev/todo' && help > 0 && (
+              <span className="ml-1.5 text-[11px] font-bold px-1.5 rounded-full"
+                    style={{ background: 'var(--danger)', color: '#fff' }}>{help}</span>
+            )}
           </Link>
         )
       })}
