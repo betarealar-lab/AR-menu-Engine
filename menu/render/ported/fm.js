@@ -49,7 +49,9 @@
     root.dataset.fmLanding = "0";
     track("menu_group", { group: kitchen, source });
     setGroup(kitchen);
-    window.scrollTo(0, 0);
+    // From the picker the menu starts at the top. Between kitchens the diner keeps their
+    // place: the page stays where it was scrolled (Nika's call, 2026-10-11).
+    if (source === "landing") window.scrollTo(0, 0);
   }
 
   function start() {

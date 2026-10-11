@@ -48,3 +48,16 @@ html[data-tenant="food-market-main"][data-fm-group="drinks"] {
   --fm-stage: radial-gradient(ellipse at 50% 42%, #ffffff 0%, #f6f7f8 60%, #eceef0 100%);
   --fm-stage-edge: rgba(0, 0, 0, 0.07);
 }
+
+/* Desktop: the 3D view fills the screen, so the kitchen's backdrop covers all of it -
+   behind the drawer and into the corners - instead of a coloured box on white. */
+@media (min-width: 640px) {
+  html[data-tenant="food-market-main"] #modal { background: var(--fm-stage, #fff); }
+  html[data-tenant="food-market-main"] #modal-viewer-wrap { background: none; border-radius: 0; }
+  html[data-tenant="food-market-main"] .modal-vignette { display: none; }
+  html[data-tenant="food-market-main"] #modal-drawer { background: none; }
+  html[data-tenant="food-market-main"][data-fm-group="georgian"] #modal-title-d,
+  html[data-tenant="food-market-main"][data-fm-group="georgian"] #modal-price,
+  html[data-tenant="food-market-main"][data-fm-group="georgian"] #modal-description,
+  html[data-tenant="food-market-main"][data-fm-group="georgian"] #modal .tip { color: #f3eee8; }
+}
