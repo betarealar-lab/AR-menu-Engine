@@ -1,0 +1,79 @@
+/* Food & Market's kitchens - the part that is ours rather than the platform's.
+   Hand-written; loaded after the generated minimal_sushi.css.
+
+   The platform re-renders the list per kitchen. Here every kitchen's cards are already
+   in the page, tagged `data-fm-kitchen`, and the kitchen on screen is `html[data-fm-group]`.
+   These rules hide the other three - sections, the 3D block's cards and the pills alike -
+   so page.js's category filter works unchanged inside a kitchen. */
+html[data-fm-group="georgian"] [data-fm-kitchen]:not([data-fm-kitchen="georgian"]),
+html[data-fm-group="thai"] [data-fm-kitchen]:not([data-fm-kitchen="thai"]),
+html[data-fm-group="japanese"] [data-fm-kitchen]:not([data-fm-kitchen="japanese"]),
+html[data-fm-group="drinks"] [data-fm-kitchen]:not([data-fm-kitchen="drinks"]) {
+  display: none !important;
+}
+/* A kitchen with no 3D dish shows no 3D block (fm.js sets this). */
+.cat-section[data-fm-empty] { display: none !important; }
+/* The hero is the restaurant's own photo (its `hero_image_url` setting) at every width.
+   The platform pins a desktop-only storefront file here; this copy uses the setting,
+   as it already does on phones. */
+[data-tenant="food-market-main"][data-template="minimal_sushi"] .mg-hero-photo {
+  background-image: var(--hero-image, none);
+}
+
+/* The 3D view's stage takes the kitchen's look, from its landing tile, softened so the
+   dish stays the subject: Georgian warm charcoal, Thai pale lavender, Japanese white
+   with a faint red sun behind the dish, Drinks clean white. Replaces the platform's
+   grey vignette (Nika's call, 2026-10-11). */
+html[data-tenant="food-market-main"] #modal-viewer-wrap {
+  background: var(--fm-stage, #fff);
+}
+html[data-tenant="food-market-main"] .modal-vignette {
+  background: radial-gradient(ellipse at center, transparent 58%, var(--fm-stage-edge, rgba(0,0,0,0.08)) 100%);
+}
+html[data-tenant="food-market-main"][data-fm-group="georgian"] {
+  --fm-stage: radial-gradient(ellipse at 50% 42%, #3b3735 0%, #262321 55%, #1a1817 100%);
+  --fm-stage-edge: rgba(0, 0, 0, 0.4);
+}
+html[data-tenant="food-market-main"][data-fm-group="thai"] {
+  --fm-stage: radial-gradient(ellipse at 50% 42%, #fcf9fe 0%, #f1e9f7 60%, #e6daf0 100%);
+  --fm-stage-edge: rgba(120, 72, 150, 0.16);
+}
+html[data-tenant="food-market-main"][data-fm-group="japanese"] {
+  --fm-stage:
+    radial-gradient(circle at 50% 40%, rgba(214, 38, 38, 0.13) 0%, rgba(214, 38, 38, 0.11) 27%, rgba(214, 38, 38, 0) 29%),
+    linear-gradient(180deg, #ffffff 0%, #f7f5f3 100%);
+  --fm-stage-edge: rgba(0, 0, 0, 0.06);
+}
+html[data-tenant="food-market-main"][data-fm-group="drinks"] {
+  --fm-stage: radial-gradient(ellipse at 50% 42%, #ffffff 0%, #f6f7f8 60%, #eceef0 100%);
+  --fm-stage-edge: rgba(0, 0, 0, 0.07);
+}
+
+/* Desktop: the 3D view fills the screen, so the kitchen's backdrop covers all of it -
+   behind the drawer and into the corners - instead of a coloured box on white. */
+@media (min-width: 640px) {
+  html[data-tenant="food-market-main"] #modal { background: var(--fm-stage, #fff); }
+  html[data-tenant="food-market-main"] #modal-viewer-wrap { background: none; border-radius: 0; }
+  html[data-tenant="food-market-main"] .modal-vignette { display: none; }
+  html[data-tenant="food-market-main"] #modal-drawer { background: none; }
+  html[data-tenant="food-market-main"][data-fm-group="georgian"] #modal-title-d,
+  html[data-tenant="food-market-main"][data-fm-group="georgian"] #modal-price,
+  html[data-tenant="food-market-main"][data-fm-group="georgian"] #modal-description,
+  html[data-tenant="food-market-main"][data-fm-group="georgian"] #modal .tip { color: #f3eee8; }
+}
+
+/* The kitchen waiters who push dishes along in the desktop 3D view (fm.js walks them in
+   from either side and centres them by their own width). */
+#fm-pusher {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: 110px;
+  height: min(52vh, 480px);
+  z-index: 4;
+  pointer-events: none;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.35));
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+@media (max-width: 639px) { #fm-pusher { display: none !important; } }

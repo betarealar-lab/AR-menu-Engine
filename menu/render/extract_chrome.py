@@ -33,12 +33,15 @@ a per-restaurant setting in our schema, not page furniture.
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-SRC = Path(r"C:\Users\temot\BetaReal scaleable\index.html")
+# BETAREAL_PLATFORM_HTML points at a copy of the live page on machines other than Temo's.
+SRC = Path(os.environ.get("BETAREAL_PLATFORM_HTML",
+                          r"C:\Users\temot\BetaReal scaleable\index.html"))
 OUT = ROOT / "menu" / "render" / "ported" / "chrome.html"
 
 # Document order, which is also the order the platform has them in. It matters for the

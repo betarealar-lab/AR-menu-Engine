@@ -53,6 +53,17 @@ export async function loadDirectory(): Promise<{ rows: DirectoryRow[]; error: st
   return { rows, error: error?.message || '' }
 }
 
+/** Delete a restaurant and everything in it (0041). Super admins only, and the slug has
+ *  to be typed back - the database checks both. Files in R2 are never touched, and a model
+ *  another restaurant still uses moves to the library instead of going with it. */
+export async function deleteTenant(tenantId: string, confirmSlug: string): Promise<string> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('delete_tenant', {
+    p_tenant: tenantId, p_confirm_slug: confirmSlug,
+  })
+  return error?.message || ''
+}
+
 /** Does this restaurant need one of us? The rule the "Needs attention" filter and the
  *  dot on a row both use, so the two can never disagree.
  *
@@ -310,4 +321,59 @@ export async function uploadModelFile(file: File, purpose: 'raw' | 'asis',
     throw e
   }
   return key as string
+}
+
+// ── A restaurant's logins (0044) ────────────────────────────────────
+
+export type AccountMember = {
+  user_id: string; email: string; role: string; added_utc: string; created_utc: string
+  confirmed: boolean; last_sign_in_utc: string | null; last_active_utc: string | null
+  edits: number; is_super: boolean
+}
+export type AccountSession = { email: string; started_utc: string; seen_utc: string; user_agent: string }
+export type AccountActivity = {
+  at: string; email: string | null; source: string; label: string | null
+  field: string; old: string; new: string
+}
+export type TenantAccount = {
+  tenant: { id: string; name: string; slug: string; created_utc: string } | null
+  members: AccountMember[]; sessions: AccountSession[]; activity: AccountActivity[]
+}
+
+export async function loadTenantAccount(tenantId: string)
+  : Promise<{ data: TenantAccount | null; error: string }> {
+  const { data, error } = await createClient().rpc('admin_tenant_account', { p_tenant: tenantId })
+  return { data: (data as TenantAccount) || null, error: error?.message || '' }
+}
+
+/** A one-time link where the owner sets a new password. We never see the password. */
+export async function makeResetLink(userId: string): Promise<{ link: string; error: string }> {
+  const res = await fetch('/api/account-reset', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId }),
+  })
+  const body = await res.json().catch(() => ({}))
+  return { link: body.link || '', error: res.ok ? '' : (body.error || `HTTP ${res.status}`) }
+}
+
+/** Give a restaurant a login: the existing invite route, which returns a set-password link. */
+export async function addLogin(tenantId: string, email: string)
+  : Promise<{ link: string | null; userId: string | null; error: string }> {
+  const res = await fetch('/api/members', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tenantId, email, role: 'owner' }),
+  })
+  const body = await res.json().catch(() => ({}))
+  return { link: body.link || null, userId: body.userId || null,
+           error: res.ok ? '' : (body.error || `HTTP ${res.status}`) }
+}
+
+/** Set a login's password directly - works for test emails that are not real inboxes. */
+export async function setLoginPassword(userId: string, password: string): Promise<string> {
+  const res = await fetch('/api/account-password', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, password }),
+  })
+  const body = await res.json().catch(() => ({}))
+  return res.ok ? '' : (body.error || `HTTP ${res.status}`)
 }

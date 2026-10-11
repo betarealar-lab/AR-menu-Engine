@@ -31,6 +31,8 @@
 // would take either) and by plain Node in `check_features.py`, and Node ESM refuses a
 // JSON import without it. One spelling that works in both is worth the six characters.
 import uiStrings from "./ui.json" with { type: "json" };
+import { kitchenOf, visibleCategory, categoryDecoration, cardDoodle, dietBadges,
+         kitchenTabs } from "./foodmarket.js";
 
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -48,7 +50,8 @@ const pick = (item, field, lang) =>
  *  3D block's heading. Everything else is set by the client, which knows the device. */
 const ui = (lang) => uiStrings[lang] || uiStrings.en;
 
-export function hero(cfg) {
+/** `extra` is markup appended inside the band - Food & Market's "Menu ↓" link. */
+export function hero(cfg, extra = "") {
   const any = cfg.hero_image_url || cfg.hero_logo_url || cfg.hero_video_url
     || cfg.hero_images;
   if (!any) return "";
@@ -67,6 +70,7 @@ export function hero(cfg) {
     (cfg.hero_logo_url
       ? `<img class="mg-hero-logo" src="${e(cfg.hero_logo_url)}" alt="" fetchpriority="high">`
       : "") +
+    extra +
     `</section>`;
 }
 
@@ -115,17 +119,26 @@ export function catBar(menu, lang) {
   // Same rule as `menuList`: when every dish is 3D there is exactly one section and it
   // holds all of them, so "All", "3D" and every category pill select the same thing.
   if (menu.items.length > 0 && menu.items.every(offers3d)) return "";
-  const pill = (cat, en, ka, ru, active) =>
+  // Food & Market: each category pill belongs to one kitchen, and reads without the
+  // kitchen's prefix ("Pizza", not "Georgian — Pizza"), as on the platform.
+  const fm = menu.fm;
+  const shown = (s) => fm ? visibleCategory(s) : s;
+  const pill = (cat, en, ka, ru, active, kitchen) =>
     `<button type="button" class="cat-pill${active ? " active" : ""}" ` +
-    `data-cat="${e(cat)}" data-cat-en="${e(en)}"` +
-    (ka ? ` data-cat-ka="${e(ka)}"` : "") + (ru ? ` data-cat-ru="${e(ru)}"` : "") + `>` +
-    `${e(label({ name: en, name_ka: ka, name_ru: ru }, lang))}</button>`;
-  return `<div id="cat-bar" class="cat-bar"><div class="cat-scroll">` +
+    `data-cat="${e(cat)}" data-cat-en="${e(shown(en))}"` +
+    (ka ? ` data-cat-ka="${e(shown(ka))}"` : "") + (ru ? ` data-cat-ru="${e(shown(ru))}"` : "") +
+    (kitchen ? ` data-fm-kitchen="${kitchen}"` : "") + `>` +
+    `${e(shown(label({ name: en, name_ka: ka, name_ru: ru }, lang)))}</button>`;
+  return `<div id="cat-bar" class="cat-bar">` +
+    (fm ? `<button type="button" id="fm-back-to-kitchens">&larr; Kitchens</button>` +
+          kitchenTabs(menu.fmKitchen, lang) : "") +
+    `<div class="cat-scroll">` +
     `<button type="button" class="cat-nav cat-nav-l" aria-label="Previous categories" hidden>&#8249;</button>` +
     `<div id="cat-filter" class="cat-filter">` +
     pill("", "All", "ყველა", "Все", true) +
     (has3d ? pill("__ar3d", "3D", "3D", "3D", false) : "") +
-    cats.map((c) => pill(c.id, c.name, c.name_ka, c.name_ru, false)).join("") +
+    cats.map((c) => pill(c.id, c.name, c.name_ka, c.name_ru, false,
+                         fm ? kitchenOf(c.name) : "")).join("") +
     `</div>` +
     `<button type="button" class="cat-nav cat-nav-r" aria-label="More categories" hidden>&#8250;</button>` +
     `</div></div>`;
@@ -180,11 +193,16 @@ function cardPrice(item) {
  */
 const choiceLabel = (c, lang) => (c && (c[lang] || c.en || c.ka)) || "";
 
-function variants(item, lang) {
+/** The choice a card opens on: the first one with a photo, else the first - the same
+ *  rule as `_variantIndex` in platform.js. Used for Food & Market (`pictured`), where the
+ *  card then shows that choice's photo and price, as the platform does. */
+const pictured = (item) => Math.max(0, (item.variants || []).findIndex((v) => v && v.image_url));
+
+function variants(item, lang, sel = 0) {
   if (!item.variants?.length) return "";
   return `<div class="variants" role="radiogroup">` + item.variants.map((v, i) =>
-    `<button type="button" class="variant${i === 0 ? " selected" : ""}" data-vi="${i}" ` +
-    `role="radio" aria-checked="${i === 0}">` +
+    `<button type="button" class="variant${i === sel ? " selected" : ""}" data-vi="${i}" ` +
+    `role="radio" aria-checked="${i === sel}">` +
     `<span class="variant-name">${e(choiceLabel(v, lang))}</span>` +
     `<span class="variant-price">${e(v.price || "")}</span></button>`).join("") + `</div>`;
 }
@@ -236,9 +254,21 @@ function qtyCtrl(i) {
  *  SAME `data-idx`, exactly as the platform does, so the basket, AR and the event sink all
  *  treat them as one dish - `.ar-featured` is a badge, not a second item.
  */
-export function menuItem(item, i, lang, promoted = false, eager = false) {
+export function menuItem(item, i, lang, promoted = false, eager = false, kitchen = "") {
   const name = pick(item, "name", lang);
   const desc = pick(item, "description", lang);
+  // Food & Market's Drinks kitchen is the printed wine list: name and price, no photo, no
+  // 3D (`_isFoodMarketDrinksActive`). Every other kitchen is an ordinary card.
+  if (kitchen === "drinks") item = { ...item, is_3d: false, text_only: true };
+  const info = kitchen ? pick(item, "additional_info", lang) : "";
+  // Food & Market opens each card on its pictured choice, with that choice's photo and
+  // price (the platform's renderMenuCard).
+  const sel = kitchen && item.variants?.length ? pictured(item) : 0;
+  if (kitchen && item.variants?.length) {
+    const v = item.variants[sel];
+    item = { ...item, price: v.price || item.price,
+             thumbnail_url: v.image_url || item.thumbnail_url, price_old: null };
+  }
   // **What a card can actually draw**, which is not the same question as what it has.
   //
   // A model only counts as something to show when `is_3d` is on: a dish CAN carry a model
@@ -294,6 +324,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
     ` data-price="${e(item.price)}"` +
     (item.price_old ? ` data-price-old="${e(item.price_old)}"` : "") +
     (item.category_id ? ` data-cat="${e(item.category_id)}"` : "") +
+    (item.category_name ? ` data-category="${e(item.category_name)}"` : "") +
     // **`data-3d` is not the same question as "has a model".** The owner can keep a dish's
     // model attached and still have it behave like a photo dish - `is_3d` off - and two of
     // Monday Greens' dishes are set that way today. Inferring 3D from the presence of a
@@ -308,7 +339,12 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
     (item.thumbnail_url ? ` data-poster="${e(item.thumbnail_url)}"` : "") +
     // How to frame the dish in 3D: "h v zoom", clamped by `_itemCameraOrbit`.
     (item.view_orbit ? ` data-orbit="${e(item.view_orbit)}"` : "") +
-    (item.ar_scale !== 1 ? ` data-ar-scale="${e(item.ar_scale)}"` : "");
+    (item.ar_scale !== 1 ? ` data-ar-scale="${e(item.ar_scale)}"` : "") +
+    (kitchen ? ` data-fm-kitchen="${kitchen}"` : "") +
+    (kitchen && item.source_ref ? ` data-item-id="${e(item.source_ref)}"` : "") +
+    (kitchen && cardDoodle(i, kitchen) ? ` data-bg-doodle="${cardDoodle(i, kitchen)}"` : "") +
+    (item.additional_info_en ? ` data-info="${e(item.additional_info_en)}"` : "") +
+    (item.additional_info_ka ? ` data-info-ka="${e(item.additional_info_ka)}"` : "");
 
   // The first few cards are above the fold, so their photos are eager and the rest are
   // lazy. width/height are set so a late image cannot shove the text beside it - layout
@@ -334,11 +370,13 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
 
   const actions = `<div class="item-actions"><p class="price">` +
     (item.price_old ? `<span class="price-was">${e(item.price_old)}</span>` : "") +
-    `${e(cardPrice(item))}</p>${qtyCtrl(i)}</div>`;
+    `${e(kitchen ? item.price : cardPrice(item))}</p>${qtyCtrl(i)}</div>`;
   const nameHtml =
-    `<p class="item-name" data-field="name" data-idx="${i}">${e(name)}</p>`;
+    `<p class="item-name" data-field="name" data-idx="${i}">${e(name)}` +
+    `${kitchen ? dietBadges(item.name_en) : ""}</p>`;
   const descHtml =
-    `<p class="ingredients" data-field="description" data-idx="${i}">${e(desc)}</p>`;
+    `<p class="ingredients" data-field="description" data-idx="${i}">${e(desc)}</p>` +
+    (info ? `<p class="additional-info">${e(info)}</p>` : "");
   const cls = "menu-item" + (noImage ? " no-image" : "") +
     (promoted ? " ar-featured" : "");
 
@@ -346,7 +384,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
   // the body rather than a right-hand column beside a picture that is not there, and the
   // sizes and add-ons take a full-width row underneath instead of the narrow price column.
   if (noImage) {
-    const extra = variants(item, lang) + addons(item, lang);
+    const extra = variants(item, lang, sel) + addons(item, lang);
     return `<div class="${cls}"${data}>${nameHtml}${descHtml}` +
       `<div class="item-right">${actions}</div>` +
       (extra ? `<div class="no-image-extra">${extra}</div>` : "") +
@@ -354,7 +392,7 @@ export function menuItem(item, i, lang, promoted = false, eager = false) {
   }
   return `<div class="${cls}"${data}>${nameHtml}${left}` +
     `<div class="item-right">${descHtml}${actions}` +
-    `${variants(item, lang)}${addons(item, lang)}` +
+    `${variants(item, lang, sel)}${addons(item, lang)}` +
     // The label is the platform's own string for this language. It is corrected on the
     // client the moment AR capability is known - a phone that can do real AR is offered
     // "VIEW ON TABLE" instead - but it must not be blank or English in the first frame.
@@ -402,6 +440,13 @@ export function menuList(menu, lang) {
   // dish - and a menu with one photo dish in it goes back to the mixed layout by itself.
   const allThreeD = items.length > 0 && threeD.length === items.length;
 
+  // Food & Market: every section and card is tagged with its kitchen, and the stylesheet
+  // shows only the kitchen on screen (`html[data-fm-group]`).
+  const fm = menu.fm;
+  const catName = new Map(menu.categories.map((c) => [c.id, c.name]));
+  const kitchenFor = (it) => fm ? kitchenOf(catName.get(it.category_id)) : "";
+  const shown = (s) => fm ? visibleCategory(s) : s;
+
   const sections = [];
   if (threeD.length) {
     const t = lang === "ka"
@@ -412,23 +457,30 @@ export function menuList(menu, lang) {
       `<div class="ar-featured-banner">` +
       `<span class="ar-featured-title">${e(t.title)}</span>` +
       `<span class="ar-featured-copy">${e(t.copy)}</span></div>` +
-      threeD.map(([it, i], n) => menuItem(it, i, lang, true, n < EAGER)).join("") +
+      threeD.map(([it, i], n) => menuItem(it, i, lang, true, n < EAGER, kitchenFor(it))).join("") +
       `</div>`);
   }
   for (const cat of menu.categories) {
     if (allThreeD) break;              // the block above already listed every dish
     const entries = byCat.get(cat.id) || [];
     if (!entries.length) continue;
+    const kitchen = fm ? kitchenOf(cat.name) : "";
+    const deco = fm ? categoryDecoration(cat.name) : {};
     sections.push(
-      `<div class="cat-section" data-cat="${e(cat.id)}">` +
-      `<div class="category-header" data-cat-en="${e(cat.name)}"` +
-      (cat.name_ka ? ` data-cat-ka="${e(cat.name_ka)}"` : "") +
-      (cat.name_ru ? ` data-cat-ru="${e(cat.name_ru)}"` : "") +
-      `>${e(label(cat, lang))}</div>` +
+      `<div class="cat-section" data-cat="${e(cat.id)}"` +
+      (kitchen ? ` data-fm-kitchen="${kitchen}"` : "") + `>` +
+      `<div class="category-header" data-cat-en="${e(shown(cat.name))}"` +
+      (cat.name_ka ? ` data-cat-ka="${e(shown(cat.name_ka))}"` : "") +
+      (cat.name_ru ? ` data-cat-ru="${e(shown(cat.name_ru))}"` : "") +
+      (fm ? ` data-cat-name="${e(cat.name)}"` : "") +
+      (deco.doodle ? ` data-doodle="${deco.doodle}"` : "") +
+      (deco.kanji ? ` data-kanji="${e(deco.kanji)}"` : "") +
+      `>${e(shown(label(cat, lang)))}</div>` +
       entries.map(([it, i], n) =>
         // Eager only when this section is what a diner opens on: no 3D block above it and
         // no earlier category. Everything below the fold is lazy.
-        menuItem(it, i, lang, false, !threeD.length && sections.length === 0 && n < EAGER))
+        menuItem(it, i, lang, false, !threeD.length && sections.length === 0 && n < EAGER,
+                 kitchen))
         .join("") +
       `</div>`);
   }
