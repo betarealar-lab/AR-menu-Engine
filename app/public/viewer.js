@@ -3982,6 +3982,8 @@ window.UI = {
       window.scrollTo(0, 0);
     });
     sync3d(root.dataset.fmGroup || "georgian");
+    wirePusher();
+    keepModalInKitchen();
     // The motion script (fm-motion.js) primes its scroll reveal when the list changes or
     // `data-fm-motion` flips. Our list is already in the HTML and never changes, so flip
     // the attribute once after it has attached its observers.
@@ -4000,6 +4002,102 @@ window.UI = {
         (span || b).textContent = lab[b.dataset.group];
       });
     }).observe(root, { attributes: true, attributeFilter: ["lang"] });
+  }
+
+  // The 3D view's arrows step through the list it was opened with, which here is every
+  // kitchen's dishes (the platform re-renders one kitchen at a time, so its list never
+  // held the others). Other kitchens' dishes go in marked "not 3D", which the arrows
+  // skip; the indices stay the same, so the dish that was tapped is still the one shown.
+  function kitchenOfCategory(name) {
+    const prefix = String(name || "").split("—")[0].trim();
+    return prefix === "Drinks" ? "drinks" : prefix === "Thai" ? "thai"
+      : prefix === "Japanese" ? "japanese" : "georgian";
+  }
+  function keepModalInKitchen() {
+    const open = window.openModal;
+    if (typeof open !== "function") return;
+    window.openModal = function (idx, items, ...rest) {
+      const group = root.dataset.fmGroup;
+      if (group && Array.isArray(items)) {
+        items = items.map((it) => (it && kitchenOfCategory(it.category) !== group)
+          ? Object.assign({}, it, { is_3d: false }) : it);
+      }
+      return open.call(this, idx, items, ...rest);
+    };
+  }
+
+  // ── The Georgian waiter: in the Georgian kitchen's 3D view, "next" / "previous" has a
+  // waiter walk in and shove the dish off screen, and the next one slides in behind it.
+  // An experiment (Nika, 2026-10-11). It wraps the arrows rather than changing viewer.js:
+  // it holds the click, plays, then replays the click for viewer.js to step the dish.
+  const PUSHER = "/img/food-market/georgian-pusher.png";
+  let pushing = false, replaying = false;
+
+  function wirePusher() {
+    const modal = document.getElementById("modal");
+    const viewer = document.getElementById("modal-viewer");
+    if (!modal || !viewer) return;
+    const guy = document.createElement("img");
+    guy.id = "fm-pusher";
+    guy.src = PUSHER;
+    guy.alt = "";
+    guy.setAttribute("aria-hidden", "true");
+    modal.appendChild(guy);
+
+    const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function shove(dir, step) {
+      // dir +1 = next: he comes in from the right and pushes the dish left. -1 = mirrored.
+      pushing = true;
+      const W = innerWidth;
+      const box = viewer.getBoundingClientRect();
+      const gw = guy.getBoundingClientRect().width || 200;
+      // The dish sits mid-viewer; he stands just off its edge, hand on the plate.
+      const dishHalf = Math.min(box.width * 0.34, box.height * 0.42);
+      const from = dir * (W / 2 + gw);               // where he starts, off screen
+      const at = dir * (dishHalf + gw * 0.32);       // shoulder against the dish
+      const away = -dir * W * 1.1;                   // how far the dish goes
+      const face = dir > 0 ? 1 : -1;                 // he faces the way he pushes
+      guy.style.display = "block";
+
+      const walk = guy.animate([
+        { transform: `translateX(${from}px) scaleX(${face}) rotate(0deg)` },
+        { transform: `translateX(${(from + at) / 2}px) scaleX(${face}) rotate(${-4 * dir}deg)`, offset: 0.5 },
+        { transform: `translateX(${at}px) scaleX(${face}) rotate(${-9 * dir}deg)` },
+      ], { duration: 420, easing: "ease-out", fill: "forwards" });
+
+      walk.finished.then(() => {
+        const ease = "cubic-bezier(.5,0,.75,0)";
+        const push = [
+          viewer.animate([{ transform: "translateX(0)" }, { transform: `translateX(${away}px) rotate(${-6 * dir}deg)` }],
+            { duration: 520, easing: ease, fill: "forwards" }),
+          guy.animate([
+            { transform: `translateX(${at}px) scaleX(${face}) rotate(${-9 * dir}deg)` },
+            { transform: `translateX(${at + away}px) scaleX(${face}) rotate(${-14 * dir}deg)` },
+          ], { duration: 520, easing: ease, fill: "forwards" }),
+        ];
+        return Promise.all(push.map((a) => a.finished));
+      }).then(() => {
+        step();                                          // viewer.js swaps the dish
+        guy.getAnimations().forEach((a) => a.cancel());
+        guy.style.display = "none";
+        viewer.getAnimations().forEach((a) => a.cancel());
+        return viewer.animate([{ transform: `translateX(${-away * 0.6}px)`, opacity: 0 }, { transform: "translateX(0)", opacity: 1 }],
+          { duration: 380, easing: "cubic-bezier(.2,.8,.3,1)" }).finished;
+      }).catch(() => {}).finally(() => { pushing = false; });
+    }
+
+    for (const [id, dir] of [["modal-next", 1], ["modal-prev", -1]]) {
+      const btn = document.getElementById(id);
+      if (!btn) continue;
+      // Capture on the button itself runs before viewer.js's own listener.
+      btn.addEventListener("click", (ev) => {
+        if (replaying || root.dataset.fmGroup !== "georgian" || still()) return;
+        ev.stopImmediatePropagation();
+        if (pushing) return;
+        shove(dir, () => { replaying = true; btn.click(); replaying = false; });
+      }, true);
+    }
   }
 
   if (document.readyState === "loading") {
