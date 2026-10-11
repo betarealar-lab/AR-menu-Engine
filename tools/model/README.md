@@ -323,3 +323,18 @@ with `BLENDER=`). Apple's `usdzconvert` is macOS-only and the `usd-core` wheel s
 reader, so **Blender is the only local GLB→USDZ path on Windows**. npm dependencies install
 on first run from `package.json` — never with `--no-save`, which prunes the `overrides` that
 keep sharp singular.
+
+## harden-model.mjs — protect a model before it ships
+
+Strips the scanner/Blender fingerprint and all mesh/material names, stamps a BetaReal
+copyright, and bakes in a signed per-tenant marker so a leaked file is provably ours and
+traceable to the restaurant it leaked from. Geometry, textures and AR scale are untouched.
+
+```
+MODEL_WATERMARK_SECRET=… node tools/model/harden-model.mjs <in.glb> --tenant <id> --name "<restaurant>"
+MODEL_WATERMARK_SECRET=… node tools/model/harden-model.mjs <file.glb> --verify
+```
+
+The marker (an HMAC over a hashed tenant tag) survives a copy or re-serialise but not a
+Blender re-export; it is traceability and deterrence, not a lock. A web model can always be
+captured as it renders. Run this on every model before it reaches our R2.
