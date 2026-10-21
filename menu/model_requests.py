@@ -164,10 +164,21 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
                 # the new size. Five seconds, free.
                 rec = dataset.record(dish, variant)
                 if not rec.get("model_key"):
+                    # A model uploaded by hand has no master here, only the file on its
+                    # `models` row. Every resize of one used to fail on this line.
+                    note = _rescale_upload(cur, req_id, tenant_id, dish, variant,
+                                           scale_cm, scale_axis,
+                                           (width_cm, length_cm, height_cm))
+                    if note is None:
+                        conn.commit()
+                        started += 1
+                        if verbose:
+                            print("    uploaded model resized")
+                        continue
                     cur.execute("""update model_requests
                                       set state = 'failed', finished_utc = now(),
-                                          note = 'There is no model to resize yet.'
-                                    where id = %s""", (req_id,))
+                                          note = %s
+                                    where id = %s""", (note, req_id))
                     conn.commit()
                     continue
                 if not jobs.exists("optimise", dish, variant):
@@ -261,6 +272,81 @@ def pull(limit: int = 10, verbose: bool = True) -> int:
                 print(f"    queued with {saved} photo(s)")
 
     return started
+
+
+def _rescale_upload(cur, req_id, tenant_id, dish: str, variant: str,
+                    scale_cm, scale_axis, dims: tuple) -> str | None:
+    """Resize a model that was uploaded as a file rather than built here. None when done,
+    otherwise the reason it was not, in words an owner can read.
+
+    No master, so nothing to re-optimise: the shipped GLB itself is scaled, by the same
+    one-node wrap the optimiser uses (`glb.place`). That only edits the JSON header, so a
+    Draco file stays byte-identical underneath and nothing about the model changes but its
+    size. The result is written under a NEW key and the old file is left where it was -
+    nothing in R2 is deleted, and another restaurant's copy may share that key.
+    """
+    import hashlib
+    import tempfile
+
+    import glb
+    import optimize
+    import usdz
+
+    cur.execute("""select id, draco_key, usdz_key from models
+                    where dish = %s and variant = %s
+                      and tenant_id is not distinct from %s
+                    order by created_utc desc limit 1""", (dish, variant, tenant_id))
+    row = cur.fetchone()
+    if not row or not row[1]:
+        return "There is no model to resize yet."
+    model_id, glb_key, usdz_key = row
+    if not scale_cm:
+        return "Type a size to resize to."
+
+    b = storage.backend()
+    data = b.get(dataset.PHOTOS, glb_key)
+    if not data:
+        return "We could not read this model's file."
+
+    prefix = f"t/{tenant_id}" if tenant_id else "lib"
+    with tempfile.TemporaryDirectory() as tmp:
+        src, out = Path(tmp) / "in.glb", Path(tmp) / "out.glb"
+        src.write_bytes(data)
+        factor = optimize.scale_factor(glb.bounds(src),
+                                       {"axis": scale_axis or "width", "cm": float(scale_cm)})
+        if factor == 1.0:
+            return "This model's file has no size we can measure."
+        glb.place(src, out, factor=factor, seat=True)
+        blob = out.read_bytes()
+        new_glb = f"{prefix}/glb/{hashlib.sha256(blob).hexdigest()[:16]}.glb"
+        b.put(dataset.PHOTOS, new_glb, blob, "model/gltf-binary")
+
+        # iPhone AR reads the USDZ, never the GLB, so one left at the old size would put
+        # the old size on every iPhone. Rebuilt from the resized GLB when there was one;
+        # if that cannot be done (a Draco upload cannot be decoded here) the request says
+        # so rather than claiming a resize half of the phones will not see.
+        new_usdz, usdz_note = usdz_key, ""
+        if usdz_key:
+            try:
+                usdz_path = Path(tmp) / "out.usdz"
+                usdz.from_glb(out, usdz_path)
+                ub = usdz_path.read_bytes()
+                new_usdz = f"{prefix}/usdz/{hashlib.sha256(ub).hexdigest()[:16]}.usdz"
+                b.put(dataset.PHOTOS, new_usdz, ub, "model/vnd.usdz+zip")
+            except Exception as e:  # noqa: BLE001
+                usdz_note = f"Resized for web and Android; iPhone keeps the old size ({type(e).__name__})."
+
+    w, l, h = dims
+    cur.execute("""update models set draco_key = %s, usdz_key = %s,
+                          scale_cm = %s, scale_axis = %s,
+                          width_cm = %s, length_cm = %s, height_cm = %s
+                    where id = %s""",
+                (new_glb, new_usdz, scale_cm, scale_axis, w, l, h, model_id))
+    cur.execute("""update model_requests
+                      set state = 'done', model_id = %s, engine = 'upload',
+                          note = %s, finished_utc = now()
+                    where id = %s""", (model_id, usdz_note, req_id))
+    return None
 
 
 def _adopt_upload(dish: str, variant: str, title: str, key: str | None) -> str:
