@@ -24,14 +24,19 @@ const BOXES: [keyof Dims, string, string][] = [
   ['height', 'Height', 'tall'],
 ]
 
-export default function SizeInput({ value, onChange, compact }: {
+export default function SizeInput({ value, onChange, compact, single }: {
   value: Dims
   onChange: (d: Dims) => void
   compact?: boolean
+  /** Typing in a box empties the other two, so the box you typed in is the one built.
+   *  For resizing a model that already has a size: without it, a saved width of 28 kept
+   *  winning (width first, 0013) and a new height of 180 was silently ignored. */
+  single?: boolean
 }) {
   const set = (k: keyof Dims, raw: string) => {
     const n = raw.trim() === '' ? null : Number(raw)
-    onChange({ ...value, [k]: n !== null && Number.isFinite(n) ? n : null })
+    const v = n !== null && Number.isFinite(n) ? n : null
+    onChange(single ? { width: null, length: null, height: null, [k]: v } : { ...value, [k]: v })
   }
   const primary = primaryDim(value)
 

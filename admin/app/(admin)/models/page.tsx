@@ -635,10 +635,12 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
   // Drafts open in 3D straight away: the owner's verdict is the point of a draft, and a
   // verdict from a still image is the wrong verdict. Everything else waits for a tap.
   const [live, setLive] = useState(m.state === 'draft' && !m.archived && !!m.glb)
+  // Only the dimension the model was actually built by. The others were never baked, and
+  // showing them made a resize by any box but width look like it should work.
   const [dims, setDims] = useState<Dims>({
-    width: m.width_cm ?? (m.scale_axis === 'width' ? m.scale_cm : null),
-    length: m.length_cm ?? (m.scale_axis === 'length' ? m.scale_cm : null),
-    height: m.height_cm ?? (m.scale_axis === 'height' ? m.scale_cm : null),
+    width: m.scale_axis === 'width' ? m.scale_cm : null,
+    length: m.scale_axis === 'length' ? m.scale_cm : null,
+    height: m.scale_axis === 'height' ? m.scale_cm : null,
   })
 
   const pill = m.state === 'approved' ? 'pill-on' : m.state === 'rejected' ? 'pill-off' : 'pill-wait'
@@ -767,7 +769,7 @@ function ModelCard({ model: m, dishes, onChanged, onSay }: {
             <p className="text-[11px]" style={{ color: 'var(--dim)' }}>
               {T.studioResizeFree}
             </p>
-            <SizeInput value={dims} onChange={setDims} compact />
+            <SizeInput value={dims} onChange={setDims} compact single />
             <button className="btn btn-sm btn-primary" disabled={!hasDims(dims)}
                     onClick={() => run(() => requestRescale({
                       tenantId: plan.restaurantId!, dish: m.dish, variant: m.variant,
