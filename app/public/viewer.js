@@ -1387,6 +1387,23 @@ window.UI = {
 
   window.__bootViewer = function () {
     build();
+    // AR capability, found out at load the way the platform's index.html does it
+    // (`arCapPromise = detectAR()` beside its menu fetch). That line lived in the startup
+    // code we replaced, so `__arCap` was only ever set by tapping a card's AR button. The
+    // 3D view hides "VIEW ON TABLE" until it is set - so on a first visit from Android the
+    // button never appeared, and a model page (/m/), which has no card, had no way into AR
+    // at all. Seed from the validated cache, detect, then redraw the buttons.
+    try {
+      const cachedCap = localStorage.getItem("bl-ar-cap");
+      if (typeof _capStillPlausible === "function" && _capStillPlausible(cachedCap)) {
+        window.__arCap = cachedCap;
+      }
+    } catch (e) { /* storage blocked: detection below still runs */ }
+    if (typeof detectAR === "function") {
+      detectAR().then(function () {
+        if (typeof setARButtonsState === "function") setARButtonsState(false);
+      }).catch(function () {});
+    }
     // `viewer.js` keeps its OWN `let menuItems` at the top of the bundle's shared scope,
     // and uses it for `menuItems.indexOf(item)` when it reports which dish was viewed.
     // Left empty, every 3D and AR event was filed against index -1 - the counts existed
