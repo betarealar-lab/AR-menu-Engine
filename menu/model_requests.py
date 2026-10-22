@@ -304,7 +304,7 @@ def _rescale_upload(cur, req_id, tenant_id, dish: str, variant: str,
         return "Type a size to resize to."
 
     b = storage.backend()
-    data = b.get(dataset.PHOTOS, glb_key)
+    data = b.get(_bucket_of(glb_key), glb_key)
     if not data:
         return "We could not read this model's file."
 
@@ -347,6 +347,77 @@ def _rescale_upload(cur, req_id, tenant_id, dish: str, variant: str,
                           note = %s, finished_utc = now()
                     where id = %s""", (model_id, usdz_note, req_id))
     return None
+
+
+def _bucket_of(key: str) -> str:
+    """Which bucket a `models` key lives in - the menu's `/a/` route rule, word for word:
+    engine output (models/, catalog/) in the models bucket, everything uploaded in photos."""
+    return dataset.MODELS if key.startswith(("models/", "catalog/")) else dataset.PHOTOS
+
+
+# Models a USDZ could not be made for, so a file the converter chokes on is tried once per
+# bridge start rather than every 30 seconds.
+_USDZ_TRIED: set = set()
+
+
+def usdz_missing(verbose: bool = True, limit: int = 3) -> int:
+    """Models with a GLB and no USDZ -> a USDZ converted from that GLB, unchanged.
+
+    Without one an iPhone gets no AR (Quick Look reads nothing else). Mostly these are
+    uploads that came as a GLB alone. The conversion is 1:1 - same triangles, same texture
+    files (only WebP/KTX2 are re-encoded, because Quick Look cannot read them), same size;
+    the GLB itself is never touched. Compressed meshes are decoded first (undraco.mjs).
+    """
+    import hashlib
+    import subprocess
+    import tempfile
+
+    import glb
+    import usdz
+
+    done = 0
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute("""select id, title, tenant_id, draco_key from models
+                        where usdz_key is null and draco_key is not null
+                          and not archived
+                        order by created_utc desc""")
+        for model_id, title, tenant_id, key in cur.fetchall():
+            if model_id in _USDZ_TRIED or done >= limit:
+                continue
+            _USDZ_TRIED.add(model_id)
+            try:
+                data = storage.backend().get(_bucket_of(key), key)
+                if not data:
+                    raise ValueError("GLB not found")
+                with tempfile.TemporaryDirectory() as tmp:
+                    src, out = Path(tmp) / "in.glb", Path(tmp) / "out.usdz"
+                    src.write_bytes(data)
+                    used = glb._read_json(src).get("extensionsUsed") or []
+                    if {"KHR_draco_mesh_compression", "EXT_meshopt_compression"} & set(used):
+                        plain = Path(tmp) / "plain.glb"
+                        tool = ROOT / "tools" / "model" / "undraco.mjs"
+                        r = subprocess.run(["node", str(tool), str(src), str(plain)],
+                                           cwd=tool.parent, capture_output=True,
+                                           text=True, timeout=300)
+                        if r.returncode != 0:
+                            raise RuntimeError(f"decode failed: {r.stderr[-200:]}")
+                        src = plain
+                    usdz.from_glb(src, out)
+                    blob = out.read_bytes()
+                prefix = f"t/{tenant_id}" if tenant_id else "lib"
+                new_key = f"{prefix}/usdz/{hashlib.sha256(blob).hexdigest()[:16]}.usdz"
+                storage.backend().put(dataset.PHOTOS, new_key, blob, "model/vnd.usdz+zip")
+                # Only if still missing: an owner who uploaded a USDZ meanwhile wins.
+                cur.execute("""update models set usdz_key = %s
+                                where id = %s and usdz_key is null""", (new_key, model_id))
+                conn.commit()
+                done += 1
+                if verbose:
+                    print(f"  usdz {title}: {len(blob) / 1048576:.1f} MB")
+            except Exception as e:  # noqa: BLE001
+                if verbose:
+                    print(f"  usdz {title}: not made - {type(e).__name__}: {str(e)[:160]}")
+    return done
 
 
 def _adopt_upload(dish: str, variant: str, title: str, key: str | None) -> str:
@@ -696,6 +767,7 @@ def main() -> int:
                 started = pull(limit=a.limit)
                 print("collecting")
                 finished = collect()
+                usdz_missing()
                 print(f"{predicted} predicted, {started} started, {finished} finished")
                 # After the pass, not before: this row means the whole pass got through
                 # multiview, pull and collect without raising. A pass that fails is
