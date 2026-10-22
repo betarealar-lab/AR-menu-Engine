@@ -15,6 +15,20 @@ the hand model pipeline in `tools/model/`. Section numbers quoted in code commen
 
 ---
 
+# STATE — 2026-10-23
+
+- **Shopping 3D** (`shopping3d/`, live at https://betareal-shopping3d.betareal-ar.workers.dev): BetaReal's
+  3D + AR for industries other than restaurants, as an EXPERIMENT (Temo). Its own Worker, but the same
+  Supabase, R2 buckets and engine as the menu. One page only: `/m/<token>` = the model + one AR button
+  (model-viewer's own AR, `ar-scale="fixed"`), same tokens as the menu's model pages. No name/price/buy
+  link yet - Temo: "just the model and AR button for now". Deploy: `cd shopping3d && npm run build && npx wrangler deploy`.
+- **Menu: VIEW ON TABLE** now shows on Android and on model pages (5f73531): `detectAR()` runs at boot in shim.js,
+  as production does at load.
+- **Engine:** uploaded models can be resized (db91161); every model without a USDZ gets one converted 1:1
+  (3250c98, `tools/model/undraco.mjs` for Draco/meshopt).
+
+---
+
 # STATE — 2026-10-08
 
 - **3D Studio is developer-only (0039, Temo).** Every restaurant `studio = false`, default false;

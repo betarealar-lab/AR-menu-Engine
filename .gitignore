@@ -33,3 +33,9 @@ app/.wrangler/
 
 # Model tools install their own npm packages on first run.
 tools/model/node_modules/
+
+# Shopping 3D - the experiment for other industries. Same rules as app/.
+shopping3d/node_modules/
+shopping3d/.astro/
+shopping3d/dist/
+shopping3d/.env

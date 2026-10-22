@@ -1,0 +1,84 @@
+---
+// One product: the model and a button that puts it in the room. Nothing else, on purpose
+// (Temo, 2026-10-23: "just the model and AR button for now"). Name, price and a buy link
+// wait until the experiment says they are wanted.
+//
+// A product is a model from the same library the menu uses, addressed by the same token
+// as its menu model page (/m/<token>), so one link works on both sites.
+//
+// AR is model-viewer's own: Quick Look on iPhone, Scene Viewer or WebXR on Android, at
+// the model's real size (ar-scale="fixed"). The button sits in model-viewer's `ar-button`
+// slot, so model-viewer shows it exactly when the device can do AR - on a laptop the
+// page is just the model.
+import { envFrom } from "../../lib/env.js";
+
+export const prerender = false;
+
+const token = String(Astro.params.token || "").toLowerCase();
+const env = envFrom(Astro.locals);
+
+let hit = null;
+if (/^[a-hj-km-np-z2-9]{10}$/.test(token)) {
+  try {
+    const url = env("SUPABASE_URL").replace(/\/$/, "");
+    const key = env("SUPABASE_ANON_KEY");
+    const res = await fetch(`${url}/rest/v1/rpc/resolve_model_link`, {
+      method: "POST",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_token: token }),
+    });
+    if (res.ok) hit = ((await res.json()) || [])[0] || null;
+  } catch (err) {
+    console.error("[shopping3d] resolve failed", err);
+  }
+}
+
+// A storage key is served from this site's /a/; an external model is already a URL.
+const asset = (v) => (!v ? "" : /^(https?:)?\/\//.test(v) ? v : `/a/${v}`);
+const glb = hit ? asset(hit.draco_key || hit.external_glb) : "";
+const usdz = hit ? asset(hit.usdz_key || hit.external_usdz) : "";
+
+// The angle set in the admin, "h v zoom", clamped the way the menu's viewer clamps it.
+let orbit = "";
+const p = String(hit?.view_orbit || "").trim().split(/\s+/).map(Number);
+if (p.length === 3 && p.every(Number.isFinite)) {
+  orbit = `${Math.max(-360, Math.min(360, p[0]))}deg ${Math.max(0, Math.min(85, p[1]))}deg ` +
+          `${Math.max(30, Math.min(300, p[2]))}%`;
+}
+
+if (!glb) Astro.response.status = 404;
+const title = hit?.title || "Product";
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <title>{title}</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; color: #111;
+                   font: 16px/1.4 system-ui, -apple-system, sans-serif; }
+      model-viewer { position: fixed; inset: 0; width: 100%; height: 100%;
+                     --poster-color: transparent; }
+      #ar { position: absolute; left: 50%; transform: translateX(-50%);
+            bottom: calc(24px + env(safe-area-inset-bottom)); width: min(88%, 360px);
+            padding: 16px; border: 0; border-radius: 14px; background: #111; color: #fff;
+            font: 700 17px/1 system-ui, -apple-system, sans-serif; cursor: pointer; }
+      .gone { display: grid; place-items: center; height: 100%; color: #666; }
+    </style>
+    {glb && <script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>}
+  </head>
+  <body>
+    {glb ? (
+      <model-viewer src={glb} ios-src={usdz || undefined} alt={title}
+                    ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed"
+                    camera-controls touch-action="pan-y" shadow-intensity="1"
+                    camera-orbit={orbit || undefined}>
+        <button slot="ar-button" id="ar">View in your space</button>
+      </model-viewer>
+    ) : (
+      <p class="gone">This product is not available.</p>
+    )}
+  </body>
+</html>

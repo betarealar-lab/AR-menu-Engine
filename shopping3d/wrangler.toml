@@ -1,0 +1,29 @@
+# Shopping 3D, as its own Cloudflare Worker - separate from the menu so an experiment
+# here can never take a restaurant's menu down. Same buckets and database as the menu
+# (Temo, 2026-10-23: one infrastructure while this is an experiment).
+#
+#   npx wrangler secret put SUPABASE_URL
+#   npx wrangler secret put SUPABASE_ANON_KEY
+#
+# Deploy:
+#   npm run build && npx wrangler deploy
+
+name = "betareal-shopping3d"
+main = "./dist/_worker.js/index.js"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[[r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "betareal-photos"
+
+[[r2_buckets]]
+binding = "MODELS"
+bucket_name = "betareal-models"
+
+[observability]
+enabled = true
