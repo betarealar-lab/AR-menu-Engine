@@ -1,0 +1,389 @@
+---
+// The Shopping 3D admin. Deliberately small: Products (the catalogue), Library, Upload and
+// 3D Studio - nothing about restaurants (Temo, 2026-10-23).
+//
+// Everything runs in the browser as the signed-in user, through the same Supabase and the
+// same RLS as the restaurant admin; the only server code is /api/upload, which puts files
+// in R2. Generation, optimising and resizing are requests the engine's bridge already
+// watches (model_requests), so this page adds no new back end. Super admins only - the
+// same login as the restaurant admin.
+import { envFrom } from "../lib/env.js";
+
+export const prerender = false;
+const env = envFrom(Astro.locals);
+// Public by design: the anon key is in every menu page already.
+const supaUrl = env("SUPABASE_URL");
+const supaAnon = env("SUPABASE_ANON_KEY");
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Shopping 3D · Admin</title>
+    <style>
+      body { margin: 0; background: #fafafa; color: #111; font: 15px/1.45 system-ui, -apple-system, sans-serif; }
+      header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: #fff;
+               border-bottom: 1px solid #e5e5e5; position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+      header b { margin-right: 8px; }
+      nav button { background: none; border: 0; padding: 8px 10px; border-radius: 8px; font: inherit; cursor: pointer; color: #555; }
+      nav button.on { background: #111; color: #fff; }
+      header .who { margin-left: auto; color: #666; font-size: 13px; }
+      main { max-width: 1000px; margin: 0 auto; padding: 20px; }
+      .card { background: #fff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+      .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      input[type=text], input[type=email], input[type=password], input[type=number] {
+        font: inherit; padding: 8px 10px; border: 1px solid #d4d4d4; border-radius: 8px; background: #fff; }
+      input[type=number] { width: 90px; }
+      button.btn { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #d4d4d4; background: #fff; cursor: pointer; }
+      button.primary { background: #111; color: #fff; border-color: #111; }
+      button:disabled { opacity: .5; cursor: default; }
+      .dim { color: #666; font-size: 13px; }
+      .pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: #eee; }
+      .pill.ok { background: #dcfce7; } .pill.wait { background: #fef3c7; } .pill.bad { background: #fee2e2; }
+      model-viewer { width: 120px; height: 120px; background: #f4f4f4; border-radius: 8px; flex: none; }
+      .grow { flex: 1; min-width: 180px; }
+      #msg { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #111; color: #fff;
+             padding: 10px 16px; border-radius: 10px; display: none; z-index: 20; }
+      #qr { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; place-items: center; z-index: 10; }
+      #qr .card { text-align: center; max-width: 320px; }
+      #qr svg { width: 220px; height: 220px; }
+      label.f { display: block; margin: 10px 0 4px; font-weight: 600; font-size: 13px; }
+      .slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+      .slots label { border: 1px dashed #bbb; border-radius: 8px; aspect-ratio: 1; display: grid; place-items: center;
+                     font-size: 12px; color: #666; cursor: pointer; background: #fff center/cover no-repeat; }
+      [hidden] { display: none !important; }
+    </style>
+    <script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    <script is:inline src="/vendor/qrcode.js" defer></script>
+  </head>
+  <body data-url={supaUrl} data-anon={supaAnon}>
+    <header>
+      <b>Shopping 3D</b>
+      <nav id="tabs" hidden>
+        <button data-tab="products" class="on">Products</button>
+        <button data-tab="library">Library</button>
+        <button data-tab="upload">Upload</button>
+        <button data-tab="studio">3D Studio</button>
+      </nav>
+      <span class="who" id="who"></span>
+      <a href="/" target="_blank" class="dim" id="viewsite" hidden>View catalogue ↗</a>
+    </header>
+
+    <main>
+      <section id="login" class="card" hidden>
+        <h3 style="margin-top:0">Sign in</h3>
+        <p class="dim">Same email and password as the BetaReal admin.</p>
+        <form id="loginForm" class="row">
+          <input type="email" id="email" placeholder="Email" required />
+          <input type="password" id="password" placeholder="Password" required />
+          <button class="btn primary">Sign in</button>
+        </form>
+      </section>
+
+      <section id="products" hidden></section>
+      <section id="library" hidden></section>
+
+      <section id="upload" hidden>
+        <div class="card">
+          <h3 style="margin-top:0">Upload a model</h3>
+          <label class="f">Name</label><input type="text" id="upName" placeholder="Oak armchair" />
+          <label class="f">GLB file (required)</label><input type="file" id="upGlb" accept=".glb" />
+          <label class="f">USDZ file for iPhone (optional — made automatically if missing)</label><input type="file" id="upUsdz" accept=".usdz" />
+          <label class="f">Real height in cm (optional — leave empty to keep the file's size)</label>
+          <input type="number" id="upHeight" min="1" max="2000" />
+          <label class="f">How</label>
+          <div class="row">
+            <label><input type="radio" name="upMode" value="asis" checked /> As-is — ships the file exactly as uploaded</label>
+            <label><input type="radio" name="upMode" value="optimise" /> Optimise — for big raw files (e.g. straight from Meshy); lands in Library as a draft</label>
+          </div>
+          <p><button class="btn primary" id="upGo">Upload</button> <span class="dim" id="upState"></span></p>
+        </div>
+      </section>
+
+      <section id="studio" hidden>
+        <div class="card">
+          <h3 style="margin-top:0">3D Studio — make a model from photos</h3>
+          <label class="f">Name</label><input type="text" id="stName" placeholder="Oak armchair" />
+          <label class="f">Photos (front is required; more angles = better model)</label>
+          <div class="slots" id="slots"></div>
+          <label class="f">Real height in cm</label><input type="number" id="stHeight" min="1" max="2000" />
+          <p class="dim">Generating costs <b>30 Meshy credits</b>. The model appears in Library as a draft when it is done.</p>
+          <p><button class="btn primary" id="stGo">Generate · 30 credits</button> <span class="dim" id="stState"></span></p>
+        </div>
+      </section>
+    </main>
+
+    <div id="qr"><div class="card"><div id="qrSvg"></div><p id="qrName"></p>
+      <p class="row" style="justify-content:center"><button class="btn" id="qrPng">Download PNG</button><button class="btn" id="qrClose">Close</button></p></div></div>
+    <div id="msg"></div>
+
+    <script>
+      import { createClient } from "@supabase/supabase-js";
+
+      const $ = (id) => document.getElementById(id);
+      const sb = createClient(document.body.dataset.url, document.body.dataset.anon);
+      let tenantId = null, catId = null;
+
+      const say = (t) => { const m = $("msg"); m.textContent = t; m.style.display = "block";
+                           clearTimeout(say.t); say.t = setTimeout(() => (m.style.display = "none"), 4000); };
+      const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      const asset = (k) => (!k ? "" : /^(https?:)?\/\//.test(k) ? k : `/a/${k}`);
+      const fail = (e) => { if (e) { say(e.message || String(e)); return true; } return false; };
+
+      // ── sign in ────────────────────────────────────────────────────────────────
+      async function boot() {
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) { $("login").hidden = false; return; }
+        const { data: sup } = await sb.from("super_admins").select("user_id").limit(1);
+        if (!sup?.length) { $("login").hidden = false; say("This account is not a BetaReal super admin"); await sb.auth.signOut(); return; }
+        const { data: t } = await sb.from("tenants").select("id").eq("slug", "shopping3d").single();
+        tenantId = t.id;
+        const { data: c } = await sb.from("categories").select("id").eq("tenant_id", tenantId).order("position").limit(1);
+        catId = c?.[0]?.id ?? null;
+        $("login").hidden = true; $("tabs").hidden = false; $("viewsite").hidden = false;
+        $("who").innerHTML = `${esc(session.user.email)} · <a href="#" id="out">sign out</a>`;
+        $("out").onclick = async (e) => { e.preventDefault(); await sb.auth.signOut(); location.reload(); };
+        show("products");
+      }
+      $("loginForm").onsubmit = async (e) => {
+        e.preventDefault();
+        const { error } = await sb.auth.signInWithPassword({ email: $("email").value, password: $("password").value });
+        if (!fail(error)) boot();
+      };
+
+      // ── tabs ───────────────────────────────────────────────────────────────────
+      const TABS = ["products", "library", "upload", "studio"];
+      function show(tab) {
+        TABS.forEach((t) => ($(t).hidden = t !== tab));
+        document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
+        if (tab === "products") renderProducts();
+        if (tab === "library") renderLibrary();
+      }
+      document.querySelectorAll("#tabs button").forEach((b) => (b.onclick = () => show(b.dataset.tab)));
+
+      // ── products: the catalogue ────────────────────────────────────────────────
+      async function loadItems() {
+        const { data, error } = await sb.from("items")
+          .select("id,name,visible,position,model_id,models(id,title,dish,variant,draco_key,usdz_key,scale_cm,scale_axis,model_links(token))")
+          .eq("tenant_id", tenantId).order("position");
+        fail(error);
+        return data || [];
+      }
+      const tokenOf = (m) => m?.model_links?.[0]?.token || (Array.isArray(m?.model_links) ? "" : m?.model_links?.token) || "";
+      const sizeOf = (m) => (m?.scale_cm ? `${Math.round(m.scale_cm)} cm ${m.scale_axis === "height" ? "tall" : m.scale_axis}` : "file's own size");
+
+      async function renderProducts() {
+        const items = await loadItems();
+        const el = $("products");
+        if (!items.length) { el.innerHTML = `<div class="card dim">No products yet. Upload one, or add one from Library.</div>`; return; }
+        el.innerHTML = items.map((it, i) => {
+          const m = it.models || {};
+          const tok = tokenOf(m);
+          return `<div class="card row" data-id="${it.id}">
+            <model-viewer src="${esc(asset(m.draco_key))}" loading="lazy" camera-controls disable-zoom interaction-prompt="none"></model-viewer>
+            <div class="grow">
+              <input type="text" class="nm" value="${esc(it.name)}" style="width:100%;max-width:340px" />
+              <div class="dim" style="margin-top:6px">${it.visible ? '<span class="pill ok">shown</span>' : '<span class="pill">hidden</span>'}
+                · ${esc(sizeOf(m))} ${m.usdz_key ? "" : "· iPhone file coming"}</div>
+              <div class="row" style="margin-top:8px">
+                <button class="btn up" ${i === 0 ? "disabled" : ""}>↑</button>
+                <button class="btn down" ${i === items.length - 1 ? "disabled" : ""}>↓</button>
+                <button class="btn vis">${it.visible ? "Hide" : "Show"}</button>
+                ${tok ? `<a class="btn" href="/m/${tok}" target="_blank">Open link</a><button class="btn qr" data-tok="${tok}">QR code</button>` : ""}
+                <span class="row" style="gap:6px">Height <input type="number" class="h" min="1" max="2000" placeholder="cm" /><button class="btn rs">Resize</button></span>
+              </div>
+            </div></div>`;
+        }).join("");
+        el.querySelectorAll(".card[data-id]").forEach((card, i) => {
+          const it = items[i], m = it.models || {};
+          card.querySelector(".nm").onchange = async (e) => {
+            const name = e.target.value.trim(); if (!name) return;
+            const a = await sb.from("items").update({ name }).eq("id", it.id);
+            const b = await sb.from("models").update({ title: name }).eq("id", m.id);
+            if (!fail(a.error || b.error)) say("Renamed");
+          };
+          const swap = async (j) => {
+            const o = items[j];
+            const a = await sb.from("items").update({ position: o.position }).eq("id", it.id);
+            const b = await sb.from("items").update({ position: it.position }).eq("id", o.id);
+            if (!fail(a.error || b.error)) renderProducts();
+          };
+          card.querySelector(".up").onclick = () => swap(i - 1);
+          card.querySelector(".down").onclick = () => swap(i + 1);
+          card.querySelector(".vis").onclick = async () => {
+            const { error } = await sb.from("items").update({ visible: !it.visible }).eq("id", it.id);
+            if (!fail(error)) renderProducts();
+          };
+          const q = card.querySelector(".qr"); if (q) q.onclick = () => openQr(q.dataset.tok, it.name);
+          card.querySelector(".rs").onclick = () => resize(m, it, card.querySelector(".h").value);
+        });
+      }
+      // Normalise positions once so ↑/↓ always has distinct numbers to swap.
+      async function normalise() {
+        const items = await loadItems();
+        for (let i = 0; i < items.length; i++)
+          if (items[i].position !== i) await sb.from("items").update({ position: i }).eq("id", items[i].id);
+      }
+
+      async function resize(m, it, cm) {
+        const h = Number(cm);
+        if (!(h > 0)) return say("Type the real height in cm first");
+        const { error } = await sb.from("model_requests").insert({
+          tenant_id: tenantId, item_id: it?.id ?? null, dish: m.dish, variant: m.variant || "default",
+          title: m.title, photo_keys: [], kind: "rescale", height_cm: h,
+        });
+        if (error?.code === "23505") return say("This model is already being resized");
+        if (!fail(error)) say(`Resizing to ${h} cm tall — usually under a minute (the engine PC must be on)`);
+      }
+
+      // ── QR ─────────────────────────────────────────────────────────────────────
+      function openQr(tok, name) {
+        const link = `${location.origin}/m/${tok}`;
+        const qr = window.qrcode(0, "M"); qr.addData(link); qr.make();
+        $("qrSvg").innerHTML = qr.createSvgTag(6, 2);
+        $("qrName").innerHTML = `${esc(name)}<br><span class="dim">${esc(link)}</span>`;
+        $("qr").style.display = "grid";
+        $("qrPng").onclick = () => {
+          const a = document.createElement("a");
+          a.href = qr.createDataURL(10, 4); a.download = `${name || "product"}-qr.png`; a.click();
+        };
+      }
+      $("qrClose").onclick = () => ($("qr").style.display = "none");
+
+      // ── library: every Shopping 3D model, and what is in flight ─────────────────
+      async function renderLibrary() {
+        const [{ data: models, error }, items, { data: reqs }] = await Promise.all([
+          sb.from("models").select("id,title,dish,variant,draco_key,usdz_key,tenant_state,scale_cm,scale_axis,created_utc,model_links(token)")
+            .eq("tenant_id", tenantId).eq("archived", false).order("created_utc", { ascending: false }),
+          loadItems(),
+          sb.from("model_requests").select("title,kind,state,note,requested_utc")
+            .eq("tenant_id", tenantId).in("state", ["pending", "approved", "running", "failed"])
+            .order("requested_utc", { ascending: false }).limit(10),
+        ]);
+        fail(error);
+        const used = new Set(items.map((i) => i.model_id));
+        const kindWord = { generate: "generating", rescale: "resizing", upload: "optimising" };
+        const inflight = (reqs || []).map((r) => `<div class="row"><span class="pill ${r.state === "failed" ? "bad" : "wait"}">${r.state === "failed" ? "failed" : kindWord[r.kind] || r.kind}</span>
+            ${esc(r.title || "")} <span class="dim">${esc(r.note || "")}</span></div>`).join("");
+        $("library").innerHTML = (inflight ? `<div class="card"><b>In progress</b>${inflight}<p class="dim">Needs the engine PC to be on.</p></div>` : "") +
+          (models || []).map((m) => `<div class="card row" data-id="${m.id}">
+            <model-viewer src="${esc(asset(m.draco_key))}" loading="lazy" camera-controls disable-zoom interaction-prompt="none"></model-viewer>
+            <div class="grow"><b>${esc(m.title || "Untitled")}</b>
+              <div class="dim"><span class="pill ${m.tenant_state === "approved" ? "ok" : m.tenant_state === "rejected" ? "bad" : "wait"}">${esc(m.tenant_state)}</span>
+                · ${esc(sizeOf(m))} · ${used.has(m.id) ? "in catalogue" : "not in catalogue"}</div>
+              <div class="row" style="margin-top:8px">
+                ${m.tenant_state !== "approved" ? `<button class="btn primary ap">Approve</button>` : ""}
+                ${m.tenant_state === "draft" ? `<button class="btn rj">Reject</button>` : ""}
+                ${!used.has(m.id) && m.tenant_state === "approved" ? `<button class="btn add">Add to catalogue</button>` : ""}
+                <button class="btn ar">Archive</button>
+              </div></div></div>`).join("") || `<div class="card dim">No models yet.</div>`;
+        $("library").querySelectorAll(".card[data-id]").forEach((card) => {
+          const m = models.find((x) => x.id === card.dataset.id);
+          const set = (patch, ok) => async () => { const { error } = await sb.from("models").update(patch).eq("id", m.id); if (!fail(error)) { say(ok); renderLibrary(); } };
+          card.querySelector(".ap")?.addEventListener("click", set({ tenant_state: "approved", decided_utc: new Date().toISOString() }, "Approved"));
+          card.querySelector(".rj")?.addEventListener("click", set({ tenant_state: "rejected", decided_utc: new Date().toISOString() }, "Rejected"));
+          card.querySelector(".ar")?.addEventListener("click", set({ archived: true }, "Archived — out of the library, file kept"));
+          card.querySelector(".add")?.addEventListener("click", async () => { if (await addToCatalogue(m)) renderLibrary(); });
+        });
+      }
+
+      async function addToCatalogue(m) {
+        await normalise();
+        const items = await loadItems();
+        const { error } = await sb.from("items").insert({
+          tenant_id: tenantId, category_id: catId, name: m.title || "Product", model_id: m.id,
+          visible: true, position: items.length, is_3d: true, thumb_3d: true,
+        });
+        if (!fail(error)) { say("Added to the catalogue"); return true; }
+        return false;
+      }
+
+      // ── upload ─────────────────────────────────────────────────────────────────
+      async function put(file, kind, onState, slot = "") {
+        const { data: { session } } = await sb.auth.getSession();
+        const form = new FormData(); form.append("file", file); form.append("kind", kind);
+        if (slot) form.append("slot", slot);
+        onState?.(`Uploading ${file.name}…`);
+        const res = await fetch("/api/upload", { method: "POST", body: form, headers: { Authorization: `Bearer ${session.access_token}` } });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || `Upload failed (${res.status})`);
+        return out.key;
+      }
+
+      $("upGo").onclick = async () => {
+        const glb = $("upGlb").files[0], usdz = $("upUsdz").files[0];
+        const name = $("upName").value.trim() || glb?.name?.replace(/\.glb$/i, "") || "Product";
+        const h = Number($("upHeight").value) || null;
+        const mode = document.querySelector("input[name=upMode]:checked").value;
+        if (!glb) return say("Choose a GLB file");
+        const st = (t) => ($("upState").textContent = t);
+        $("upGo").disabled = true;
+        try {
+          const glbKey = await put(glb, "glb", st);
+          const dish = `shop-${crypto.randomUUID()}`;
+          if (mode === "optimise") {
+            const { error } = await sb.from("model_requests").insert({
+              tenant_id: tenantId, dish, variant: "default", title: name, photo_keys: [glbKey], kind: "upload", height_cm: h,
+            });
+            if (fail(error)) return;
+            st(""); say("Uploaded — optimising. It appears in Library as a draft."); show("library");
+          } else {
+            const usdzKey = usdz ? await put(usdz, "usdz", st) : null;
+            const { data: m, error } = await sb.from("models").insert({
+              tenant_id: tenantId, title: name, dish, variant: "default", draco_key: glbKey, usdz_key: usdzKey,
+              tenant_state: "approved", decided_utc: new Date().toISOString(),
+            }).select("id,title,dish,variant").single();
+            if (fail(error)) return;
+            await addToCatalogue(m);
+            if (h) await resize(m, null, h);
+            st(""); say(h ? "Uploaded — resizing now" : "Uploaded and added to the catalogue"); show("products");
+          }
+          $("upGlb").value = ""; $("upUsdz").value = ""; $("upName").value = ""; $("upHeight").value = "";
+        } catch (e) { fail(e); st(""); } finally { $("upGo").disabled = false; }
+      };
+
+      // ── 3D studio ──────────────────────────────────────────────────────────────
+      const SLOTS = ["front", "right", "back", "left"];
+      const photos = {};
+      $("slots").innerHTML = SLOTS.map((s) => `<label data-slot="${s}">${s}<input type="file" accept="image/*" hidden /></label>`).join("");
+      $("slots").querySelectorAll("label").forEach((l) => {
+        l.querySelector("input").onchange = (e) => {
+          const f = e.target.files[0]; if (!f) return;
+          photos[l.dataset.slot] = f;
+          l.style.backgroundImage = `url(${URL.createObjectURL(f)})`; l.firstChild.textContent = "";
+        };
+      });
+      // Any image in, a JPEG at most 2048 px out - the engine reads JPEGs.
+      async function toJpeg(file) {
+        const img = await createImageBitmap(file);
+        const s = Math.min(1, 2048 / Math.max(img.width, img.height));
+        const c = document.createElement("canvas"); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
+        return new File([blob], "photo.jpg", { type: "image/jpeg" });
+      }
+      $("stGo").onclick = async () => {
+        const name = $("stName").value.trim(), h = Number($("stHeight").value) || null;
+        if (!name) return say("Give the product a name");
+        if (!photos.front) return say("The front photo is required");
+        if (!confirm(`Generate "${name}"? This spends 30 Meshy credits.`)) return;
+        const st = (t) => ($("stState").textContent = t);
+        $("stGo").disabled = true;
+        try {
+          const keys = [];
+          for (const s of SLOTS) if (photos[s]) keys.push(await put(await toJpeg(photos[s]), "photo", st, s));
+          const { error } = await sb.from("model_requests").insert({
+            tenant_id: tenantId, dish: `shop-${crypto.randomUUID()}`, variant: "default",
+            title: name, photo_keys: keys, kind: "generate", height_cm: h,
+          });
+          if (fail(error)) return;
+          st(""); say("Sent to the engine — the model appears in Library as a draft (a few minutes)"); show("library");
+        } catch (e) { fail(e); st(""); } finally { $("stGo").disabled = false; }
+      };
+
+      boot();
+    </script>
+  </body>
+</html>

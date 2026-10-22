@@ -22,6 +22,12 @@ the hand model pipeline in `tools/model/`. Section numbers quoted in code commen
   Supabase, R2 buckets and engine as the menu. One page only: `/m/<token>` = the model + one AR button
   (model-viewer's own AR, `ar-scale="fixed"`), same tokens as the menu's model pages. No name/price/buy
   link yet - Temo: "just the model and AR button for now". Deploy: `cd shopping3d && npm run build && npx wrangler deploy`.
+- **Shopping 3D admin** at `/admin` (same login, super admins only): Products (catalogue: rename, order,
+  show/hide, link, QR, resize), Library (approve/reject drafts, add to catalogue, archive), Upload (as-is or
+  optimise), 3D Studio (photos -> generate, 30 credits, confirm first). Data = tenant `shopping3d` (its
+  items are the catalogue, `/` lists them via `public_menu`). Only server code is `/api/upload` (R2 via
+  binding, super-admin check as the caller). The 4 non-food models were COPIED in (same R2 keys,
+  `source_ref = copied-from:<token>`); the test restaurants keep theirs.
 - **Menu: VIEW ON TABLE** now shows on Android and on model pages (5f73531): `detectAR()` runs at boot in shim.js,
   as production does at load.
 - **Engine:** uploaded models can be resized (db91161); every model without a USDZ gets one converted 1:1
